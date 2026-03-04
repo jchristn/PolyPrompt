@@ -103,7 +103,11 @@ namespace PolyPrompt.Clients
         public int TimeoutMs
         {
             get { return _TimeoutMs; }
-            set { _TimeoutMs = Math.Clamp(value, 1000, 600_000); }
+            set
+            {
+                _TimeoutMs = Math.Clamp(value, 1000, 600_000);
+                _HttpClient.Timeout = TimeSpan.FromMilliseconds(_TimeoutMs);
+            }
         }
 
         /// <summary>
@@ -166,6 +170,7 @@ namespace PolyPrompt.Clients
             _ApiKey = apiKey;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HttpClient = new HttpClient();
+            _HttpClient.Timeout = TimeSpan.FromMilliseconds(_TimeoutMs);
         }
 
         #endregion
