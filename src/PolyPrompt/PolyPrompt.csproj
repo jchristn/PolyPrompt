@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <Version>0.1.0</Version>
+    <Authors>Joel Christner</Authors>
+    <Company>Joel Christner</Company>
+    <Copyright>(c)2026 Joel Christner</Copyright>
+    <PackageId>PolyPrompt</PackageId>
+    <Description>PolyPrompt is a lightweight, unified .NET library for chat completions, text generation, and embeddings across Ollama, OpenAI, and Google Gemini APIs.</Description>
+    <PackageProjectUrl>https://github.com/jchristn/PolyPrompt</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jchristn/PolyPrompt</RepositoryUrl>
+    <RepositoryType>Github</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>logo.png</PackageIcon>
+    <PackageTags>llm;ai;ollama;openai;gemini;chat;completion;embedding;generation;streaming</PackageTags>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <DocumentationFile>PolyPrompt.xml</DocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NoWarn>CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <Title>PolyPrompt</Title>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="logo.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\logo.png" Pack="true" PackagePath="\" />
+    <None Include="PolyPrompt.xml" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SerializationHelper" Version="2.0.3" />
+    <PackageReference Include="SyslogLogging" Version="2.0.13" />
+  </ItemGroup>
+
+</Project>

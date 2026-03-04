@@ -1,0 +1,745 @@
+namespace PolyPrompt.Clients
+{
+    using System.Diagnostics;
+    using System.IO;
+    using System.Runtime.CompilerServices;
+    using System.Text;
+    using PolyPrompt.Models;
+    using PolyPrompt.Options;
+    using SyslogLogging;
+
+    /// <summary>
+    /// Client for the OpenAI-compatible API supporting chat completions, embeddings, and text generation.
+    /// </summary>
+    public class OpenAiClient : CompletionClientBase
+    {
+        #region Constructors-and-Factories
+
+        /// <summary>
+        /// Initialize a new OpenAiClient.
+        /// </summary>
+        /// <param name="endpoint">OpenAI API endpoint URL. Default: https://api.openai.com.</param>
+        /// <param name="apiKey">API key (required for OpenAI). Default: null.</param>
+        /// <param name="logging">Logging module. Default: new instance.</param>
+        public OpenAiClient(
+            string endpoint = "https://api.openai.com",
+            string? apiKey = null,
+            LoggingModule? logging = null)
+            : base(endpoint, apiKey, logging ?? new LoggingModule())
+        {
+            _Header = "[OpenAI] ";
+            Model = "gpt-4o-mini";
+
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                _HttpClient.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            }
+        }
+
+        #endregion
+
+        #region Public-Methods
+
+        /// <inheritdoc />
+        public override async Task<ChatResponse> ChatAsync(
+            string prompt,
+            ChatCompletionOptions? options = null,
+            CancellationToken token = default)
+        {
+            ResolveOptions(options, out int maxTokens, out double? temperature, out double? topP, out string? systemPrompt);
+
+            ChatResponse chatResponse = new ChatResponse();
+            chatResponse.Model = Model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+
+            Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, false);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                HttpResponseMessage response = result.Response;
+                string responseBody = result.ResponseBody;
+
+                chatResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "chat request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    chatResponse.Success = false;
+                    chatResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    return chatResponse;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+                if (responseObj == null || !responseObj.ContainsKey("choices"))
+                {
+                    _Logging.Warn(_Header + "chat response missing 'choices' field");
+                    chatResponse.Success = false;
+                    chatResponse.Error = "Response missing 'choices' field";
+                    return chatResponse;
+                }
+
+                string choicesJson = _Serializer.SerializeJson(responseObj["choices"], false);
+                List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+                if (choices == null || choices.Count == 0)
+                {
+                    _Logging.Warn(_Header + "chat response has empty choices array");
+                    chatResponse.Success = false;
+                    chatResponse.Error = "Response has empty choices array";
+                    return chatResponse;
+                }
+
+                if (!choices[0].ContainsKey("message"))
+                {
+                    _Logging.Warn(_Header + "chat response choice missing 'message' field");
+                    chatResponse.Success = false;
+                    chatResponse.Error = "Response choice missing 'message' field";
+                    return chatResponse;
+                }
+
+                string messageJson = _Serializer.SerializeJson(choices[0]["message"], false);
+                Dictionary<string, object>? message = _Serializer.DeserializeJson<Dictionary<string, object>>(messageJson);
+
+                if (message == null || !message.ContainsKey("content"))
+                {
+                    _Logging.Warn(_Header + "chat response message missing 'content' field");
+                    chatResponse.Success = false;
+                    chatResponse.Error = "Response message missing 'content' field";
+                    return chatResponse;
+                }
+
+                string? completionText = message["content"]?.ToString();
+                chatResponse.Text = string.IsNullOrWhiteSpace(completionText) ? null : completionText.Trim();
+                chatResponse.Success = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                chatResponse.Success = false;
+                chatResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                chatResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return chatResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<ChatStreamingResponse> ChatStreamingAsync(
+            string prompt,
+            ChatCompletionOptions? options = null,
+            CancellationToken token = default)
+        {
+            ResolveOptions(options, out int maxTokens, out double? temperature, out double? topP, out string? systemPrompt);
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+
+            Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, true);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST (streaming) " + url);
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            ChatStreamingResponse streamingResponse = new ChatStreamingResponse();
+            streamingResponse.Model = Model;
+
+            try
+            {
+                HttpResponseMessage response = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                streamingResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                    _Logging.Warn(_Header + "streaming chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                    streamingResponse.Success = false;
+                    streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    return streamingResponse;
+                }
+
+                streamingResponse.Success = true;
+                streamingResponse.Chunks = WrapChunksWithTiming(streamingResponse, ReadOpenAiChatChunks(response, token), sw, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                streamingResponse.Success = false;
+                streamingResponse.Error = ex.Message;
+            }
+
+            return streamingResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<EmbeddingResponse> EmbedAsync(
+            string input,
+            EmbeddingOptions? options = null,
+            CancellationToken token = default)
+        {
+            return await EmbedAsync(new List<string> { input }, options, token).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc />
+        public override async Task<EmbeddingResponse> EmbedAsync(
+            List<string> inputs,
+            EmbeddingOptions? options = null,
+            CancellationToken token = default)
+        {
+            EmbeddingResponse embedResponse = new EmbeddingResponse();
+            string model = options?.Model ?? Model;
+            embedResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/embeddings";
+
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", model },
+                { "input", inputs }
+            };
+
+            OpenAiEmbeddingOptions? openAiOptions = options as OpenAiEmbeddingOptions;
+            if (openAiOptions != null)
+            {
+                if (!string.IsNullOrEmpty(openAiOptions.EncodingFormat)) requestBody["encoding_format"] = openAiOptions.EncodingFormat;
+                if (openAiOptions.Dimensions.HasValue) requestBody["dimensions"] = openAiOptions.Dimensions.Value;
+            }
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                HttpResponseMessage response = result.Response;
+                string responseBody = result.ResponseBody;
+
+                embedResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "embed request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    embedResponse.Success = false;
+                    embedResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    return embedResponse;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+                if (responseObj == null || !responseObj.ContainsKey("data"))
+                {
+                    _Logging.Warn(_Header + "embed response missing 'data' field");
+                    embedResponse.Success = false;
+                    embedResponse.Error = "Response missing 'data' field";
+                    return embedResponse;
+                }
+
+                string dataJson = _Serializer.SerializeJson(responseObj["data"], false);
+                List<Dictionary<string, object>>? dataList = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(dataJson);
+
+                if (dataList != null)
+                {
+                    foreach (Dictionary<string, object> item in dataList)
+                    {
+                        EmbeddingResult embResult = new EmbeddingResult();
+                        if (item.ContainsKey("index") && int.TryParse(item["index"]?.ToString(), out int idx))
+                        {
+                            embResult.Index = idx;
+                        }
+                        if (item.ContainsKey("embedding"))
+                        {
+                            string vectorJson = _Serializer.SerializeJson(item["embedding"], false);
+                            embResult.Embedding = ParseFloatArray(vectorJson);
+                        }
+                        embedResponse.Embeddings.Add(embResult);
+                    }
+                }
+
+                embedResponse.Success = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                embedResponse.Success = false;
+                embedResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                embedResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return embedResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<GenerationResponse> GenerateAsync(
+            string prompt,
+            GenerationOptions? options = null,
+            CancellationToken token = default)
+        {
+            ResolveGenerationOptions(options, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            GenerationResponse genResponse = new GenerationResponse();
+            genResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/completions";
+
+            Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, model, maxTokens, temperature, topP, options as OpenAiGenerationOptions, false);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                HttpResponseMessage response = result.Response;
+                string responseBody = result.ResponseBody;
+
+                genResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "generate request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    genResponse.Success = false;
+                    genResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    return genResponse;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+                if (responseObj != null && responseObj.ContainsKey("choices"))
+                {
+                    string choicesJson = _Serializer.SerializeJson(responseObj["choices"], false);
+                    List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+                    if (choices != null && choices.Count > 0 && choices[0].ContainsKey("text"))
+                    {
+                        string? text = choices[0]["text"]?.ToString();
+                        genResponse.Text = string.IsNullOrWhiteSpace(text) ? null : text;
+                    }
+                }
+
+                genResponse.Success = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                genResponse.Success = false;
+                genResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                genResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return genResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<GenerationStreamingResponse> GenerateStreamingAsync(
+            string prompt,
+            GenerationOptions? options = null,
+            CancellationToken token = default)
+        {
+            ResolveGenerationOptions(options, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/completions";
+
+            Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, model, maxTokens, temperature, topP, options as OpenAiGenerationOptions, true);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST (streaming) " + url);
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            GenerationStreamingResponse streamingResponse = new GenerationStreamingResponse();
+            streamingResponse.Model = model;
+
+            try
+            {
+                HttpResponseMessage response = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                streamingResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    string errorBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+                    _Logging.Warn(_Header + "streaming generate request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                    streamingResponse.Success = false;
+                    streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    return streamingResponse;
+                }
+
+                streamingResponse.Success = true;
+                streamingResponse.Chunks = WrapGenerationChunksWithTiming(streamingResponse, ReadOpenAiGenerateChunks(response, token), sw, token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                streamingResponse.Success = false;
+                streamingResponse.Error = ex.Message;
+            }
+
+            return streamingResponse;
+        }
+
+        /// <inheritdoc />
+        public override async IAsyncEnumerable<ModelInformation> ListModelsAsync(
+            [EnumeratorCancellation] CancellationToken token = default)
+        {
+            string url = _Endpoint.TrimEnd('/') + "/v1/models";
+
+            _Logging.Debug(_Header + "GET " + url);
+
+            CompletionHttpResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
+
+            if (!result.Response.IsSuccessStatusCode)
+            {
+                _Logging.Warn(_Header + "list models failed with status " + (int)result.Response.StatusCode);
+                yield break;
+            }
+
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(result.ResponseBody);
+            if (responseObj == null || !responseObj.ContainsKey("data"))
+                yield break;
+
+            string dataJson = _Serializer.SerializeJson(responseObj["data"], false);
+            List<Dictionary<string, object>>? dataList = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(dataJson);
+            if (dataList == null)
+                yield break;
+
+            foreach (Dictionary<string, object> modelObj in dataList)
+            {
+                token.ThrowIfCancellationRequested();
+
+                ModelInformation info = new ModelInformation();
+                info.Name = modelObj.ContainsKey("id") ? modelObj["id"]?.ToString() ?? "" : "";
+                info.OwnedBy = modelObj.ContainsKey("owned_by") ? modelObj["owned_by"]?.ToString() : null;
+
+                if (modelObj.ContainsKey("created"))
+                {
+                    string? createdStr = modelObj["created"]?.ToString();
+                    if (long.TryParse(createdStr, out long unixSeconds))
+                    {
+                        info.CreatedUtc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;
+                    }
+                }
+
+                if (modelObj.ContainsKey("object"))
+                {
+                    info.Metadata["object"] = modelObj["object"]?.ToString();
+                }
+
+                yield return info;
+            }
+        }
+
+        /// <inheritdoc />
+        public override async Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentNullException(nameof(model));
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/models/" + Uri.EscapeDataString(model);
+            _Logging.Debug(_Header + "GET " + url);
+
+            try
+            {
+                CompletionHttpResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
+                HttpResponseMessage response = result.Response;
+                string responseBody = result.ResponseBody;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "get model failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    return null;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+                if (responseObj == null) return null;
+
+                ModelInformation info = new ModelInformation();
+                info.Name = responseObj.ContainsKey("id") ? responseObj["id"]?.ToString() ?? model : model;
+                info.OwnedBy = responseObj.ContainsKey("owned_by") ? responseObj["owned_by"]?.ToString() : null;
+
+                if (responseObj.ContainsKey("created"))
+                {
+                    long? created = TryGetLong(responseObj, "created");
+                    if (created.HasValue)
+                    {
+                        info.CreatedUtc = DateTimeOffset.FromUnixTimeSeconds(created.Value).UtcDateTime;
+                    }
+                }
+
+                if (responseObj.ContainsKey("object"))
+                    info.Metadata["object"] = responseObj["object"]?.ToString();
+
+                return info;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _Logging.Warn(_Header + "get model failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private Dictionary<string, object> BuildChatRequestBody(
+            string prompt, int maxTokens, string? systemPrompt,
+            double? temperature, double? topP,
+            OpenAiChatCompletionOptions? openAiOptions, bool stream)
+        {
+            List<Dictionary<string, string>> messages = new List<Dictionary<string, string>>();
+            if (!string.IsNullOrEmpty(systemPrompt))
+            {
+                messages.Add(new Dictionary<string, string> { { "role", "system" }, { "content", systemPrompt } });
+            }
+            messages.Add(new Dictionary<string, string> { { "role", "user" }, { "content", prompt } });
+
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", Model },
+                { "messages", messages },
+                { "max_tokens", maxTokens }
+            };
+
+            if (temperature.HasValue) requestBody["temperature"] = temperature.Value;
+            if (topP.HasValue) requestBody["top_p"] = topP.Value;
+
+            if (openAiOptions != null)
+            {
+                if (openAiOptions.FrequencyPenalty.HasValue) requestBody["frequency_penalty"] = openAiOptions.FrequencyPenalty.Value;
+                if (openAiOptions.PresencePenalty.HasValue) requestBody["presence_penalty"] = openAiOptions.PresencePenalty.Value;
+                if (openAiOptions.Seed.HasValue) requestBody["seed"] = openAiOptions.Seed.Value;
+            }
+
+            if (stream)
+            {
+                requestBody["stream"] = true;
+                requestBody["stream_options"] = new Dictionary<string, object> { { "include_usage", true } };
+            }
+
+            return requestBody;
+        }
+
+        private Dictionary<string, object> BuildGenerateRequestBody(
+            string prompt, string model, int maxTokens,
+            double? temperature, double? topP,
+            OpenAiGenerationOptions? openAiOptions, bool stream)
+        {
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", model },
+                { "prompt", prompt },
+                { "max_tokens", maxTokens }
+            };
+
+            if (temperature.HasValue) requestBody["temperature"] = temperature.Value;
+            if (topP.HasValue) requestBody["top_p"] = topP.Value;
+
+            if (openAiOptions != null)
+            {
+                if (openAiOptions.FrequencyPenalty.HasValue) requestBody["frequency_penalty"] = openAiOptions.FrequencyPenalty.Value;
+                if (openAiOptions.PresencePenalty.HasValue) requestBody["presence_penalty"] = openAiOptions.PresencePenalty.Value;
+                if (openAiOptions.Seed.HasValue) requestBody["seed"] = openAiOptions.Seed.Value;
+                if (openAiOptions.Echo.HasValue) requestBody["echo"] = openAiOptions.Echo.Value;
+                if (!string.IsNullOrEmpty(openAiOptions.Suffix)) requestBody["suffix"] = openAiOptions.Suffix;
+                if (openAiOptions.Logprobs.HasValue) requestBody["logprobs"] = openAiOptions.Logprobs.Value;
+            }
+
+            if (stream)
+            {
+                requestBody["stream"] = true;
+            }
+
+            return requestBody;
+        }
+
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadOpenAiChatChunks(
+            HttpResponseMessage response,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream);
+
+            string? line;
+            while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data: ")) continue;
+
+                string data = line.Substring(6);
+                if (data == "[DONE]")
+                {
+                    ChatStreamingChunk doneChunk = new ChatStreamingChunk();
+                    doneChunk.Done = true;
+                    yield return doneChunk;
+                    break;
+                }
+
+                Dictionary<string, object>? chunk = _Serializer.DeserializeJson<Dictionary<string, object>>(data);
+                if (chunk == null) continue;
+
+                ChatStreamingChunk streamChunk = new ChatStreamingChunk();
+                streamChunk.ResponseId = chunk.ContainsKey("id") ? chunk["id"]?.ToString() : null;
+                streamChunk.Model = chunk.ContainsKey("model") ? chunk["model"]?.ToString() : null;
+
+                if (chunk.ContainsKey("created"))
+                {
+                    string? createdStr = chunk["created"]?.ToString();
+                    if (long.TryParse(createdStr, out long unixSeconds))
+                    {
+                        streamChunk.CreatedUtc = DateTimeOffset.FromUnixTimeSeconds(unixSeconds).UtcDateTime;
+                    }
+                }
+
+                if (chunk.ContainsKey("choices"))
+                {
+                    string choicesJson = _Serializer.SerializeJson(chunk["choices"], false);
+                    List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+                    if (choices != null && choices.Count > 0)
+                    {
+                        Dictionary<string, object> choice = choices[0];
+
+                        if (choice.ContainsKey("finish_reason") && choice["finish_reason"] != null)
+                        {
+                            streamChunk.FinishReason = choice["finish_reason"].ToString();
+                            streamChunk.Done = true;
+                        }
+
+                        if (choice.ContainsKey("delta"))
+                        {
+                            string deltaJson = _Serializer.SerializeJson(choice["delta"], false);
+                            Dictionary<string, object>? delta = _Serializer.DeserializeJson<Dictionary<string, object>>(deltaJson);
+                            if (delta != null && delta.ContainsKey("content"))
+                            {
+                                streamChunk.Text = delta["content"]?.ToString();
+                            }
+                        }
+                    }
+                }
+
+                if (chunk.ContainsKey("usage") && chunk["usage"] != null)
+                {
+                    string usageJson = _Serializer.SerializeJson(chunk["usage"], false);
+                    Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
+
+                    if (usageObj != null)
+                    {
+                        ChatStreamingUsage usage = new ChatStreamingUsage();
+                        if (usageObj.ContainsKey("prompt_tokens") && int.TryParse(usageObj["prompt_tokens"]?.ToString(), out int pt))
+                            usage.PromptTokens = pt;
+                        if (usageObj.ContainsKey("completion_tokens") && int.TryParse(usageObj["completion_tokens"]?.ToString(), out int ct))
+                            usage.CompletionTokens = ct;
+                        if (usageObj.ContainsKey("total_tokens") && int.TryParse(usageObj["total_tokens"]?.ToString(), out int tt))
+                            usage.TotalTokens = tt;
+                        streamChunk.Usage = usage;
+                    }
+                }
+
+                yield return streamChunk;
+            }
+        }
+
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadOpenAiGenerateChunks(
+            HttpResponseMessage response,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream);
+
+            string? line;
+            while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data: ")) continue;
+
+                string data = line.Substring(6);
+                if (data == "[DONE]")
+                {
+                    GenerationStreamingChunk doneChunk = new GenerationStreamingChunk();
+                    doneChunk.Done = true;
+                    yield return doneChunk;
+                    break;
+                }
+
+                Dictionary<string, object>? chunk = _Serializer.DeserializeJson<Dictionary<string, object>>(data);
+                if (chunk == null) continue;
+
+                GenerationStreamingChunk streamChunk = new GenerationStreamingChunk();
+                streamChunk.Model = chunk.ContainsKey("model") ? chunk["model"]?.ToString() : null;
+
+                if (chunk.ContainsKey("choices"))
+                {
+                    string choicesJson = _Serializer.SerializeJson(chunk["choices"], false);
+                    List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+                    if (choices != null && choices.Count > 0)
+                    {
+                        Dictionary<string, object> choice = choices[0];
+                        if (choice.ContainsKey("text"))
+                        {
+                            streamChunk.Text = choice["text"]?.ToString();
+                        }
+                        if (choice.ContainsKey("finish_reason") && choice["finish_reason"] != null)
+                        {
+                            streamChunk.Done = true;
+                        }
+                    }
+                }
+
+                yield return streamChunk;
+            }
+        }
+
+        #endregion
+    }
+}

@@ -1,0 +1,1255 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>PolyPrompt</name>
+    </assembly>
+    <members>
+        <member name="T:PolyPrompt.Clients.CompletionClientBase">
+            <summary>
+            Abstract base class for chat completion, embedding, and generation API clients.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._Logging">
+            <summary>
+            Logging module.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._Endpoint">
+            <summary>
+            Endpoint URL.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._ApiKey">
+            <summary>
+            API key (nullable).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._HttpClient">
+            <summary>
+            HTTP client for API requests.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._Serializer">
+            <summary>
+            Serializer instance.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._Header">
+            <summary>
+            Header prefix for log messages.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.Endpoint">
+            <summary>
+            The endpoint URL for this client (read-only, set in constructor).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.ApiKey">
+            <summary>
+            The API key for this client (read-only, set in constructor). Returns null if not set.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.Model">
+            <summary>
+            Model name to use for completions.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.MaxTokens">
+            <summary>
+            Maximum number of tokens to generate. Clamped to 1..10,000,000.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.TimeoutMs">
+            <summary>
+            HTTP request timeout in milliseconds. Clamped to 1,000..600,000 (1 second to 10 minutes).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.Temperature">
+            <summary>
+            Sampling temperature. Clamped to 0.0..2.0. Set to null to use the provider default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.TopP">
+            <summary>
+            Nucleus sampling (top-p). Clamped to 0.0..1.0. Set to null to use the provider default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.SystemPrompt">
+            <summary>
+            System prompt to include with every chat completion. Set to null for none.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.CallDetails">
+            <summary>
+            Recorded details of HTTP calls made to upstream completion endpoints.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a new CompletionClientBase.
+            </summary>
+            <param name="endpoint">Endpoint URL.</param>
+            <param name="apiKey">API key (nullable).</param>
+            <param name="logging">Logging module.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Send a chat completion request and return the full response.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatResponse containing the completion text, metadata, and timing.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Send a chat completion request and stream response chunks as they arrive.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate an embedding for a single input string.
+            </summary>
+            <param name="input">The text to embed.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An EmbeddingResponse containing the embedding vector.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate embeddings for a batch of input strings.
+            </summary>
+            <param name="inputs">The list of texts to embed.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An EmbeddingResponse containing the embedding vectors.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate text from a prompt (non-streaming).
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A GenerationResponse containing the generated text.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate text from a prompt with streaming.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A GenerationStreamingResponse containing an async enumerable of chunks.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List available models from the provider.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>An async enumerable of ModelInformation objects.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ModelExistsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Check if a specific model exists on the provider.
+            </summary>
+            <param name="model">The model name to search for.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the model exists, false otherwise.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Validate connectivity to the provider by attempting to list models.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the provider is reachable and responded successfully, false otherwise.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.PullModelAsync(System.String,System.Func{PolyPrompt.Models.ModelPullProgress,System.Threading.Tasks.Task},System.Threading.CancellationToken)">
+            <summary>
+            Pull (download) a model from the provider. Invokes the progress callback as download progresses.
+            Not all providers support model pulling; the default implementation throws NotSupportedException.
+            </summary>
+            <param name="model">The model name to pull.</param>
+            <param name="progress">Callback invoked with progress updates. May be null to ignore progress.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the model was pulled successfully, false otherwise.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support model pulling.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.DeleteModelAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete a model from the provider.
+            Not all providers support model deletion; the default implementation throws NotSupportedException.
+            </summary>
+            <param name="model">The model name to delete.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the model was deleted successfully, false otherwise.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support model deletion.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Retrieve detailed information about a specific model.
+            </summary>
+            <param name="model">The model name to look up.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ModelInformation object if found, null otherwise.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.Dispose">
+            <summary>
+            Dispose of HTTP client resources.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.GetAndRecordAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP GET to an upstream endpoint and record the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A CompletionHttpResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolveOptions(PolyPrompt.Models.ChatCompletionOptions,System.Int32@,System.Nullable{System.Double}@,System.Nullable{System.Double}@,System.String@)">
+            <summary>
+            Resolve effective values from per-call options and instance defaults.
+            </summary>
+            <param name="options">Per-call options (nullable).</param>
+            <param name="maxTokens">Resolved max tokens.</param>
+            <param name="temperature">Resolved temperature.</param>
+            <param name="topP">Resolved top-p.</param>
+            <param name="systemPrompt">Resolved system prompt.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolveGenerationOptions(PolyPrompt.Models.GenerationOptions,System.String@,System.Int32@,System.Nullable{System.Double}@,System.Nullable{System.Double}@)">
+            <summary>
+            Resolve effective values from per-call generation options and instance defaults.
+            </summary>
+            <param name="options">Per-call options (nullable).</param>
+            <param name="model">Resolved model name.</param>
+            <param name="maxTokens">Resolved max tokens.</param>
+            <param name="temperature">Resolved temperature.</param>
+            <param name="topP">Resolved top-p.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.PostAndRecordAsync(System.String,System.Net.Http.StringContent,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP POST to an upstream endpoint and record the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="content">HTTP content to send.</param>
+            <param name="requestBodyJson">Request body as a JSON string (for recording).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A CompletionHttpResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapChunksWithTiming(PolyPrompt.Models.ChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken)">
+            <summary>
+            Wrap a raw chunk enumerable with timing-tracking logic that updates the response object.
+            </summary>
+            <param name="response">The streaming response object to update with timing.</param>
+            <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
+            <param name="sw">Stopwatch started before the HTTP request was made.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapGenerationChunksWithTiming(PolyPrompt.Models.GenerationStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.GenerationStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken)">
+            <summary>
+            Wrap a raw generation chunk enumerable with timing-tracking logic.
+            </summary>
+            <param name="response">The streaming response object to update with timing.</param>
+            <param name="rawChunks">The raw async enumerable of generation chunks.</param>
+            <param name="sw">Stopwatch started before the HTTP request was made.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP POST for streaming and return the response stream.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="content">HTTP content to send.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The HTTP response message with stream content.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ParseFloatArray(System.String)">
+            <summary>
+            Parse a float array from a JSON array element.
+            </summary>
+            <param name="arrayJson">The JSON string representing the array.</param>
+            <returns>An array of floats.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.TryGetInt(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Try to parse an integer from a dictionary value.
+            </summary>
+            <param name="dict">The dictionary.</param>
+            <param name="key">The key to look up.</param>
+            <returns>The integer value or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.TryGetLong(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Try to parse a long from a dictionary value.
+            </summary>
+            <param name="dict">The dictionary.</param>
+            <param name="key">The key to look up.</param>
+            <returns>The long value or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.IsTruthy(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Check if a dictionary value represents a truthy boolean.
+            Handles bool objects, strings ("true"/"True"), and numeric values (non-zero).
+            </summary>
+            <param name="dict">The dictionary.</param>
+            <param name="key">The key to look up.</param>
+            <returns>True if the value is truthy, false otherwise.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.GeminiClient">
+            <summary>
+            Client for the Google Gemini API supporting chat completions, embeddings, and text generation.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a new GeminiClient.
+            </summary>
+            <param name="endpoint">Gemini API endpoint URL. Default: https://generativelanguage.googleapis.com.</param>
+            <param name="apiKey">Google API key (required). Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.OllamaClient">
+            <summary>
+            Client for the Ollama API supporting chat completions, embeddings, and text generation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.OllamaClient.ContextLength">
+            <summary>
+            Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a new OllamaClient.
+            </summary>
+            <param name="endpoint">Ollama server endpoint URL. Default: http://localhost:11434.</param>
+            <param name="apiKey">API key (nullable, typically not needed for Ollama). Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.PullModelAsync(System.String,System.Func{PolyPrompt.Models.ModelPullProgress,System.Threading.Tasks.Task},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.DeleteModelAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.OpenAiClient">
+            <summary>
+            Client for the OpenAI-compatible API supporting chat completions, embeddings, and text generation.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a new OpenAiClient.
+            </summary>
+            <param name="endpoint">OpenAI API endpoint URL. Default: https://api.openai.com.</param>
+            <param name="apiKey">API key (required for OpenAI). Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Models.ChatCompletionOptions">
+            <summary>
+            Base options for chat completion requests.
+            Per-call overrides for properties that are also available on the client instance.
+            When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatCompletionOptions.Temperature">
+            <summary>
+            Sampling temperature override. Clamped to 0.0..2.0. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatCompletionOptions.TopP">
+            <summary>
+            Nucleus sampling (top-p) override. Clamped to 0.0..1.0. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatCompletionOptions.MaxTokens">
+            <summary>
+            Max tokens override. Clamped to 1..10,000,000. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatCompletionOptions.SystemPrompt">
+            <summary>
+            System prompt override. Null uses client default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatResponse">
+            <summary>
+            Response from a non-streaming chat completion request.
+            Contains the completion text, metadata, and timing information.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Text">
+            <summary>
+            The completion text returned by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Model">
+            <summary>
+            The model name used for this completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatStreamingChunk">
+            <summary>
+            A single chunk from a streaming chat completion response.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.Text">
+            <summary>
+            The text content of this chunk. May be null or empty for metadata-only chunks.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.Model">
+            <summary>
+            The model that generated this chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.Done">
+            <summary>
+            Whether this is the final chunk in the stream.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.FinishReason">
+            <summary>
+            The reason generation finished. Present on the final chunk.
+            Common values: "stop", "length" (Ollama/OpenAI), "STOP", "MAX_TOKENS" (Gemini).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.Usage">
+            <summary>
+            Token usage and timing statistics. Typically only populated on the final chunk.
+            Gemini provides cumulative usage on every chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.ResponseId">
+            <summary>
+            Response identifier for correlation. Present in OpenAI (id) and Gemini (responseId).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.CreatedUtc">
+            <summary>
+            UTC timestamp of when this chunk was created.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatStreamingResponse">
+            <summary>
+            Top-level response from a streaming chat completion request.
+            Contains metadata, timing, and an async enumerable of streaming chunks.
+            Timing fields are populated as chunks are consumed through the Chunks enumerable.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Model">
+            <summary>
+            The model name used for this completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Success">
+            <summary>
+            Whether the streaming request was initiated successfully.
+            If false, check Error for details.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.StatusCode">
+            <summary>
+            HTTP status code from the streaming request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Chunks">
+            <summary>
+            The async enumerable of streaming chunks.
+            Enumerate this to receive tokens and metadata as they arrive.
+            Timing fields on this response are updated as chunks are consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime in milliseconds from request start to last chunk received.
+            Updated after all chunks have been consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.TimeToFirstTokenMs">
+            <summary>
+            Time in milliseconds from request start to the first token received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.TimeToLastTokenMs">
+            <summary>
+            Time in milliseconds from request start to the last token received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ChunkCount">
+            <summary>
+            Number of text-bearing chunks received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.OverallTokensPerSecond">
+            <summary>
+            Tokens per second calculated over the overall runtime (completion tokens / overall runtime).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.InterTokenTokensPerSecond">
+            <summary>
+            Tokens per second calculated between first and last token arrival (completion tokens / inter-token duration).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Usage">
+            <summary>
+            Final token usage from the stream (typically from the last chunk).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.FinishReason">
+            <summary>
+            The finish reason from the model (e.g. "stop", "length").
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ResponseId">
+            <summary>
+            Response identifier for correlation.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatStreamingUsage">
+            <summary>
+            Token usage and timing statistics from a chat completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens">
+            <summary>
+            Number of tokens in the prompt.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.CompletionTokens">
+            <summary>
+            Number of tokens generated in the completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.TotalTokens">
+            <summary>
+            Total tokens (prompt + completion).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.TotalDurationNs">
+            <summary>
+            Total request duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.LoadDurationNs">
+            <summary>
+            Model load duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.PromptEvalDurationNs">
+            <summary>
+            Prompt evaluation duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.EvalDurationNs">
+            <summary>
+            Token generation duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CompletionCallDetail">
+            <summary>
+            Captures details of a single HTTP call made to an upstream completion endpoint.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.Url">
+            <summary>
+            Full URL called.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.Method">
+            <summary>
+            HTTP method (e.g. POST).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.RequestHeaders">
+            <summary>
+            Headers sent upstream.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.RequestBody">
+            <summary>
+            Body sent upstream.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.StatusCode">
+            <summary>
+            HTTP status code returned.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.ResponseHeaders">
+            <summary>
+            Response headers.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.ResponseBody">
+            <summary>
+            Response body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.ResponseTimeMs">
+            <summary>
+            Timing for this call in milliseconds.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.Success">
+            <summary>
+            Whether the call succeeded.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.Error">
+            <summary>
+            Error message if the call failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionCallDetail.TimestampUtc">
+            <summary>
+            UTC timestamp when the call was initiated.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CompletionHttpResult">
+            <summary>
+            Wraps the HTTP response and body from a completion API call.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionHttpResult.Response">
+            <summary>
+            The HTTP response message.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionHttpResult.ResponseBody">
+            <summary>
+            The response body as a string.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.EmbeddingOptions">
+            <summary>
+            Base options for embedding requests.
+            When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingOptions.Model">
+            <summary>
+            Model override for this embedding request. Null uses client default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.EmbeddingResponse">
+            <summary>
+            Response from an embedding request containing one or more embedding vectors.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.Model">
+            <summary>
+            The model name used for this embedding.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.Embeddings">
+            <summary>
+            List of embedding vectors returned by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.EmbeddingResult">
+            <summary>
+            A single embedding vector result.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResult.Index">
+            <summary>
+            The index of this embedding in the request batch.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResult.Embedding">
+            <summary>
+            The embedding vector as an array of floats.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GenerationOptions">
+            <summary>
+            Base options for text generation requests.
+            When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationOptions.Model">
+            <summary>
+            Model override for this generation request. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationOptions.Temperature">
+            <summary>
+            Sampling temperature override. Clamped to 0.0..2.0. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationOptions.TopP">
+            <summary>
+            Nucleus sampling (top-p) override. Clamped to 0.0..1.0. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationOptions.MaxTokens">
+            <summary>
+            Max tokens override. Clamped to 1..10,000,000. Null uses client default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GenerationResponse">
+            <summary>
+            Response from a non-streaming text generation request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Text">
+            <summary>
+            The generated text returned by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Model">
+            <summary>
+            The model name used for this generation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GenerationStreamingChunk">
+            <summary>
+            A single chunk from a streaming text generation response.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.Text">
+            <summary>
+            The text content of this chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.Done">
+            <summary>
+            Whether this is the final chunk in the stream.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.Model">
+            <summary>
+            The model that generated this chunk.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GenerationStreamingResponse">
+            <summary>
+            Top-level response from a streaming text generation request.
+            Contains metadata, timing, and an async enumerable of streaming chunks.
+            Timing fields are populated as chunks are consumed through the Chunks enumerable.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Model">
+            <summary>
+            The model name used for this generation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Success">
+            <summary>
+            Whether the streaming request was initiated successfully.
+            If false, check Error for details.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.StatusCode">
+            <summary>
+            HTTP status code from the streaming request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Chunks">
+            <summary>
+            The async enumerable of streaming chunks.
+            Enumerate this to receive tokens as they arrive.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime in milliseconds from request start to last chunk received.
+            Updated after all chunks have been consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.TimeToFirstTokenMs">
+            <summary>
+            Time in milliseconds from request start to the first token received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.TimeToLastTokenMs">
+            <summary>
+            Time in milliseconds from request start to the last token received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.ChunkCount">
+            <summary>
+            Number of text-bearing chunks received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.OverallTokensPerSecond">
+            <summary>
+            Tokens per second calculated over the overall runtime.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.InterTokenTokensPerSecond">
+            <summary>
+            Tokens per second calculated between first and last token arrival.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ModelInformation">
+            <summary>
+            Normalized model information returned by ListModelsAsync across all providers.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.Name">
+            <summary>
+            The model identifier to pass to API calls (e.g. "gemma3:4b", "gpt-4o", "gemini-2.5-flash").
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.DisplayName">
+            <summary>
+            Human-friendly display name for the model. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.Description">
+            <summary>
+            Model description. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.OwnedBy">
+            <summary>
+            Owner or organization of the model. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.CreatedUtc">
+            <summary>
+            Creation timestamp in UTC. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.ModifiedUtc">
+            <summary>
+            Last modified timestamp in UTC. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.SizeBytes">
+            <summary>
+            Model file size in bytes. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.InputTokenLimit">
+            <summary>
+            Maximum input tokens supported by the model. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.OutputTokenLimit">
+            <summary>
+            Maximum output tokens supported by the model. May be null if the provider does not supply one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.Metadata">
+            <summary>
+            Provider-specific metadata as key-value pairs. Contains fields such as parameter_size,
+            quantization_level, family, format, digest (Ollama), object type (OpenAI),
+            or supportedGenerationMethods (Gemini).
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ModelPullProgress">
+            <summary>
+            Progress information reported during a model pull operation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelPullProgress.Status">
+            <summary>
+            Status message from the provider (e.g. "pulling manifest", "downloading sha256:abc123", "success").
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelPullProgress.Digest">
+            <summary>
+            Digest identifier for the layer being downloaded. Null when not downloading a layer.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelPullProgress.TotalBytes">
+            <summary>
+            Total bytes for the current layer. Null when not applicable.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelPullProgress.CompletedBytes">
+            <summary>
+            Bytes completed for the current layer. Null when not applicable.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelPullProgress.PercentComplete">
+            <summary>
+            Percentage complete for the current layer (0.0 to 100.0). Null when total is unknown.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.GeminiChatCompletionOptions">
+            <summary>
+            Gemini-specific options for chat completion requests.
+            These map to fields in the Gemini generationConfig.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiChatCompletionOptions.TopK">
+            <summary>
+            Top-K sampling. Clamped to 1..1,000. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiChatCompletionOptions.CandidateCount">
+            <summary>
+            Number of candidate responses to generate. Clamped to 1..8. Null uses default (1).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiChatCompletionOptions.PresencePenalty">
+            <summary>
+            Presence penalty. Clamped to -2.0..2.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiChatCompletionOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty. Clamped to -2.0..2.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.GeminiEmbeddingOptions">
+            <summary>
+            Gemini-specific options for embedding requests.
+            These map to fields in the Gemini embedContent request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiEmbeddingOptions.TaskType">
+            <summary>
+            Task type for the embedding. Examples: "RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY", "SEMANTIC_SIMILARITY", "CLASSIFICATION", "CLUSTERING".
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiEmbeddingOptions.Title">
+            <summary>
+            Title of the document (only applicable when TaskType is "RETRIEVAL_DOCUMENT").
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.GeminiGenerationOptions">
+            <summary>
+            Gemini-specific options for text generation requests.
+            These map to fields in the Gemini generationConfig.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiGenerationOptions.TopK">
+            <summary>
+            Top-K sampling. Clamped to 1..1,000. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiGenerationOptions.CandidateCount">
+            <summary>
+            Number of candidate responses to generate. Clamped to 1..8. Null uses default (1).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiGenerationOptions.PresencePenalty">
+            <summary>
+            Presence penalty. Clamped to -2.0..2.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.GeminiGenerationOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty. Clamped to -2.0..2.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OllamaChatCompletionOptions">
+            <summary>
+            Ollama-specific options for chat completion requests.
+            These map to fields in the Ollama /api/chat request body under "options".
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.ContextLength">
+            <summary>
+            Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.TopK">
+            <summary>
+            Top-K sampling. Clamped to 1..1,000. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.RepeatPenalty">
+            <summary>
+            Repeat penalty. Clamped to 0.0..10.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.Seed">
+            <summary>
+            Random seed for reproducibility. Null uses random seed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.MinP">
+            <summary>
+            Minimum probability threshold (min_p). Clamped to 0.0..1.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaChatCompletionOptions.RepeatLastN">
+            <summary>
+            Number of tokens to look back for repeat penalty (repeat_last_n). Clamped to 0..4096. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OllamaEmbeddingOptions">
+            <summary>
+            Ollama-specific options for embedding requests.
+            These map to fields in the Ollama /api/embed request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaEmbeddingOptions.Truncate">
+            <summary>
+            Truncate input to this many tokens. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaEmbeddingOptions.ContextLength">
+            <summary>
+            Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OllamaGenerationOptions">
+            <summary>
+            Ollama-specific options for text generation requests.
+            These map to fields in the Ollama /api/generate request body under "options".
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.TopK">
+            <summary>
+            Top-K sampling. Clamped to 1..1,000. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.RepeatPenalty">
+            <summary>
+            Repeat penalty. Clamped to 0.0..10.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.Seed">
+            <summary>
+            Random seed for reproducibility. Null uses random seed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.ContextLength">
+            <summary>
+            Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.MinP">
+            <summary>
+            Minimum probability threshold (min_p). Clamped to 0.0..1.0. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaGenerationOptions.RepeatLastN">
+            <summary>
+            Number of tokens to look back for repeat penalty (repeat_last_n). Clamped to 0..4096. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OpenAiChatCompletionOptions">
+            <summary>
+            OpenAI-specific options for chat completion requests.
+            These map to fields in the OpenAI /v1/chat/completions request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiChatCompletionOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty. Clamped to -2.0..2.0. Null uses API default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiChatCompletionOptions.PresencePenalty">
+            <summary>
+            Presence penalty. Clamped to -2.0..2.0. Null uses API default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiChatCompletionOptions.Seed">
+            <summary>
+            Random seed for reproducibility. Null uses random seed.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OpenAiEmbeddingOptions">
+            <summary>
+            OpenAI-specific options for embedding requests.
+            These map to fields in the OpenAI /v1/embeddings request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiEmbeddingOptions.EncodingFormat">
+            <summary>
+            Encoding format for the embeddings. Valid values: "float" (default), "base64".
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiEmbeddingOptions.Dimensions">
+            <summary>
+            Number of dimensions for the output embedding. Null uses model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.OpenAiGenerationOptions">
+            <summary>
+            OpenAI-specific options for text generation requests.
+            These map to fields in the OpenAI /v1/completions request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty. Clamped to -2.0..2.0. Null uses API default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.PresencePenalty">
+            <summary>
+            Presence penalty. Clamped to -2.0..2.0. Null uses API default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.Seed">
+            <summary>
+            Random seed for reproducibility. Null uses random seed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.Echo">
+            <summary>
+            Echo the prompt back in the response. Null uses API default (false).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.Suffix">
+            <summary>
+            Suffix to append after the generated text.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.Logprobs">
+            <summary>
+            Include log probabilities. Null uses API default.
+            </summary>
+        </member>
+    </members>
+</doc>
