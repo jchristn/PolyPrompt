@@ -9,12 +9,14 @@
 - Streaming chat and generation timeouts now cover response body enumeration, not only response header retrieval.
 - `ValidateConnectivityAsync` now propagates `OperationCanceledException`.
 - `CallDetails` now returns detached snapshots, is recorded through a thread-safe bounded buffer, and defaults to retaining the latest 1,000 entries.
+- Refactored automated tests into Touchstone package-based projects: `Test.Shared`, `Test.Automated`, `Test.Xunit`, and `Test.Nunit`.
 
 ### Added
 
 - Added `MaxCallDetails` to configure retained call-detail capacity, including `0` to disable recording.
 - Added `ClearCallDetails()` for long-lived clients.
 - Added local `Test.Automated selftest` coverage for timeout behavior, streaming body cancellation, disposed non-streaming responses, call-detail retention, and cancellation propagation.
+- Added xUnit and NUnit adapters over the shared Touchstone test descriptors.
 
 ### Fixed
 

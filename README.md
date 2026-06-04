@@ -530,7 +530,10 @@ PolyPrompt/
 │   ├── OllamaConsole/           # Interactive Ollama test harness
 │   ├── OpenAIConsole/           # Interactive OpenAI test harness
 │   ├── GeminiConsole/           # Interactive Gemini test harness
-│   └── Test.Automated/          # Automated test suite
+│   ├── Test.Shared/             # Shared Touchstone test descriptors
+│   ├── Test.Automated/          # Touchstone console runner
+│   ├── Test.Xunit/              # xUnit adapter over Test.Shared
+│   └── Test.Nunit/              # NUnit adapter over Test.Shared
 └── assets/
     └── logo.png
 ```
@@ -548,14 +551,22 @@ dotnet build src/PolyPrompt.sln
 # Local self-tests for timeout, cancellation, response disposal, and CallDetails behavior
 dotnet run --project src/Test.Automated -- selftest
 
-# Ollama
+# Local self-tests through xUnit and NUnit
+dotnet test src/Test.Xunit/Test.Xunit.csproj
+dotnet test src/Test.Nunit/Test.Nunit.csproj
+
+# Live provider tests through the Touchstone console runner
 dotnet run --project src/Test.Automated -- ollama http://localhost:11434
-
-# OpenAI
 dotnet run --project src/Test.Automated -- openai https://api.openai.com sk-your-key gpt-4o text-embedding-3-small
-
-# Gemini
 dotnet run --project src/Test.Automated -- gemini https://generativelanguage.googleapis.com your-key gemini-2.5-flash gemini-embedding-001
+
+# Live provider tests can also be enabled for xUnit and NUnit with environment variables
+set POLYPROMPT_TEST_PROVIDER=ollama
+set POLYPROMPT_TEST_ENDPOINT=http://localhost:11434
+set POLYPROMPT_TEST_MODEL=gemma3:4b
+set POLYPROMPT_TEST_EMBEDDING_MODEL=all-minilm
+dotnet test src/Test.Xunit/Test.Xunit.csproj
+dotnet test src/Test.Nunit/Test.Nunit.csproj
 ```
 
 ## Issues and Discussions
