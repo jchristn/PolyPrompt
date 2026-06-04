@@ -61,7 +61,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.CompletionClientBase.TimeoutMs">
             <summary>
-            HTTP request timeout in milliseconds. Clamped to 1,000..600,000 (1 second to 10 minutes).
+            HTTP request timeout in milliseconds. Must be greater than zero.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.CompletionClientBase.Temperature">
@@ -82,6 +82,11 @@
         <member name="P:PolyPrompt.Clients.CompletionClientBase.CallDetails">
             <summary>
             Recorded details of HTTP calls made to upstream completion endpoints.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.MaxCallDetails">
+            <summary>
+            Maximum number of call details retained by this client. Set to zero to disable recording.
             </summary>
         </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
@@ -206,6 +211,11 @@
             Dispose of HTTP client resources.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ClearCallDetails">
+            <summary>
+            Clear all retained call details.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.GetAndRecordAsync(System.String,System.Threading.CancellationToken)">
             <summary>
             Send an HTTP GET to an upstream endpoint and record the call details.
@@ -244,7 +254,7 @@
             <param name="token">Cancellation token.</param>
             <returns>A CompletionHttpResult containing the response and body.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapChunksWithTiming(PolyPrompt.Models.ChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapChunksWithTiming(PolyPrompt.Models.ChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
             <summary>
             Wrap a raw chunk enumerable with timing-tracking logic that updates the response object.
             </summary>
@@ -252,9 +262,10 @@
             <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
             <param name="sw">Stopwatch started before the HTTP request was made.</param>
             <param name="token">Cancellation token.</param>
+            <param name="owner">Optional disposable owner released when enumeration ends.</param>
             <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapGenerationChunksWithTiming(PolyPrompt.Models.GenerationStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.GenerationStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapGenerationChunksWithTiming(PolyPrompt.Models.GenerationStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.GenerationStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
             <summary>
             Wrap a raw generation chunk enumerable with timing-tracking logic.
             </summary>
@@ -262,6 +273,7 @@
             <param name="rawChunks">The raw async enumerable of generation chunks.</param>
             <param name="sw">Stopwatch started before the HTTP request was made.</param>
             <param name="token">Cancellation token.</param>
+            <param name="owner">Optional disposable owner released when enumeration ends.</param>
             <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)">
@@ -272,6 +284,55 @@
             <param name="content">HTTP content to send.</param>
             <param name="token">Cancellation token.</param>
             <returns>The HTTP response message with stream content.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.CaptureResponseHeaders(System.Net.Http.HttpResponseMessage)">
+            <summary>
+            Captures response and content headers into a retained dictionary.
+            </summary>
+            <param name="response">HTTP response.</param>
+            <returns>Response headers.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.RecordCallDetail(PolyPrompt.Models.CompletionCallDetail)">
+            <summary>
+            Record a call detail while enforcing the configured retention limit.
+            </summary>
+            <param name="detail">Call detail to record.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.CloneCallDetail(PolyPrompt.Models.CompletionCallDetail)">
+            <summary>
+            Clone a call detail so callers cannot mutate retained state.
+            </summary>
+            <param name="detail">Call detail.</param>
+            <returns>A detached copy.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.CompletionClientBase.StreamingHttpResult">
+            <summary>
+            Holds the HTTP response and timeout resources for a streaming request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.StreamingHttpResult.Response">
+            <summary>
+            HTTP response message.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.StreamingHttpResult.Token">
+            <summary>
+            Token linked to the caller token and the configured timeout.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.StreamingHttpResult.#ctor(System.Net.Http.HttpResponseMessage,System.Threading.CancellationTokenSource,System.Threading.CancellationTokenSource,System.Net.Http.HttpRequestMessage)">
+            <summary>
+            Initialize a streaming result.
+            </summary>
+            <param name="response">HTTP response.</param>
+            <param name="timeoutCts">Timeout cancellation source.</param>
+            <param name="linkedCts">Linked cancellation source.</param>
+            <param name="request">HTTP request.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.StreamingHttpResult.Dispose">
+            <summary>
+            Dispose streaming request resources.
+            </summary>
         </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.ParseFloatArray(System.String)">
             <summary>
@@ -720,7 +781,24 @@
         </member>
         <member name="P:PolyPrompt.Models.CompletionHttpResult.Response">
             <summary>
-            The HTTP response message.
+            The HTTP response message. The response has already been disposed when this
+            result is returned; use StatusCode, IsSuccessStatusCode, ResponseHeaders,
+            and ResponseBody for retained response data.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionHttpResult.StatusCode">
+            <summary>
+            HTTP response status code.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionHttpResult.IsSuccessStatusCode">
+            <summary>
+            Indicates whether the response status code was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CompletionHttpResult.ResponseHeaders">
+            <summary>
+            Response headers captured before the HTTP response was disposed.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.CompletionHttpResult.ResponseBody">

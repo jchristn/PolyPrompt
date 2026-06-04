@@ -19,6 +19,9 @@ namespace PolyPrompt.Clients
         private double? _Temperature = null;
         private double? _TopP = null;
         private string? _SystemPrompt = null;
+        private readonly object _CallDetailsLock = new object();
+        private readonly List<CompletionCallDetail> _CallDetails = new List<CompletionCallDetail>();
+        private int _MaxCallDetails = 1000;
 
         #endregion
 
@@ -98,15 +101,15 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// HTTP request timeout in milliseconds. Clamped to 1,000..600,000 (1 second to 10 minutes).
+        /// HTTP request timeout in milliseconds. Must be greater than zero.
         /// </summary>
         public int TimeoutMs
         {
             get { return _TimeoutMs; }
             set
             {
-                _TimeoutMs = Math.Clamp(value, 1000, 600_000);
-                _HttpClient.Timeout = TimeSpan.FromMilliseconds(_TimeoutMs);
+                if (value <= 0) throw new ArgumentOutOfRangeException(nameof(TimeoutMs), "TimeoutMs must be greater than zero.");
+                _TimeoutMs = value;
             }
         }
 
@@ -152,7 +155,44 @@ namespace PolyPrompt.Clients
         /// <summary>
         /// Recorded details of HTTP calls made to upstream completion endpoints.
         /// </summary>
-        public List<CompletionCallDetail> CallDetails { get; } = new List<CompletionCallDetail>();
+        public List<CompletionCallDetail> CallDetails
+        {
+            get
+            {
+                lock (_CallDetailsLock)
+                {
+                    List<CompletionCallDetail> snapshot = new List<CompletionCallDetail>(_CallDetails.Count);
+                    foreach (CompletionCallDetail detail in _CallDetails)
+                    {
+                        snapshot.Add(CloneCallDetail(detail));
+                    }
+                    return snapshot;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Maximum number of call details retained by this client. Set to zero to disable recording.
+        /// </summary>
+        public int MaxCallDetails
+        {
+            get
+            {
+                lock (_CallDetailsLock)
+                {
+                    return _MaxCallDetails;
+                }
+            }
+            set
+            {
+                if (value < 0) throw new ArgumentOutOfRangeException(nameof(MaxCallDetails), "MaxCallDetails cannot be negative.");
+                lock (_CallDetailsLock)
+                {
+                    _MaxCallDetails = value;
+                    TrimCallDetailsIfNeeded();
+                }
+            }
+        }
 
         #endregion
 
@@ -170,7 +210,7 @@ namespace PolyPrompt.Clients
             _ApiKey = apiKey;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
             _HttpClient = new HttpClient();
-            _HttpClient.Timeout = TimeSpan.FromMilliseconds(_TimeoutMs);
+            _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
         }
 
         #endregion
@@ -314,6 +354,10 @@ namespace PolyPrompt.Clients
                 }
                 return true;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 return false;
@@ -370,6 +414,17 @@ namespace PolyPrompt.Clients
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Clear all retained call details.
+        /// </summary>
+        public void ClearCallDetails()
+        {
+            lock (_CallDetailsLock)
+            {
+                _CallDetails.Clear();
+            }
+        }
+
         #endregion
 
         #region Protected-Methods
@@ -401,31 +456,26 @@ namespace PolyPrompt.Clients
                 using CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
                 using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
-                HttpResponseMessage response = await _HttpClient.GetAsync(url, linkedCts.Token).ConfigureAwait(false);
+                using HttpResponseMessage response = await _HttpClient.GetAsync(url, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
+
+                Dictionary<string, string> respHeaders = CaptureResponseHeaders(response);
 
                 detail.StatusCode = (int)response.StatusCode;
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.ResponseBody = responseBody;
                 detail.Success = response.IsSuccessStatusCode;
-
-                Dictionary<string, string> respHeaders = new Dictionary<string, string>();
-                foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers)
-                {
-                    respHeaders[header.Key] = string.Join(", ", header.Value);
-                }
-                foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
-                {
-                    respHeaders[header.Key] = string.Join(", ", header.Value);
-                }
                 detail.ResponseHeaders = respHeaders;
 
-                CallDetails.Add(detail);
+                RecordCallDetail(detail);
 
                 CompletionHttpResult result = new CompletionHttpResult();
                 result.Response = response;
+                result.StatusCode = (int)response.StatusCode;
+                result.IsSuccessStatusCode = response.IsSuccessStatusCode;
+                result.ResponseHeaders = respHeaders;
                 result.ResponseBody = responseBody;
                 return result;
             }
@@ -435,7 +485,7 @@ namespace PolyPrompt.Clients
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.Success = false;
                 detail.Error = ex.Message;
-                CallDetails.Add(detail);
+                RecordCallDetail(detail);
                 throw;
             }
         }
@@ -517,31 +567,26 @@ namespace PolyPrompt.Clients
                 using CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
                 using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
-                HttpResponseMessage response = await _HttpClient.PostAsync(url, content, linkedCts.Token).ConfigureAwait(false);
+                using HttpResponseMessage response = await _HttpClient.PostAsync(url, content, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
+
+                Dictionary<string, string> respHeaders = CaptureResponseHeaders(response);
 
                 detail.StatusCode = (int)response.StatusCode;
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.ResponseBody = responseBody;
                 detail.Success = response.IsSuccessStatusCode;
-
-                Dictionary<string, string> respHeaders = new Dictionary<string, string>();
-                foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers)
-                {
-                    respHeaders[header.Key] = string.Join(", ", header.Value);
-                }
-                foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
-                {
-                    respHeaders[header.Key] = string.Join(", ", header.Value);
-                }
                 detail.ResponseHeaders = respHeaders;
 
-                CallDetails.Add(detail);
+                RecordCallDetail(detail);
 
                 CompletionHttpResult result = new CompletionHttpResult();
                 result.Response = response;
+                result.StatusCode = (int)response.StatusCode;
+                result.IsSuccessStatusCode = response.IsSuccessStatusCode;
+                result.ResponseHeaders = respHeaders;
                 result.ResponseBody = responseBody;
                 return result;
             }
@@ -551,7 +596,7 @@ namespace PolyPrompt.Clients
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.Success = false;
                 detail.Error = ex.Message;
-                CallDetails.Add(detail);
+                RecordCallDetail(detail);
                 throw;
             }
         }
@@ -563,46 +608,60 @@ namespace PolyPrompt.Clients
         /// <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
         /// <param name="sw">Stopwatch started before the HTTP request was made.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="owner">Optional disposable owner released when enumeration ends.</param>
         /// <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
         protected async IAsyncEnumerable<ChatStreamingChunk> WrapChunksWithTiming(
             ChatStreamingResponse response,
             IAsyncEnumerable<ChatStreamingChunk> rawChunks,
             Stopwatch sw,
-            [EnumeratorCancellation] CancellationToken token = default)
+            [EnumeratorCancellation] CancellationToken token = default,
+            IDisposable? owner = null)
         {
-            await foreach (ChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
+            try
             {
-                if (!string.IsNullOrEmpty(chunk.Text))
+                await foreach (ChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
                 {
-                    if (response.ChunkCount == 0)
+                    if (!string.IsNullOrEmpty(chunk.Text))
                     {
-                        response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
+                        if (response.ChunkCount == 0)
+                        {
+                            response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
+                        }
+                        response.ChunkCount++;
+                        response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
                     }
-                    response.ChunkCount++;
-                    response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
+
+                    if (chunk.Usage != null) response.Usage = chunk.Usage;
+                    if (chunk.FinishReason != null) response.FinishReason = chunk.FinishReason;
+                    if (chunk.ResponseId != null) response.ResponseId = chunk.ResponseId;
+
+                    yield return chunk;
                 }
 
-                if (chunk.Usage != null) response.Usage = chunk.Usage;
-                if (chunk.FinishReason != null) response.FinishReason = chunk.FinishReason;
-                if (chunk.ResponseId != null) response.ResponseId = chunk.ResponseId;
+                sw.Stop();
+                response.OverallRuntimeMs = sw.ElapsedMilliseconds;
 
-                yield return chunk;
+                int tokenCount = response.Usage?.CompletionTokens ?? response.ChunkCount;
+
+                if (tokenCount > 0 && response.OverallRuntimeMs > 0)
+                {
+                    response.OverallTokensPerSecond = tokenCount / (response.OverallRuntimeMs / 1000.0);
+                }
+
+                if (tokenCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
+                {
+                    double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
+                    response.InterTokenTokensPerSecond = tokenCount / interTokenSec;
+                }
             }
-
-            sw.Stop();
-            response.OverallRuntimeMs = sw.ElapsedMilliseconds;
-
-            int tokenCount = response.Usage?.CompletionTokens ?? response.ChunkCount;
-
-            if (tokenCount > 0 && response.OverallRuntimeMs > 0)
+            finally
             {
-                response.OverallTokensPerSecond = tokenCount / (response.OverallRuntimeMs / 1000.0);
-            }
-
-            if (tokenCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
-            {
-                double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
-                response.InterTokenTokensPerSecond = tokenCount / interTokenSec;
+                if (sw.IsRunning)
+                {
+                    sw.Stop();
+                    response.OverallRuntimeMs = sw.ElapsedMilliseconds;
+                }
+                owner?.Dispose();
             }
         }
 
@@ -613,40 +672,54 @@ namespace PolyPrompt.Clients
         /// <param name="rawChunks">The raw async enumerable of generation chunks.</param>
         /// <param name="sw">Stopwatch started before the HTTP request was made.</param>
         /// <param name="token">Cancellation token.</param>
+        /// <param name="owner">Optional disposable owner released when enumeration ends.</param>
         /// <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
         protected async IAsyncEnumerable<GenerationStreamingChunk> WrapGenerationChunksWithTiming(
             GenerationStreamingResponse response,
             IAsyncEnumerable<GenerationStreamingChunk> rawChunks,
             Stopwatch sw,
-            [EnumeratorCancellation] CancellationToken token = default)
+            [EnumeratorCancellation] CancellationToken token = default,
+            IDisposable? owner = null)
         {
-            await foreach (GenerationStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
+            try
             {
-                if (!string.IsNullOrEmpty(chunk.Text))
+                await foreach (GenerationStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
                 {
-                    if (response.ChunkCount == 0)
+                    if (!string.IsNullOrEmpty(chunk.Text))
                     {
-                        response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
+                        if (response.ChunkCount == 0)
+                        {
+                            response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
+                        }
+                        response.ChunkCount++;
+                        response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
                     }
-                    response.ChunkCount++;
-                    response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
+
+                    yield return chunk;
                 }
 
-                yield return chunk;
+                sw.Stop();
+                response.OverallRuntimeMs = sw.ElapsedMilliseconds;
+
+                if (response.ChunkCount > 0 && response.OverallRuntimeMs > 0)
+                {
+                    response.OverallTokensPerSecond = response.ChunkCount / (response.OverallRuntimeMs / 1000.0);
+                }
+
+                if (response.ChunkCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
+                {
+                    double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
+                    response.InterTokenTokensPerSecond = response.ChunkCount / interTokenSec;
+                }
             }
-
-            sw.Stop();
-            response.OverallRuntimeMs = sw.ElapsedMilliseconds;
-
-            if (response.ChunkCount > 0 && response.OverallRuntimeMs > 0)
+            finally
             {
-                response.OverallTokensPerSecond = response.ChunkCount / (response.OverallRuntimeMs / 1000.0);
-            }
-
-            if (response.ChunkCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
-            {
-                double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
-                response.InterTokenTokensPerSecond = response.ChunkCount / interTokenSec;
+                if (sw.IsRunning)
+                {
+                    sw.Stop();
+                    response.OverallRuntimeMs = sw.ElapsedMilliseconds;
+                }
+                owner?.Dispose();
             }
         }
 
@@ -657,21 +730,156 @@ namespace PolyPrompt.Clients
         /// <param name="content">HTTP content to send.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The HTTP response message with stream content.</returns>
-        protected async Task<HttpResponseMessage> PostStreamingAsync(
+        protected async Task<StreamingHttpResult> PostStreamingAsync(
             string url, StringContent content, CancellationToken token)
         {
-            using CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
-            using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
+            CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
+            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Content = content;
 
-            HttpResponseMessage response = await _HttpClient.SendAsync(
-                request,
-                HttpCompletionOption.ResponseHeadersRead,
-                linkedCts.Token).ConfigureAwait(false);
+            try
+            {
+                HttpResponseMessage response = await _HttpClient.SendAsync(
+                    request,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    linkedCts.Token).ConfigureAwait(false);
 
-            return response;
+                return new StreamingHttpResult(response, timeoutCts, linkedCts, request);
+            }
+            catch
+            {
+                request.Dispose();
+                linkedCts.Dispose();
+                timeoutCts.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Captures response and content headers into a retained dictionary.
+        /// </summary>
+        /// <param name="response">HTTP response.</param>
+        /// <returns>Response headers.</returns>
+        protected Dictionary<string, string> CaptureResponseHeaders(HttpResponseMessage response)
+        {
+            Dictionary<string, string> respHeaders = new Dictionary<string, string>();
+            foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers)
+            {
+                respHeaders[header.Key] = string.Join(", ", header.Value);
+            }
+            foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers)
+            {
+                respHeaders[header.Key] = string.Join(", ", header.Value);
+            }
+            return respHeaders;
+        }
+
+        /// <summary>
+        /// Record a call detail while enforcing the configured retention limit.
+        /// </summary>
+        /// <param name="detail">Call detail to record.</param>
+        protected void RecordCallDetail(CompletionCallDetail detail)
+        {
+            lock (_CallDetailsLock)
+            {
+                if (_MaxCallDetails == 0) return;
+
+                _CallDetails.Add(CloneCallDetail(detail));
+                TrimCallDetailsIfNeeded();
+            }
+        }
+
+        /// <summary>
+        /// Clone a call detail so callers cannot mutate retained state.
+        /// </summary>
+        /// <param name="detail">Call detail.</param>
+        /// <returns>A detached copy.</returns>
+        protected CompletionCallDetail CloneCallDetail(CompletionCallDetail detail)
+        {
+            CompletionCallDetail clone = new CompletionCallDetail();
+            clone.Url = detail.Url;
+            clone.Method = detail.Method;
+            clone.RequestHeaders = detail.RequestHeaders != null ? new Dictionary<string, string>(detail.RequestHeaders) : new Dictionary<string, string>();
+            clone.RequestBody = detail.RequestBody;
+            clone.StatusCode = detail.StatusCode;
+            clone.ResponseHeaders = detail.ResponseHeaders != null ? new Dictionary<string, string>(detail.ResponseHeaders) : new Dictionary<string, string>();
+            clone.ResponseBody = detail.ResponseBody;
+            clone.ResponseTimeMs = detail.ResponseTimeMs;
+            clone.Success = detail.Success;
+            clone.Error = detail.Error;
+            clone.TimestampUtc = detail.TimestampUtc;
+            return clone;
+        }
+
+        private void TrimCallDetailsIfNeeded()
+        {
+            if (_MaxCallDetails == 0)
+            {
+                _CallDetails.Clear();
+                return;
+            }
+
+            int excess = _CallDetails.Count - _MaxCallDetails;
+            if (excess > 0)
+            {
+                _CallDetails.RemoveRange(0, excess);
+            }
+        }
+
+        /// <summary>
+        /// Holds the HTTP response and timeout resources for a streaming request.
+        /// </summary>
+        protected sealed class StreamingHttpResult : IDisposable
+        {
+            private readonly CancellationTokenSource _TimeoutCts;
+            private readonly CancellationTokenSource _LinkedCts;
+            private readonly HttpRequestMessage _Request;
+            private bool _Disposed = false;
+
+            /// <summary>
+            /// HTTP response message.
+            /// </summary>
+            public HttpResponseMessage Response { get; }
+
+            /// <summary>
+            /// Token linked to the caller token and the configured timeout.
+            /// </summary>
+            public CancellationToken Token => _LinkedCts.Token;
+
+            /// <summary>
+            /// Initialize a streaming result.
+            /// </summary>
+            /// <param name="response">HTTP response.</param>
+            /// <param name="timeoutCts">Timeout cancellation source.</param>
+            /// <param name="linkedCts">Linked cancellation source.</param>
+            /// <param name="request">HTTP request.</param>
+            public StreamingHttpResult(
+                HttpResponseMessage response,
+                CancellationTokenSource timeoutCts,
+                CancellationTokenSource linkedCts,
+                HttpRequestMessage request)
+            {
+                Response = response;
+                _TimeoutCts = timeoutCts;
+                _LinkedCts = linkedCts;
+                _Request = request;
+            }
+
+            /// <summary>
+            /// Dispose streaming request resources.
+            /// </summary>
+            public void Dispose()
+            {
+                if (_Disposed) return;
+                _Disposed = true;
+
+                Response.Dispose();
+                _Request.Dispose();
+                _LinkedCts.Dispose();
+                _TimeoutCts.Dispose();
+            }
         }
 
         /// <summary>

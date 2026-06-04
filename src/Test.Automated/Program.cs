@@ -11,7 +11,7 @@ namespace Test.Automated
     /// and streaming generation APIs, including provider-specific options, property
     /// validation, system prompts, and CallDetails recording.
     /// </summary>
-    public class Program
+    public partial class Program
     {
         #region Private-Members
 
@@ -34,6 +34,19 @@ namespace Test.Automated
             Console.WriteLine("  PolyPrompt Automated Test Harness");
             Console.WriteLine("==============================================");
             Console.WriteLine("");
+
+            if (args.Length == 1 && string.Equals(args[0], "selftest", StringComparison.OrdinalIgnoreCase))
+            {
+                _OverallStopwatch.Start();
+                _TestStopwatch.Start();
+
+                await RunTestSection("Local Behavior Tests", () => RunLocalBehaviorTests()).ConfigureAwait(false);
+
+                _OverallStopwatch.Stop();
+                PrintResults();
+                Environment.ExitCode = _FailedTests > 0 ? 1 : 0;
+                return;
+            }
 
             if (args.Length < 2)
             {
@@ -102,30 +115,7 @@ namespace Test.Automated
 
             _OverallStopwatch.Stop();
 
-            Console.WriteLine("");
-            Console.WriteLine("==============================================");
-            Console.WriteLine("  RESULTS");
-            Console.WriteLine("==============================================");
-            Console.WriteLine("");
-            Console.WriteLine("  Overall : " + (_FailedTests > 0 ? "FAIL" : "PASS"));
-            Console.WriteLine("  Runtime : " + _OverallStopwatch.ElapsedMilliseconds + " ms");
-            Console.WriteLine("  Total   : " + _TotalTests);
-            Console.WriteLine("  Passed  : " + _PassedTests);
-            Console.WriteLine("  Failed  : " + _FailedTests);
-            Console.WriteLine("");
-
-            if (_Failures.Count > 0)
-            {
-                Console.WriteLine("  FAILURES:");
-                foreach (string failure in _Failures)
-                {
-                    Console.WriteLine("    - " + failure);
-                }
-                Console.WriteLine("");
-            }
-
-            Console.WriteLine("==============================================");
-            Console.WriteLine("");
+            PrintResults();
 
             Environment.ExitCode = _FailedTests > 0 ? 1 : 0;
         }
@@ -137,6 +127,7 @@ namespace Test.Automated
         private static void PrintUsage()
         {
             Console.WriteLine("Usage: Test.Automated <provider> <endpoint> [apikey] [model] [embedding-model]");
+            Console.WriteLine("       Test.Automated selftest");
             Console.WriteLine("");
             Console.WriteLine("  provider        : ollama | openai | gemini");
             Console.WriteLine("  endpoint        : Provider API endpoint URL");
@@ -146,6 +137,7 @@ namespace Test.Automated
             Console.WriteLine("");
             Console.WriteLine("Examples:");
             Console.WriteLine("  Test.Automated ollama http://localhost:11434");
+            Console.WriteLine("  Test.Automated selftest");
             Console.WriteLine("  Test.Automated ollama http://localhost:11434 \"\" gemma3:4b nomic-embed-text");
             Console.WriteLine("  Test.Automated openai https://api.openai.com sk-... gpt-4o text-embedding-3-small");
             Console.WriteLine("  Test.Automated gemini https://generativelanguage.googleapis.com AIza... gemini-2.5-flash gemini-embedding-001");
@@ -311,14 +303,36 @@ namespace Test.Automated
             client.MaxTokens = 128;
             Assert("MaxTokens normal value", client.MaxTokens == 128);
 
-            // TimeoutMs clamping
+            // TimeoutMs validation
             client.TimeoutMs = 100;
-            Assert("TimeoutMs clamps to minimum 1000", client.TimeoutMs == 1000);
+            Assert("TimeoutMs preserves subsecond values", client.TimeoutMs == 100);
 
             client.TimeoutMs = 999_999;
-            Assert("TimeoutMs clamps to maximum 600,000", client.TimeoutMs == 600_000);
+            Assert("TimeoutMs does not silently clamp large values", client.TimeoutMs == 999_999);
+
+            threw = false;
+            try { client.TimeoutMs = 0; }
+            catch (ArgumentOutOfRangeException) { threw = true; }
+            Assert("TimeoutMs rejects zero", threw);
+
+            threw = false;
+            try { client.TimeoutMs = -1; }
+            catch (ArgumentOutOfRangeException) { threw = true; }
+            Assert("TimeoutMs rejects negative values", threw);
 
             client.TimeoutMs = 120000;
+
+            // CallDetails retention
+            int originalMaxCallDetails = client.MaxCallDetails;
+            client.MaxCallDetails = 2;
+            Assert("MaxCallDetails setter works", client.MaxCallDetails == 2);
+
+            threw = false;
+            try { client.MaxCallDetails = -1; }
+            catch (ArgumentOutOfRangeException) { threw = true; }
+            Assert("MaxCallDetails rejects negative values", threw);
+
+            client.MaxCallDetails = originalMaxCallDetails;
 
             // Temperature clamping
             client.Temperature = -1.0;
@@ -707,7 +721,8 @@ namespace Test.Automated
             Assert("CallDetails: count incremented", client.CallDetails.Count > countBefore);
 
             // Inspect the last call detail
-            CompletionCallDetail last = client.CallDetails[client.CallDetails.Count - 1];
+            List<CompletionCallDetail> details = client.CallDetails;
+            CompletionCallDetail last = details[details.Count - 1];
             Assert("CallDetail: has URL", !string.IsNullOrEmpty(last.Url));
             Assert("CallDetail: method is POST", last.Method == "POST");
             Assert("CallDetail: has request body", !string.IsNullOrEmpty(last.RequestBody));
@@ -1122,6 +1137,34 @@ namespace Test.Automated
         {
             _TestStopwatch.Restart();
             Console.WriteLine("[" + title + "]");
+            Console.WriteLine("");
+        }
+
+        private static void PrintResults()
+        {
+            Console.WriteLine("");
+            Console.WriteLine("==============================================");
+            Console.WriteLine("  RESULTS");
+            Console.WriteLine("==============================================");
+            Console.WriteLine("");
+            Console.WriteLine("  Overall : " + (_FailedTests > 0 ? "FAIL" : "PASS"));
+            Console.WriteLine("  Runtime : " + _OverallStopwatch.ElapsedMilliseconds + " ms");
+            Console.WriteLine("  Total   : " + _TotalTests);
+            Console.WriteLine("  Passed  : " + _PassedTests);
+            Console.WriteLine("  Failed  : " + _FailedTests);
+            Console.WriteLine("");
+
+            if (_Failures.Count > 0)
+            {
+                Console.WriteLine("  FAILURES:");
+                foreach (string failure in _Failures)
+                {
+                    Console.WriteLine("    - " + failure);
+                }
+                Console.WriteLine("");
+            }
+
+            Console.WriteLine("==============================================");
             Console.WriteLine("");
         }
 

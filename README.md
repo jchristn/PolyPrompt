@@ -375,6 +375,11 @@ foreach (CompletionCallDetail detail in client.CallDetails)
     Console.WriteLine("  Time: " + detail.ResponseTimeMs + " ms");
     Console.WriteLine("  Success: " + detail.Success);
 }
+
+// CallDetails returns a detached snapshot. Use MaxCallDetails to bound retention
+// and ClearCallDetails to release retained diagnostics on long-lived clients.
+client.MaxCallDetails = 100;
+client.ClearCallDetails();
 ```
 
 ### Using CancellationToken
@@ -385,6 +390,7 @@ using PolyPrompt.Models;
 
 using OllamaClient client = new OllamaClient("http://localhost:11434");
 client.Model = "gemma3:4b";
+client.TimeoutMs = 10000;
 
 using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
@@ -398,6 +404,10 @@ catch (OperationCanceledException)
     Console.WriteLine("Request was cancelled.");
 }
 ```
+
+`TimeoutMs` is enforced with per-call cancellation tokens and is honored for both
+non-streaming requests and streaming response bodies. Values must be greater than
+zero and are not silently clamped.
 
 ### Provider-Agnostic Code
 
@@ -443,11 +453,12 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 | `ApiKey` | `string?` | `null` | API key (read-only) |
 | `Model` | `string` | varies | Model name for requests |
 | `MaxTokens` | `int` | `4096` | Maximum tokens to generate (1 to 10,000,000) |
-| `TimeoutMs` | `int` | `120000` | HTTP timeout in milliseconds (1,000 to 600,000) |
+| `TimeoutMs` | `int` | `120000` | HTTP timeout in milliseconds; must be greater than zero |
 | `Temperature` | `double?` | `null` | Sampling temperature (0.0 to 2.0) |
 | `TopP` | `double?` | `null` | Nucleus sampling threshold (0.0 to 1.0) |
 | `SystemPrompt` | `string?` | `null` | System prompt for chat completions |
-| `CallDetails` | `List<CompletionCallDetail>` | empty | Recorded HTTP call details |
+| `CallDetails` | `List<CompletionCallDetail>` | empty | Detached snapshot of recorded HTTP call details |
+| `MaxCallDetails` | `int` | `1000` | Maximum retained call details; set to 0 to disable recording |
 
 ### Client Methods
 
@@ -465,6 +476,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 | `PullModelAsync` | Pull/download a model with progress callbacks (Ollama only) |
 | `DeleteModelAsync` | Delete a model (Ollama only) |
 | `ValidateConnectivityAsync` | Verify the provider is reachable |
+| `ClearCallDetails` | Clear retained HTTP call details |
 
 ### Provider-Specific Options
 
@@ -533,6 +545,9 @@ dotnet build src/PolyPrompt.sln
 ## Running the Automated Tests
 
 ```bash
+# Local self-tests for timeout, cancellation, response disposal, and CallDetails behavior
+dotnet run --project src/Test.Automated -- selftest
+
 # Ollama
 dotnet run --project src/Test.Automated -- ollama http://localhost:11434
 

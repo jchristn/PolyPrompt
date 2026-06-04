@@ -62,16 +62,15 @@ namespace PolyPrompt.Clients
             try
             {
                 CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
-                HttpResponseMessage response = result.Response;
                 string responseBody = result.ResponseBody;
 
-                chatResponse.StatusCode = (int)response.StatusCode;
+                chatResponse.StatusCode = result.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (!result.IsSuccessStatusCode)
                 {
-                    _Logging.Warn(_Header + "chat request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    _Logging.Warn(_Header + "chat request failed with status " + result.StatusCode + ": " + responseBody);
                     chatResponse.Success = false;
-                    chatResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    chatResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
                     return chatResponse;
                 }
 
@@ -122,20 +121,24 @@ namespace PolyPrompt.Clients
 
             try
             {
-                HttpResponseMessage response = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                StreamingHttpResult streamingResult = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                HttpResponseMessage response = streamingResult.Response;
                 streamingResponse.StatusCode = (int)response.StatusCode;
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    string errorBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "streaming chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
-                    streamingResponse.Success = false;
-                    streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    using (streamingResult)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
+                        _Logging.Warn(_Header + "streaming chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        streamingResponse.Success = false;
+                        streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    }
                     return streamingResponse;
                 }
 
                 streamingResponse.Success = true;
-                streamingResponse.Chunks = WrapChunksWithTiming(streamingResponse, ReadGeminiChunks(response, token), sw, token);
+                streamingResponse.Chunks = WrapChunksWithTiming(streamingResponse, ReadGeminiChunks(response, streamingResult.Token), sw, streamingResult.Token, streamingResult);
             }
             catch (OperationCanceledException)
             {
@@ -195,16 +198,15 @@ namespace PolyPrompt.Clients
             try
             {
                 CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
-                HttpResponseMessage response = result.Response;
                 string responseBody = result.ResponseBody;
 
-                embedResponse.StatusCode = (int)response.StatusCode;
+                embedResponse.StatusCode = result.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (!result.IsSuccessStatusCode)
                 {
-                    _Logging.Warn(_Header + "embed request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    _Logging.Warn(_Header + "embed request failed with status " + result.StatusCode + ": " + responseBody);
                     embedResponse.Success = false;
-                    embedResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    embedResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
                     return embedResponse;
                 }
 
@@ -303,16 +305,15 @@ namespace PolyPrompt.Clients
             try
             {
                 CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
-                HttpResponseMessage response = result.Response;
                 string responseBody = result.ResponseBody;
 
-                embedResponse.StatusCode = (int)response.StatusCode;
+                embedResponse.StatusCode = result.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (!result.IsSuccessStatusCode)
                 {
-                    _Logging.Warn(_Header + "batch embed request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    _Logging.Warn(_Header + "batch embed request failed with status " + result.StatusCode + ": " + responseBody);
                     embedResponse.Success = false;
-                    embedResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    embedResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
                     return embedResponse;
                 }
 
@@ -387,16 +388,15 @@ namespace PolyPrompt.Clients
             try
             {
                 CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
-                HttpResponseMessage response = result.Response;
                 string responseBody = result.ResponseBody;
 
-                genResponse.StatusCode = (int)response.StatusCode;
+                genResponse.StatusCode = result.StatusCode;
 
-                if (!response.IsSuccessStatusCode)
+                if (!result.IsSuccessStatusCode)
                 {
-                    _Logging.Warn(_Header + "generate request failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    _Logging.Warn(_Header + "generate request failed with status " + result.StatusCode + ": " + responseBody);
                     genResponse.Success = false;
-                    genResponse.Error = "HTTP " + (int)response.StatusCode + ": " + responseBody;
+                    genResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
                     return genResponse;
                 }
 
@@ -447,20 +447,24 @@ namespace PolyPrompt.Clients
 
             try
             {
-                HttpResponseMessage response = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                StreamingHttpResult streamingResult = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                HttpResponseMessage response = streamingResult.Response;
                 streamingResponse.StatusCode = (int)response.StatusCode;
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    string errorBody = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "streaming generate request failed with status " + (int)response.StatusCode + ": " + errorBody);
-                    streamingResponse.Success = false;
-                    streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    using (streamingResult)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
+                        _Logging.Warn(_Header + "streaming generate request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        streamingResponse.Success = false;
+                        streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    }
                     return streamingResponse;
                 }
 
                 streamingResponse.Success = true;
-                streamingResponse.Chunks = WrapGenerationChunksWithTiming(streamingResponse, ReadGeminiGenerateChunks(response, token), sw, token);
+                streamingResponse.Chunks = WrapGenerationChunksWithTiming(streamingResponse, ReadGeminiGenerateChunks(response, streamingResult.Token), sw, streamingResult.Token, streamingResult);
             }
             catch (OperationCanceledException)
             {
@@ -485,9 +489,9 @@ namespace PolyPrompt.Clients
 
             CompletionHttpResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
 
-            if (!result.Response.IsSuccessStatusCode)
+            if (!result.IsSuccessStatusCode)
             {
-                _Logging.Warn(_Header + "list models failed with status " + (int)result.Response.StatusCode);
+                _Logging.Warn(_Header + "list models failed with status " + result.StatusCode);
                 yield break;
             }
 
@@ -553,12 +557,11 @@ namespace PolyPrompt.Clients
             try
             {
                 CompletionHttpResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
-                HttpResponseMessage response = result.Response;
                 string responseBody = result.ResponseBody;
 
-                if (!response.IsSuccessStatusCode)
+                if (!result.IsSuccessStatusCode)
                 {
-                    _Logging.Warn(_Header + "get model failed with status " + (int)response.StatusCode + ": " + responseBody);
+                    _Logging.Warn(_Header + "get model failed with status " + result.StatusCode + ": " + responseBody);
                     return null;
                 }
 
