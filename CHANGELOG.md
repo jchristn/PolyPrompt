@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.5.0 (2026-07-11)
+
+### Added
+
+- Added provider-normalized tool calling through `ToolChatAsync` on `CompletionClientBase`.
+- Added `ToolChatRequest`, `ToolChatResponse`, `ChatMessage`, `ToolDefinition`, and `ToolCall` models.
+- Added OpenAI-compatible `/v1/chat/completions` tool declarations, assistant `tool_calls`, and tool-result follow-up message support.
+- Added Ollama `/api/chat` tool declarations, tool-call parsing, and tool-result follow-up message support.
+- Added Gemini `functionDeclarations`, `functionCall`, `functionResponse`, `systemInstruction`, and tool choice mapping.
+- Added local Touchstone coverage for tool-chat validation and OpenAI-compatible, Ollama, and Gemini tool-call flows.
+- Expanded local Touchstone coverage for option clamping, guard clauses, provider chat request translation, embeddings, generation, model listing, model information, Ollama pull/delete behavior, unsupported provider operations, and HTTP error handling.
+
+### Changed
+
+- Updated package metadata to version `1.5.0` and expanded package tags for tool/function calling.
+- Updated README documentation with the explicit `ToolChatAsync` developer flow and provider support matrix.
+
 ## v0.2.0 (2026-06-04)
 
 ### Changed

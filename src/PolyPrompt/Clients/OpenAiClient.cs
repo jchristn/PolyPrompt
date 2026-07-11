@@ -195,6 +195,62 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        public override async Task<ToolChatResponse> ToolChatAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            ToolChatResponse toolResponse = new ToolChatResponse();
+            toolResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                string responseBody = result.ResponseBody;
+
+                toolResponse.StatusCode = result.StatusCode;
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "tool chat request failed with status " + result.StatusCode + ": " + responseBody);
+                    toolResponse.Success = false;
+                    toolResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
+                    return toolResponse;
+                }
+
+                PopulateOpenAiToolChatResponse(responseBody, toolResponse);
+                toolResponse.Success = string.IsNullOrEmpty(toolResponse.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                toolResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return toolResponse;
+        }
+
+        /// <inheritdoc />
         public override async Task<EmbeddingResponse> EmbedAsync(
             string input,
             EmbeddingOptions? options = null,
@@ -569,6 +625,208 @@ namespace PolyPrompt.Clients
             }
 
             return requestBody;
+        }
+
+        private Dictionary<string, object> BuildToolChatRequestBody(
+            ToolChatRequest request,
+            string model,
+            int maxTokens,
+            double? temperature,
+            double? topP)
+        {
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", model },
+                { "messages", BuildOpenAiMessages(request.Messages) },
+                { "max_tokens", maxTokens }
+            };
+
+            if (temperature.HasValue) requestBody["temperature"] = temperature.Value;
+            if (topP.HasValue) requestBody["top_p"] = topP.Value;
+
+            if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
+            {
+                requestBody["tools"] = BuildOpenAiTools(request.Tools);
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.ToolChoice))
+            {
+                requestBody["tool_choice"] = request.ToolChoice;
+            }
+
+            return requestBody;
+        }
+
+        private List<Dictionary<string, object>> BuildOpenAiMessages(List<ChatMessage> messages)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ChatMessage message in messages)
+            {
+                Dictionary<string, object> item = new Dictionary<string, object>
+                {
+                    { "role", NormalizeOpenAiRole(message.Role) }
+                };
+
+                if (!string.IsNullOrEmpty(message.ToolCallId))
+                {
+                    item["tool_call_id"] = message.ToolCallId;
+                }
+
+                if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                {
+                    item["content"] = message.Content ?? string.Empty;
+                    item["tool_calls"] = BuildOpenAiToolCalls(message.ToolCalls);
+                }
+                else
+                {
+                    item["content"] = message.Content ?? string.Empty;
+                }
+
+                result.Add(item);
+            }
+
+            return result;
+        }
+
+        private List<Dictionary<string, object>> BuildOpenAiTools(List<ToolDefinition> tools)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ToolDefinition tool in tools)
+            {
+                Dictionary<string, object> function = new Dictionary<string, object>
+                {
+                    { "name", tool.Name },
+                    { "description", tool.Description },
+                    { "parameters", tool.Parameters }
+                };
+
+                result.Add(new Dictionary<string, object>
+                {
+                    { "type", string.IsNullOrWhiteSpace(tool.Type) ? "function" : tool.Type },
+                    { "function", function }
+                });
+            }
+
+            return result;
+        }
+
+        private List<Dictionary<string, object>> BuildOpenAiToolCalls(List<ToolCall> toolCalls)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ToolCall toolCall in toolCalls)
+            {
+                Dictionary<string, object> function = new Dictionary<string, object>
+                {
+                    { "name", toolCall.Name },
+                    { "arguments", string.IsNullOrWhiteSpace(toolCall.ArgumentsJson) ? "{}" : toolCall.ArgumentsJson }
+                };
+
+                Dictionary<string, object> item = new Dictionary<string, object>
+                {
+                    { "id", toolCall.Id ?? string.Empty },
+                    { "type", "function" },
+                    { "function", function }
+                };
+
+                result.Add(item);
+            }
+
+            return result;
+        }
+
+        private void PopulateOpenAiToolChatResponse(string responseBody, ToolChatResponse toolResponse)
+        {
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+            if (responseObj == null || !responseObj.ContainsKey("choices"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response missing 'choices' field";
+                return;
+            }
+
+            toolResponse.ResponseId = responseObj.ContainsKey("id") ? responseObj["id"]?.ToString() : null;
+
+            string choicesJson = _Serializer.SerializeJson(responseObj["choices"], false);
+            List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+            if (choices == null || choices.Count == 0)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response has empty choices array";
+                return;
+            }
+
+            Dictionary<string, object> choice = choices[0];
+            toolResponse.FinishReason = choice.ContainsKey("finish_reason") ? choice["finish_reason"]?.ToString() : null;
+
+            if (!choice.ContainsKey("message"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response choice missing 'message' field";
+                return;
+            }
+
+            string messageJson = _Serializer.SerializeJson(choice["message"], false);
+            Dictionary<string, object>? message = _Serializer.DeserializeJson<Dictionary<string, object>>(messageJson);
+            if (message == null)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response message could not be parsed";
+                return;
+            }
+
+            if (message.ContainsKey("content"))
+            {
+                string? text = message["content"]?.ToString();
+                toolResponse.Text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            }
+
+            if (message.ContainsKey("tool_calls"))
+            {
+                string toolCallsJson = _Serializer.SerializeJson(message["tool_calls"], false);
+                List<Dictionary<string, object>>? toolCalls = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(toolCallsJson);
+
+                if (toolCalls != null)
+                {
+                    foreach (Dictionary<string, object> toolCallObj in toolCalls)
+                    {
+                        ToolCall? toolCall = ParseOpenAiToolCall(toolCallObj);
+                        if (toolCall != null) toolResponse.ToolCalls.Add(toolCall);
+                    }
+                }
+            }
+        }
+
+        private ToolCall? ParseOpenAiToolCall(Dictionary<string, object> toolCallObj)
+        {
+            if (!toolCallObj.ContainsKey("function")) return null;
+
+            string functionJson = _Serializer.SerializeJson(toolCallObj["function"], false);
+            Dictionary<string, object>? function = _Serializer.DeserializeJson<Dictionary<string, object>>(functionJson);
+            if (function == null || !function.ContainsKey("name")) return null;
+
+            ToolCall toolCall = new ToolCall();
+            toolCall.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : null;
+            toolCall.Name = function["name"]?.ToString() ?? string.Empty;
+            toolCall.ArgumentsJson = function.ContainsKey("arguments") && function["arguments"] != null
+                ? function["arguments"]?.ToString() ?? "{}"
+                : "{}";
+            return toolCall;
+        }
+
+        private static string NormalizeOpenAiRole(string? role)
+        {
+            if (string.Equals(role, "model", StringComparison.OrdinalIgnoreCase)) return "assistant";
+            if (string.Equals(role, "function", StringComparison.OrdinalIgnoreCase)) return "tool";
+            return string.IsNullOrWhiteSpace(role) ? "user" : role.ToLowerInvariant();
+        }
+
+        private static bool IsToolChoiceNone(string? toolChoice)
+        {
+            return string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase);
         }
 
         private Dictionary<string, object> BuildGenerateRequestBody(

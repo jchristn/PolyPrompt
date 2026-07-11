@@ -201,6 +201,62 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        public override async Task<ToolChatResponse> ToolChatAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            ToolChatResponse toolResponse = new ToolChatResponse();
+            toolResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/api/chat";
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                string responseBody = result.ResponseBody;
+
+                toolResponse.StatusCode = result.StatusCode;
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "tool chat request failed with status " + result.StatusCode + ": " + responseBody);
+                    toolResponse.Success = false;
+                    toolResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
+                    return toolResponse;
+                }
+
+                PopulateOllamaToolChatResponse(responseBody, toolResponse);
+                toolResponse.Success = string.IsNullOrEmpty(toolResponse.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                toolResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return toolResponse;
+        }
+
+        /// <inheritdoc />
         public override async Task<EmbeddingResponse> EmbedAsync(
             string input,
             EmbeddingOptions? options = null,
@@ -762,6 +818,187 @@ namespace PolyPrompt.Clients
             };
 
             return requestBody;
+        }
+
+        private Dictionary<string, object> BuildToolChatRequestBody(
+            ToolChatRequest request,
+            string model,
+            int maxTokens,
+            double? temperature,
+            double? topP)
+        {
+            Dictionary<string, object> modelOptions = new Dictionary<string, object>();
+            modelOptions["num_predict"] = maxTokens;
+
+            int? contextLength = _ContextLength;
+            if (contextLength.HasValue) modelOptions["num_ctx"] = contextLength.Value;
+            if (temperature.HasValue) modelOptions["temperature"] = temperature.Value;
+            if (topP.HasValue) modelOptions["top_p"] = topP.Value;
+
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", model },
+                { "messages", BuildOllamaMessages(request.Messages) },
+                { "stream", false },
+                { "options", modelOptions }
+            };
+
+            if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
+            {
+                requestBody["tools"] = BuildOllamaTools(request.Tools);
+            }
+
+            return requestBody;
+        }
+
+        private List<Dictionary<string, object>> BuildOllamaMessages(List<ChatMessage> messages)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ChatMessage message in messages)
+            {
+                Dictionary<string, object> item = new Dictionary<string, object>
+                {
+                    { "role", NormalizeOllamaRole(message.Role) },
+                    { "content", message.Content ?? string.Empty }
+                };
+
+                if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+                {
+                    item["tool_calls"] = BuildOllamaToolCalls(message.ToolCalls);
+                }
+
+                result.Add(item);
+            }
+
+            return result;
+        }
+
+        private List<Dictionary<string, object>> BuildOllamaTools(List<ToolDefinition> tools)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ToolDefinition tool in tools)
+            {
+                Dictionary<string, object> function = new Dictionary<string, object>
+                {
+                    { "name", tool.Name },
+                    { "description", tool.Description },
+                    { "parameters", tool.Parameters }
+                };
+
+                result.Add(new Dictionary<string, object>
+                {
+                    { "type", string.IsNullOrWhiteSpace(tool.Type) ? "function" : tool.Type },
+                    { "function", function }
+                });
+            }
+
+            return result;
+        }
+
+        private List<Dictionary<string, object>> BuildOllamaToolCalls(List<ToolCall> toolCalls)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ToolCall toolCall in toolCalls)
+            {
+                Dictionary<string, object> function = new Dictionary<string, object>
+                {
+                    { "name", toolCall.Name },
+                    { "arguments", DeserializeDictionaryOrEmpty(toolCall.ArgumentsJson) }
+                };
+
+                result.Add(new Dictionary<string, object>
+                {
+                    { "function", function }
+                });
+            }
+
+            return result;
+        }
+
+        private void PopulateOllamaToolChatResponse(string responseBody, ToolChatResponse toolResponse)
+        {
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+            if (responseObj == null || !responseObj.ContainsKey("message"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response missing 'message' field";
+                return;
+            }
+
+            toolResponse.Model = responseObj.ContainsKey("model") ? responseObj["model"]?.ToString() ?? toolResponse.Model : toolResponse.Model;
+            toolResponse.FinishReason = responseObj.ContainsKey("done_reason") ? responseObj["done_reason"]?.ToString() : null;
+
+            string messageJson = _Serializer.SerializeJson(responseObj["message"], false);
+            Dictionary<string, object>? message = _Serializer.DeserializeJson<Dictionary<string, object>>(messageJson);
+            if (message == null)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response message could not be parsed";
+                return;
+            }
+
+            if (message.ContainsKey("content"))
+            {
+                string? text = message["content"]?.ToString();
+                toolResponse.Text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+            }
+
+            if (message.ContainsKey("tool_calls"))
+            {
+                string toolCallsJson = _Serializer.SerializeJson(message["tool_calls"], false);
+                List<Dictionary<string, object>>? toolCalls = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(toolCallsJson);
+
+                if (toolCalls != null)
+                {
+                    int index = 0;
+                    foreach (Dictionary<string, object> toolCallObj in toolCalls)
+                    {
+                        ToolCall? toolCall = ParseOllamaToolCall(toolCallObj, index);
+                        if (toolCall != null) toolResponse.ToolCalls.Add(toolCall);
+                        index++;
+                    }
+                }
+            }
+        }
+
+        private ToolCall? ParseOllamaToolCall(Dictionary<string, object> toolCallObj, int index)
+        {
+            if (!toolCallObj.ContainsKey("function")) return null;
+
+            string functionJson = _Serializer.SerializeJson(toolCallObj["function"], false);
+            Dictionary<string, object>? function = _Serializer.DeserializeJson<Dictionary<string, object>>(functionJson);
+            if (function == null || !function.ContainsKey("name")) return null;
+
+            ToolCall toolCall = new ToolCall();
+            toolCall.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : "ollama-call-" + index;
+            toolCall.Name = function["name"]?.ToString() ?? string.Empty;
+            toolCall.ArgumentsJson = function.ContainsKey("arguments") && function["arguments"] != null
+                ? _Serializer.SerializeJson(function["arguments"], false)
+                : "{}";
+            return toolCall;
+        }
+
+        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
+
+            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
+            return parsed ?? new Dictionary<string, object>();
+        }
+
+        private static string NormalizeOllamaRole(string? role)
+        {
+            if (string.Equals(role, "model", StringComparison.OrdinalIgnoreCase)) return "assistant";
+            if (string.Equals(role, "function", StringComparison.OrdinalIgnoreCase)) return "tool";
+            return string.IsNullOrWhiteSpace(role) ? "user" : role.ToLowerInvariant();
+        }
+
+        private static bool IsToolChoiceNone(string? toolChoice)
+        {
+            return string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase);
         }
 
         private Dictionary<string, object> BuildGenerateRequestBody(

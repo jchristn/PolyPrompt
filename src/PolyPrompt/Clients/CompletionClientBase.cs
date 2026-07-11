@@ -242,6 +242,19 @@ namespace PolyPrompt.Clients
             CancellationToken token = default);
 
         /// <summary>
+        /// Send a tool-capable chat completion request and return text and/or tool calls from the model.
+        /// Tool execution is owned by the caller; append ToAssistantMessage and tool-result messages to continue.
+        /// </summary>
+        /// <param name="request">Tool chat request containing messages and tool definitions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ToolChatResponse containing assistant text and requested tool calls.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when request.Messages is empty.</exception>
+        public abstract Task<ToolChatResponse> ToolChatAsync(
+            ToolChatRequest request,
+            CancellationToken token = default);
+
+        /// <summary>
         /// Generate an embedding for a single input string.
         /// </summary>
         /// <param name="input">The text to embed.</param>
@@ -509,6 +522,34 @@ namespace PolyPrompt.Clients
             temperature = options?.Temperature ?? _Temperature;
             topP = options?.TopP ?? _TopP;
             systemPrompt = options?.SystemPrompt ?? _SystemPrompt;
+        }
+
+        /// <summary>
+        /// Resolve effective values from a tool chat request and instance defaults.
+        /// </summary>
+        /// <param name="request">Tool chat request.</param>
+        /// <param name="model">Resolved model.</param>
+        /// <param name="maxTokens">Resolved max tokens.</param>
+        /// <param name="temperature">Resolved temperature.</param>
+        /// <param name="topP">Resolved top-p.</param>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when request.Messages is empty.</exception>
+        protected void ResolveToolChatRequest(
+            ToolChatRequest request,
+            out string model,
+            out int maxTokens,
+            out double? temperature,
+            out double? topP)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            if (request.Messages == null || request.Messages.Count == 0)
+                throw new ArgumentException("Tool chat requests require at least one message.", nameof(request));
+
+            model = request.Model ?? _Model;
+            maxTokens = request.MaxTokens ?? _MaxTokens;
+            temperature = request.Temperature ?? _Temperature;
+            topP = request.TopP ?? _TopP;
         }
 
         /// <summary>

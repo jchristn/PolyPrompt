@@ -154,6 +154,65 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        public override async Task<ToolChatResponse> ToolChatAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            ToolChatResponse toolResponse = new ToolChatResponse();
+            toolResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/')
+                + "/v1beta/models/" + model + ":generateContent"
+                + "?key=" + _ApiKey;
+
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":generateContent");
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                string responseBody = result.ResponseBody;
+
+                toolResponse.StatusCode = result.StatusCode;
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "tool chat request failed with status " + result.StatusCode + ": " + responseBody);
+                    toolResponse.Success = false;
+                    toolResponse.Error = "HTTP " + result.StatusCode + ": " + responseBody;
+                    return toolResponse;
+                }
+
+                PopulateGeminiToolChatResponse(responseBody, toolResponse);
+                toolResponse.Success = string.IsNullOrEmpty(toolResponse.Error);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                toolResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return toolResponse;
+        }
+
+        /// <inheritdoc />
         public override async Task<EmbeddingResponse> EmbedAsync(
             string input,
             EmbeddingOptions? options = null,
@@ -666,6 +725,279 @@ namespace PolyPrompt.Clients
             };
 
             return requestBody;
+        }
+
+        private Dictionary<string, object> BuildToolChatRequestBody(
+            ToolChatRequest request,
+            int maxTokens,
+            double? temperature,
+            double? topP)
+        {
+            Dictionary<string, object> generationConfig = new Dictionary<string, object>
+            {
+                { "maxOutputTokens", maxTokens }
+            };
+
+            if (temperature.HasValue) generationConfig["temperature"] = temperature.Value;
+            if (topP.HasValue) generationConfig["topP"] = topP.Value;
+
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "contents", BuildGeminiContents(request.Messages) },
+                { "generationConfig", generationConfig }
+            };
+
+            Dictionary<string, object>? systemInstruction = BuildGeminiSystemInstruction(request.Messages);
+            if (systemInstruction != null)
+            {
+                requestBody["systemInstruction"] = systemInstruction;
+            }
+
+            if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
+            {
+                requestBody["tools"] = BuildGeminiTools(request.Tools);
+                requestBody["toolConfig"] = BuildGeminiToolConfig(request.ToolChoice);
+            }
+
+            return requestBody;
+        }
+
+        private List<Dictionary<string, object>> BuildGeminiContents(List<ChatMessage> messages)
+        {
+            List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
+
+            foreach (ChatMessage message in messages)
+            {
+                if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                Dictionary<string, object> item = new Dictionary<string, object>
+                {
+                    { "role", NormalizeGeminiRole(message.Role) },
+                    { "parts", BuildGeminiParts(message) }
+                };
+
+                result.Add(item);
+            }
+
+            return result;
+        }
+
+        private Dictionary<string, object>? BuildGeminiSystemInstruction(List<ChatMessage> messages)
+        {
+            List<Dictionary<string, string>> parts = new List<Dictionary<string, string>>();
+
+            foreach (ChatMessage message in messages)
+            {
+                if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(message.Content))
+                {
+                    parts.Add(new Dictionary<string, string> { { "text", message.Content } });
+                }
+            }
+
+            if (parts.Count == 0) return null;
+
+            return new Dictionary<string, object>
+            {
+                { "parts", parts }
+            };
+        }
+
+        private List<Dictionary<string, object>> BuildGeminiParts(ChatMessage message)
+        {
+            List<Dictionary<string, object>> parts = new List<Dictionary<string, object>>();
+
+            if (message.ToolCalls != null && message.ToolCalls.Count > 0)
+            {
+                foreach (ToolCall toolCall in message.ToolCalls)
+                {
+                    Dictionary<string, object> functionCall = new Dictionary<string, object>
+                    {
+                        { "name", toolCall.Name },
+                        { "args", DeserializeDictionaryOrEmpty(toolCall.ArgumentsJson) }
+                    };
+
+                    parts.Add(new Dictionary<string, object> { { "functionCall", functionCall } });
+                }
+
+                return parts;
+            }
+
+            if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(message.Role, "function", StringComparison.OrdinalIgnoreCase))
+            {
+                Dictionary<string, object> functionResponse = new Dictionary<string, object>
+                {
+                    { "name", ResolveToolResultName(message) },
+                    { "response", DeserializeDictionaryOrResult(message.Content) }
+                };
+
+                parts.Add(new Dictionary<string, object> { { "functionResponse", functionResponse } });
+                return parts;
+            }
+
+            parts.Add(new Dictionary<string, object> { { "text", message.Content ?? string.Empty } });
+            return parts;
+        }
+
+        private List<Dictionary<string, object>> BuildGeminiTools(List<ToolDefinition> tools)
+        {
+            List<Dictionary<string, object>> functionDeclarations = new List<Dictionary<string, object>>();
+
+            foreach (ToolDefinition tool in tools)
+            {
+                functionDeclarations.Add(new Dictionary<string, object>
+                {
+                    { "name", tool.Name },
+                    { "description", tool.Description },
+                    { "parameters", tool.Parameters }
+                });
+            }
+
+            return new List<Dictionary<string, object>>
+            {
+                new Dictionary<string, object>
+                {
+                    { "functionDeclarations", functionDeclarations }
+                }
+            };
+        }
+
+        private Dictionary<string, object> BuildGeminiToolConfig(string? toolChoice)
+        {
+            string mode = "AUTO";
+            if (string.Equals(toolChoice, "required", StringComparison.OrdinalIgnoreCase))
+                mode = "ANY";
+            else if (string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase))
+                mode = "NONE";
+
+            return new Dictionary<string, object>
+            {
+                { "functionCallingConfig", new Dictionary<string, object> { { "mode", mode } } }
+            };
+        }
+
+        private void PopulateGeminiToolChatResponse(string responseBody, ToolChatResponse toolResponse)
+        {
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+            if (responseObj == null || !responseObj.ContainsKey("candidates"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response missing 'candidates' field";
+                return;
+            }
+
+            toolResponse.ResponseId = responseObj.ContainsKey("responseId") ? responseObj["responseId"]?.ToString() : null;
+            toolResponse.Model = responseObj.ContainsKey("modelVersion") ? responseObj["modelVersion"]?.ToString() ?? toolResponse.Model : toolResponse.Model;
+
+            string candidatesJson = _Serializer.SerializeJson(responseObj["candidates"], false);
+            List<Dictionary<string, object>>? candidates = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(candidatesJson);
+            if (candidates == null || candidates.Count == 0)
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response has empty candidates array";
+                return;
+            }
+
+            Dictionary<string, object> candidate = candidates[0];
+            toolResponse.FinishReason = candidate.ContainsKey("finishReason") ? candidate["finishReason"]?.ToString() : null;
+
+            if (!candidate.ContainsKey("content"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response candidate missing 'content' field";
+                return;
+            }
+
+            string contentJson = _Serializer.SerializeJson(candidate["content"], false);
+            Dictionary<string, object>? contentObj = _Serializer.DeserializeJson<Dictionary<string, object>>(contentJson);
+            if (contentObj == null || !contentObj.ContainsKey("parts"))
+            {
+                toolResponse.Success = false;
+                toolResponse.Error = "Response content missing 'parts' field";
+                return;
+            }
+
+            string partsJson = _Serializer.SerializeJson(contentObj["parts"], false);
+            List<Dictionary<string, object>>? parts = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(partsJson);
+            if (parts == null) return;
+
+            int index = 0;
+            foreach (Dictionary<string, object> part in parts)
+            {
+                if (part.ContainsKey("text"))
+                {
+                    string? text = part["text"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        toolResponse.Text = string.IsNullOrEmpty(toolResponse.Text)
+                            ? text
+                            : toolResponse.Text + text;
+                    }
+                }
+
+                if (part.ContainsKey("functionCall"))
+                {
+                    ToolCall? toolCall = ParseGeminiToolCall(part["functionCall"], index);
+                    if (toolCall != null) toolResponse.ToolCalls.Add(toolCall);
+                    index++;
+                }
+            }
+        }
+
+        private ToolCall? ParseGeminiToolCall(object functionCallObj, int index)
+        {
+            string functionCallJson = _Serializer.SerializeJson(functionCallObj, false);
+            Dictionary<string, object>? functionCall = _Serializer.DeserializeJson<Dictionary<string, object>>(functionCallJson);
+            if (functionCall == null || !functionCall.ContainsKey("name")) return null;
+
+            ToolCall toolCall = new ToolCall();
+            toolCall.Id = "gemini-call-" + index;
+            toolCall.Name = functionCall["name"]?.ToString() ?? string.Empty;
+            toolCall.ArgumentsJson = functionCall.ContainsKey("args") && functionCall["args"] != null
+                ? _Serializer.SerializeJson(functionCall["args"], false)
+                : "{}";
+            return toolCall;
+        }
+
+        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
+
+            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
+            return parsed ?? new Dictionary<string, object>();
+        }
+
+        private Dictionary<string, object> DeserializeDictionaryOrResult(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return new Dictionary<string, object> { { "result", string.Empty } };
+            }
+
+            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
+            if (parsed != null) return parsed;
+
+            return new Dictionary<string, object> { { "result", json } };
+        }
+
+        private static string ResolveToolResultName(ChatMessage message)
+        {
+            if (!string.IsNullOrWhiteSpace(message.ToolName)) return message.ToolName;
+            if (!string.IsNullOrWhiteSpace(message.ToolCallId)) return message.ToolCallId;
+            return "tool";
+        }
+
+        private static string NormalizeGeminiRole(string? role)
+        {
+            if (string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase)) return "model";
+            if (string.Equals(role, "tool", StringComparison.OrdinalIgnoreCase)) return "function";
+            return string.IsNullOrWhiteSpace(role) ? "user" : role.ToLowerInvariant();
+        }
+
+        private static bool IsToolChoiceNone(string? toolChoice)
+        {
+            return string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase);
         }
 
         private Dictionary<string, object> BuildGenerateRequestBody(

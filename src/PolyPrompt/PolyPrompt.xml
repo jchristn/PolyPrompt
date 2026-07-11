@@ -115,6 +115,17 @@
             <param name="token">Cancellation token.</param>
             <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Send a tool-capable chat completion request and return text and/or tool calls from the model.
+            Tool execution is owned by the caller; append ToAssistantMessage and tool-result messages to continue.
+            </summary>
+            <param name="request">Tool chat request containing messages and tool definitions.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ToolChatResponse containing assistant text and requested tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <summary>
             Generate an embedding for a single input string.
@@ -233,6 +244,18 @@
             <param name="temperature">Resolved temperature.</param>
             <param name="topP">Resolved top-p.</param>
             <param name="systemPrompt">Resolved system prompt.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolveToolChatRequest(PolyPrompt.Models.ToolChatRequest,System.String@,System.Int32@,System.Nullable{System.Double}@,System.Nullable{System.Double}@)">
+            <summary>
+            Resolve effective values from a tool chat request and instance defaults.
+            </summary>
+            <param name="request">Tool chat request.</param>
+            <param name="model">Resolved model.</param>
+            <param name="maxTokens">Resolved max tokens.</param>
+            <param name="temperature">Resolved temperature.</param>
+            <param name="topP">Resolved top-p.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
         </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolveGenerationOptions(PolyPrompt.Models.GenerationOptions,System.String@,System.Int32@,System.Nullable{System.Double}@,System.Nullable{System.Double}@)">
             <summary>
@@ -385,6 +408,9 @@
         <member name="M:PolyPrompt.Clients.GeminiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.GeminiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -425,6 +451,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
@@ -468,6 +497,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
@@ -514,6 +546,79 @@
             <summary>
             System prompt override. Null uses client default.
             </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatMessage">
+            <summary>
+            Message used by tool-capable chat requests.
+            Content may be null for assistant messages that contain tool calls.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.Role">
+            <summary>
+            Message role. Common values are system, user, assistant, and tool.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.Content">
+            <summary>
+            Text content for the message. May be null for assistant tool-call messages.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.ToolCallId">
+            <summary>
+            Tool call identifier for tool-result messages. May be null for providers that do not use tool call IDs.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.ToolName">
+            <summary>
+            Tool/function name for tool-result messages. Required by Gemini and ignored by providers that only need ToolCallId.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.ToolCalls">
+            <summary>
+            Tool calls associated with an assistant message. Empty for normal text messages.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.System(System.String)">
+            <summary>
+            Create a system message.
+            </summary>
+            <param name="content">System instructions.</param>
+            <returns>A system chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when content is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.User(System.String)">
+            <summary>
+            Create a user message.
+            </summary>
+            <param name="content">User text.</param>
+            <returns>A user chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when content is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.Assistant(System.String)">
+            <summary>
+            Create an assistant text message.
+            </summary>
+            <param name="content">Assistant text.</param>
+            <returns>An assistant chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when content is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.AssistantToolCalls(System.Collections.Generic.IEnumerable{PolyPrompt.Models.ToolCall})">
+            <summary>
+            Create an assistant message containing tool calls.
+            </summary>
+            <param name="toolCalls">Tool calls requested by the assistant.</param>
+            <returns>An assistant chat message containing tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when toolCalls is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.ToolResult(System.String,System.String,System.String)">
+            <summary>
+            Create a tool result message.
+            </summary>
+            <param name="toolCallId">Tool call identifier returned by the model. May be null for providers that do not emit one.</param>
+            <param name="toolName">Tool/function name. Required by Gemini function-response messages.</param>
+            <param name="content">Serialized tool result content.</param>
+            <returns>A tool result chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when toolName or content is null.</exception>
         </member>
         <member name="T:PolyPrompt.Models.ChatResponse">
             <summary>
@@ -1099,6 +1204,165 @@
             <summary>
             Percentage complete for the current layer (0.0 to 100.0). Null when total is unknown.
             </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolCall">
+            <summary>
+            Tool call requested by a model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCall.Id">
+            <summary>
+            Provider tool call identifier. May be null when the provider does not emit IDs.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCall.Name">
+            <summary>
+            Tool/function name requested by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCall.ArgumentsJson">
+            <summary>
+            Tool arguments as a JSON object string. Defaults to an empty JSON object.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ToolCall.DeserializeArguments``1">
+            <summary>
+            Deserialize ArgumentsJson into a typed arguments object.
+            </summary>
+            <typeparam name="T">Argument model type.</typeparam>
+            <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolChatRequest">
+            <summary>
+            Request for a tool-capable chat completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.Model">
+            <summary>
+            Optional model override. Null uses the client Model property.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.Messages">
+            <summary>
+            Conversation messages. At least one message is required.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.Tools">
+            <summary>
+            Tool definitions available to the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.ToolChoice">
+            <summary>
+            Tool choice directive. Common values are auto, none, and required. Null uses provider default behavior.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.Temperature">
+            <summary>
+            Sampling temperature override. Clamped to 0.0..2.0. Null uses the client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.TopP">
+            <summary>
+            Nucleus sampling top-p override. Clamped to 0.0..1.0. Null uses the client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatRequest.MaxTokens">
+            <summary>
+            Max tokens override. Clamped to 1..10,000,000. Null uses the client default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolChatResponse">
+            <summary>
+            Response from a tool-capable chat completion request.
+            A response may contain text, tool calls, or both depending on the provider and model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Text">
+            <summary>
+            Assistant text returned by the model. May be null when the model requested tool calls.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.ToolCalls">
+            <summary>
+            Tool calls requested by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Model">
+            <summary>
+            The model name used for this completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.ResponseId">
+            <summary>
+            Provider response identifier for correlation. May be null when the provider does not emit one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.FinishReason">
+            <summary>
+            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Success">
+            <summary>
+            Whether the request succeeded.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Error">
+            <summary>
+            Error message when Success is false.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ToolChatResponse.ToAssistantMessage">
+            <summary>
+            Convert this response into an assistant message that can be appended to the next ToolChatRequest.
+            </summary>
+            <returns>An assistant message containing either text or tool calls.</returns>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolDefinition">
+            <summary>
+            Portable function/tool declaration supplied to a tool-capable chat request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolDefinition.Type">
+            <summary>
+            Tool type. The default is function.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolDefinition.Name">
+            <summary>
+            Function/tool name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolDefinition.Description">
+            <summary>
+            Human-readable function/tool description.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolDefinition.Parameters">
+            <summary>
+            JSON Schema parameter object for the function/tool.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ToolDefinition.Function(System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.Object})">
+            <summary>
+            Create a function tool definition.
+            </summary>
+            <param name="name">Function name.</param>
+            <param name="description">Function description.</param>
+            <param name="parameters">JSON Schema parameter object.</param>
+            <returns>A function tool definition.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
         </member>
         <member name="T:PolyPrompt.Options.GeminiChatCompletionOptions">
             <summary>

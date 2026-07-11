@@ -6,48 +6,53 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, text generation, embeddings, and model management across **Ollama**, **OpenAI**, and **Google Gemini** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, and **Google Gemini** APIs. Write your LLM integration code once and swap providers without changing your application logic.
 
 ## What It Does
 
 PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning three different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers.
 
-- **Chat Completions** — Streaming and non-streaming conversational AI with system prompts
-- **Text Generation** — Streaming and non-streaming text generation (completion-style)
-- **Embeddings** — Single and batch embedding vector generation for semantic search and RAG
-- **Model Management** — List models, check existence, get model details, pull, and delete
-- **Connectivity Validation** — Verify provider reachability before running workloads
-- **Timing Metrics** — Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput
-- **Call Recording** — Every HTTP call is recorded with full request/response details for debugging and auditing
-- **Provider-Specific Options** — Fine-tune each provider's unique parameters without losing portability
+- **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
+- **Tool Calling** - Provider-normalized function declarations, model tool calls, and tool-result follow-up messages
+- **Text Generation** - Streaming and non-streaming text generation (completion-style)
+- **Embeddings** - Single and batch embedding vector generation for semantic search and RAG
+- **Model Management** - List models, check existence, get model details, pull, and delete
+- **Connectivity Validation** - Verify provider reachability before running workloads
+- **Timing Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput
+- **Call Recording** - Every HTTP call is recorded with full request/response details for debugging and auditing
+- **Provider-Specific Options** - Fine-tune each provider's unique parameters without losing portability
 
 ## Use Cases
 
 PolyPrompt is a good fit when you need to:
 
-- **Build provider-agnostic applications** — Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, or Google Gemini) without rewriting integration code
-- **Compare providers side-by-side** — Benchmark the same prompts across Ollama, OpenAI, and Gemini to evaluate quality, latency, and cost
-- **Prototype rapidly** — Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
-- **Build RAG pipelines** — Generate embeddings for document chunks using any provider's embedding models, then query with semantic search
-- **Create AI-powered CLI tools** — The simple API makes it easy to add LLM capabilities to command-line applications
-- **Manage local model infrastructure** — Pull, list, inspect, and delete Ollama models programmatically
-- **Monitor LLM performance** — Use built-in timing metrics and call recording to track latency, throughput, and errors in production
-- **Build multi-model workflows** — Use different providers for different tasks (e.g., Ollama for embeddings, OpenAI for chat) through the same interface
+- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, or Google Gemini) without rewriting integration code
+- **Add tool-backed workflows** - Let models request application functions while your code stays in charge of tool execution
+- **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, and Gemini to evaluate quality, latency, and cost
+- **Prototype rapidly** - Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
+- **Build RAG pipelines** - Generate embeddings for document chunks using any provider's embedding models, then query with semantic search
+- **Create AI-powered CLI tools** - The simple API makes it easy to add LLM capabilities to command-line applications
+- **Manage local model infrastructure** - Pull, list, inspect, and delete Ollama models programmatically
+- **Monitor LLM performance** - Use built-in timing metrics and call recording to track latency, throughput, and errors in production
+- **Build multi-model workflows** - Use different providers for different tasks (e.g., Ollama for embeddings, OpenAI for chat) through the same interface
 
 ## When Not to Use It
 
 PolyPrompt may not be the right choice if you need:
 
-- **Advanced provider-specific features** — Tool/function calling, vision/image inputs, structured outputs, or fine-tuning APIs are not currently supported
-- **Multi-turn conversation management** — PolyPrompt handles single-turn request/response; it does not manage conversation history or context windows
-- **Token counting or cost estimation** — While some providers return token usage in responses, PolyPrompt does not provide pre-request token counting
-- **Official SDK parity** — If you need every feature of a specific provider's API, use their official SDK instead
+- **Advanced multimodal or lifecycle APIs** - Vision/image inputs, structured outputs, fine-tuning APIs, batch APIs, and provider-specific agent runtimes are not currently supported
+- **Automatic agent execution** - PolyPrompt returns requested tool calls, but your application executes tools and appends tool results
+- **Conversation storage** - PolyPrompt sends the messages you provide; it does not persist conversation history or manage context windows
+- **Token counting or cost estimation** - While some providers return token usage in responses, PolyPrompt does not provide pre-request token counting
+- **Official SDK parity** - If you need every feature of a specific provider's API, use their official SDK instead
 
 ## Installation
 
 ```bash
 dotnet add package PolyPrompt
 ```
+
+Current documented package version: **1.5.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -141,6 +146,68 @@ options.SystemPrompt = "You are a concise technical writer.";
 
 ChatResponse response = await client.ChatAsync("Explain dependency injection.", options);
 Console.WriteLine(response.Text);
+```
+
+### Tool Calling
+
+Tool calling is explicit. Use `ToolChatAsync` when a model may request application functions, then execute those functions in your code and send the result back as another message. PolyPrompt normalizes the provider protocol; it does not run your tools for you.
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using OpenAiClient client = new OpenAiClient("https://api.openai.com", "sk-your-api-key");
+client.Model = "gpt-4o-mini";
+
+ToolChatRequest request = new ToolChatRequest();
+request.Messages.Add(ChatMessage.System("Answer with practical weather guidance."));
+request.Messages.Add(ChatMessage.User("What is the weather in Seattle, and should I bring a jacket?"));
+request.Tools.Add(ToolDefinition.Function(
+    "get_weather",
+    "Get current weather for a city.",
+    new Dictionary<string, object>
+    {
+        { "type", "object" },
+        { "properties", new Dictionary<string, object>
+            {
+                { "city", new Dictionary<string, object>
+                    {
+                        { "type", "string" },
+                        { "description", "City name." }
+                    }
+                },
+                { "unit", new Dictionary<string, object>
+                    {
+                        { "type", "string" },
+                        { "enum", new List<string> { "fahrenheit", "celsius" } }
+                    }
+                }
+            }
+        },
+        { "required", new List<string> { "city" } }
+    }));
+
+ToolChatResponse first = await client.ToolChatAsync(request);
+
+if (first.ToolCalls.Count > 0)
+{
+    request.Messages.Add(first.ToAssistantMessage());
+}
+
+foreach (ToolCall call in first.ToolCalls)
+{
+    if (call.Name == "get_weather")
+    {
+        string weatherJson = "{\"temperature\":72,\"conditions\":\"clear\"}";
+        request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, weatherJson));
+    }
+}
+
+request.Tools.Clear();
+request.ToolChoice = "none";
+
+ToolChatResponse final = await client.ToolChatAsync(request);
+Console.WriteLine(final.Text);
 ```
 
 ### Streaming Chat
@@ -466,6 +533,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 |--------|-------------|
 | `ChatAsync` | Non-streaming chat completion |
 | `ChatStreamingAsync` | Streaming chat completion with timing metrics |
+| `ToolChatAsync` | Tool-capable chat completion that returns assistant text and requested tool calls |
 | `EmbedAsync(string)` | Generate embedding for a single text |
 | `EmbedAsync(List<string>)` | Generate embeddings for a batch of texts |
 | `GenerateAsync` | Non-streaming text generation |
@@ -477,6 +545,18 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 | `DeleteModelAsync` | Delete a model (Ollama only) |
 | `ValidateConnectivityAsync` | Verify the provider is reachable |
 | `ClearCallDetails` | Clear retained HTTP call details |
+
+### Tool Calling Models
+
+`ToolChatAsync` uses a message-based request because tool calling is inherently multi-step. A model can return tool calls instead of final text, and the caller decides how to execute those tools.
+
+| Type | Purpose |
+|------|---------|
+| `ToolChatRequest` | Contains messages, tool definitions, tool choice, and generation overrides |
+| `ChatMessage` | Represents system, user, assistant, and tool-result messages |
+| `ToolDefinition` | Declares a callable function with a JSON Schema parameter object |
+| `ToolCall` | Represents a model-requested tool name and JSON arguments |
+| `ToolChatResponse` | Contains assistant text, tool calls, status, timing, and finish metadata |
 
 ### Provider-Specific Options
 
@@ -508,6 +588,7 @@ Each provider exposes option classes that extend the base options with provider-
 |---------|--------|--------|--------|
 | Chat (non-streaming) | Yes | Yes | Yes |
 | Chat (streaming) | Yes | Yes | Yes |
+| Tool Calling | Yes | Yes | Yes |
 | Text Generation | Yes | Legacy only | Yes |
 | Embeddings (single) | Yes | Yes | Yes |
 | Embeddings (batch) | Yes | Yes | Yes |
@@ -522,20 +603,20 @@ Each provider exposes option classes that extend the base options with provider-
 
 ```
 PolyPrompt/
-├── src/
-│   ├── PolyPrompt/              # Core library (NuGet package)
-│   │   ├── Clients/             # CompletionClientBase, OllamaClient, OpenAiClient, GeminiClient
-│   │   ├── Models/              # Request/response data models
-│   │   └── Options/             # Provider-specific option classes
-│   ├── OllamaConsole/           # Interactive Ollama test harness
-│   ├── OpenAIConsole/           # Interactive OpenAI test harness
-│   ├── GeminiConsole/           # Interactive Gemini test harness
-│   ├── Test.Shared/             # Shared Touchstone test descriptors
-│   ├── Test.Automated/          # Touchstone console runner
-│   ├── Test.Xunit/              # xUnit adapter over Test.Shared
-│   └── Test.Nunit/              # NUnit adapter over Test.Shared
-└── assets/
-    └── logo.png
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ PolyPrompt/              # Core library (NuGet package)
+â”‚   â”‚   â”œâ”€â”€ Clients/             # CompletionClientBase, OllamaClient, OpenAiClient, GeminiClient
+â”‚   â”‚   â”œâ”€â”€ Models/              # Request/response data models
+â”‚   â”‚   â””â”€â”€ Options/             # Provider-specific option classes
+â”‚   â”œâ”€â”€ OllamaConsole/           # Interactive Ollama test harness
+â”‚   â”œâ”€â”€ OpenAIConsole/           # Interactive OpenAI test harness
+â”‚   â”œâ”€â”€ GeminiConsole/           # Interactive Gemini test harness
+â”‚   â”œâ”€â”€ Test.Shared/             # Shared Touchstone test descriptors
+â”‚   â”œâ”€â”€ Test.Automated/          # Touchstone console runner
+â”‚   â”œâ”€â”€ Test.Xunit/              # xUnit adapter over Test.Shared
+â”‚   â””â”€â”€ Test.Nunit/              # NUnit adapter over Test.Shared
+â””â”€â”€ assets/
+    â””â”€â”€ logo.png
 ```
 
 ## Building from Source
@@ -548,8 +629,8 @@ dotnet build src/PolyPrompt.sln
 ## Running the Automated Tests
 
 ```bash
-# Local self-tests for timeout, cancellation, response disposal, and CallDetails behavior
-dotnet run --project src/Test.Automated -- selftest
+# Local self-tests for timeout, cancellation, response disposal, CallDetails, and tool calling
+dotnet run --project src/Test.Automated --framework net8.0 -- selftest
 
 # Local self-tests through xUnit and NUnit
 dotnet test src/Test.Xunit/Test.Xunit.csproj
