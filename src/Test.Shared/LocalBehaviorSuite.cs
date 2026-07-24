@@ -7,10 +7,37 @@ namespace Test.Shared
     using PolyPrompt.Options;
     using Touchstone.Core;
 
+    /// <summary>
+    /// Builds Touchstone test suites that exercise deterministic local provider behavior.
+    /// </summary>
     public static class LocalBehaviorSuite
     {
         private const string SuiteId = "local_behavior";
+        private static readonly string[] _ProviderEnvironmentVariables = new string[]
+        {
+            "POLYPROMPT_TEST_PROVIDER",
+            "POLYPROMPT_TEST_ENDPOINT",
+            "POLYPROMPT_TEST_API_KEY",
+            "POLYPROMPT_TEST_MODEL",
+            "POLYPROMPT_TEST_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_OPENAI_API_KEY",
+            "POLYPROMPT_TEST_OPENAI_ENDPOINT",
+            "POLYPROMPT_TEST_OPENAI_MODEL",
+            "POLYPROMPT_TEST_OPENAI_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_OLLAMA_API_KEY",
+            "POLYPROMPT_TEST_OLLAMA_ENDPOINT",
+            "POLYPROMPT_TEST_OLLAMA_MODEL",
+            "POLYPROMPT_TEST_OLLAMA_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_GEMINI_API_KEY",
+            "POLYPROMPT_TEST_GEMINI_ENDPOINT",
+            "POLYPROMPT_TEST_GEMINI_MODEL",
+            "POLYPROMPT_TEST_GEMINI_EMBEDDING_MODEL",
+        };
 
+        /// <summary>
+        /// Creates the deterministic local behavior suite.
+        /// </summary>
+        /// <returns>A Touchstone suite descriptor containing local provider protocol and behavior tests.</returns>
         public static TestSuiteDescriptor Create()
         {
             return new TestSuiteDescriptor(
@@ -20,12 +47,26 @@ namespace Test.Shared
                 {
                     Case("chat_and_call_details", "Chat and CallDetails behavior", RunChatAndCallDetailsAsync),
                     Case("client_options_and_guards", "Client options and guard clauses", RunClientOptionsAndGuardsAsync),
+                    Case("provider_test_configuration", "Provider test configuration defaults and environment groups", RunProviderTestConfigurationAsync),
                     Case("provider_specific_options_clamping", "Provider-specific options clamp values", RunProviderSpecificOptionsClampingAsync),
                     Case("provider_chat_request_translation", "Provider chat request translation", RunProviderChatRequestTranslationAsync),
                     Case("tool_chat_models_and_validation", "Tool chat models and validation", RunToolChatModelsAndValidationAsync),
+                    Case("tool_chat_streaming_models_and_validation", "Tool chat streaming models and validation", RunToolChatStreamingModelsAndValidationAsync),
+                    Case("openai_chat_streaming", "OpenAI-compatible streaming chat flow", RunOpenAiChatStreamingAsync),
+                    Case("ollama_chat_streaming", "Ollama streaming chat flow", RunOllamaChatStreamingAsync),
+                    Case("gemini_chat_streaming", "Gemini streaming chat flow", RunGeminiChatStreamingAsync),
+                    Case("openai_generation_streaming", "OpenAI-compatible streaming generation flow", RunOpenAiGenerationStreamingAsync),
+                    Case("ollama_generation_streaming", "Ollama streaming generation flow", RunOllamaGenerationStreamingAsync),
+                    Case("gemini_generation_streaming", "Gemini streaming generation flow", RunGeminiGenerationStreamingAsync),
+                    Case("tool_choice_translation", "Tool choice directives are translated consistently", RunToolChoiceTranslationAsync),
+                    Case("request_model_overrides", "Per-request model overrides are sent to providers", RunRequestModelOverridesAsync),
+                    Case("streaming_http_error_handling", "Streaming HTTP startup errors are surfaced", RunStreamingHttpErrorHandlingAsync),
                     Case("openai_tool_chat", "OpenAI-compatible tool chat flow", RunOpenAiToolChatAsync),
+                    Case("openai_tool_chat_streaming", "OpenAI-compatible streaming tool chat flow", RunOpenAiToolChatStreamingAsync),
                     Case("ollama_tool_chat", "Ollama tool chat flow", RunOllamaToolChatAsync),
+                    Case("ollama_tool_chat_streaming", "Ollama streaming tool chat flow", RunOllamaToolChatStreamingAsync),
                     Case("gemini_tool_chat", "Gemini tool chat flow", RunGeminiToolChatAsync),
+                    Case("gemini_tool_chat_streaming", "Gemini streaming tool chat flow", RunGeminiToolChatStreamingAsync),
                     Case("openai_embedding_generation_models", "OpenAI-compatible embeddings, generation, and models", RunOpenAiEmbeddingGenerationModelsAsync),
                     Case("ollama_embedding_generation_models", "Ollama embeddings, generation, and models", RunOllamaEmbeddingGenerationModelsAsync),
                     Case("gemini_embedding_generation_models", "Gemini embeddings, generation, and models", RunGeminiEmbeddingGenerationModelsAsync),
@@ -34,6 +75,7 @@ namespace Test.Shared
                     Case("timeout_validation", "TimeoutMs validation preserves positive values", RunTimeoutValidationAsync),
                     Case("validate_connectivity_cancellation", "ValidateConnectivityAsync propagates cancellation", RunValidateConnectivityCancellationAsync),
                     Case("streaming_body_timeout", "Streaming timeout covers the response body", RunStreamingBodyTimeoutAsync),
+                    Case("tool_chat_streaming_body_timeout", "Streaming tool chat timeout covers the response body", RunToolChatStreamingBodyTimeoutAsync),
                     Case("post_and_record_disposes_response", "PostAndRecordAsync disposes non-streaming responses", RunPostAndRecordDisposesResponseAsync),
                 });
         }
@@ -122,6 +164,77 @@ namespace Test.Shared
             SharedAssert.Equal(10_000_000, generationOptions.MaxTokens, "GenerationOptions MaxTokens should clamp.");
             SharedAssert.Equal(2.0, generationOptions.Temperature, "GenerationOptions Temperature should clamp.");
             SharedAssert.Equal(0.0, generationOptions.TopP, "GenerationOptions TopP should clamp.");
+        }
+
+        private static async Task RunProviderTestConfigurationAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            ProviderTestConfiguration openAi = ProviderTestConfiguration.CreateWithDefaults("OPENAI", apiKey: "test-key", inferenceModel: "gpt-test");
+            SharedAssert.Equal("openai", openAi.ProviderType, "OpenAI provider type should normalize.");
+            SharedAssert.Equal(ProviderTestConfiguration.DefaultOpenAiEndpoint, openAi.Endpoint, "OpenAI should use its default endpoint when none is supplied.");
+            SharedAssert.Equal("test-key", openAi.ApiKey, "OpenAI API key should be retained.");
+            SharedAssert.Equal("gpt-test", openAi.InferenceModel, "OpenAI inference model should be retained.");
+            SharedAssert.Equal("text-embedding-3-small", openAi.EmbeddingModel, "OpenAI should use its default embedding model.");
+
+            ProviderTestConfiguration gemini = ProviderTestConfiguration.CreateWithDefaults("gemini", apiKey: "gemini-key", inferenceModel: "gemini-test");
+            SharedAssert.Equal(ProviderTestConfiguration.DefaultGeminiEndpoint, gemini.Endpoint, "Gemini should use its default endpoint when none is supplied.");
+            SharedAssert.Equal("text-embedding-004", gemini.EmbeddingModel, "Gemini should use its default embedding model.");
+
+            ProviderTestConfiguration ollama = ProviderTestConfiguration.CreateWithDefaults("ollama", endpoint: "http://localhost:11434", inferenceModel: "gemma3:4b", embeddingModel: "all-minilm");
+            SharedAssert.Equal("ollama", ollama.ProviderType, "Ollama provider type should be retained.");
+            SharedAssert.Equal("http://localhost:11434", ollama.Endpoint, "Ollama endpoint should be retained.");
+            SharedAssert.True(ollama.ApiKey == null, "Ollama API key should remain null when omitted.");
+            SharedAssert.Equal("gemma3:4b", ollama.InferenceModel, "Ollama inference model should be retained.");
+            SharedAssert.Equal("all-minilm", ollama.EmbeddingModel, "Ollama embedding model override should be retained.");
+
+            await SharedAssert.ThrowsAsync<ArgumentException>(
+                () =>
+                {
+                    ProviderTestConfiguration.CreateWithDefaults("unknown");
+                    return Task.CompletedTask;
+                },
+                "Unknown provider configuration should throw.").ConfigureAwait(false);
+
+            Dictionary<string, string?> originalEnvironment = CaptureProviderEnvironment();
+            try
+            {
+                ClearProviderEnvironment();
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_OPENAI_API_KEY", "openai-key");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_OPENAI_MODEL", "gpt-live");
+                ProviderTestConfiguration? openAiFromEnvironment = ProviderTestConfiguration.FromEnvironment();
+                ProviderTestConfiguration openAiEnvironment = openAiFromEnvironment ?? throw new TestFailureException("OpenAI environment configuration should be created.");
+                SharedAssert.Equal("openai", openAiEnvironment.ProviderType, "OpenAI environment provider should be selected.");
+                SharedAssert.Equal(ProviderTestConfiguration.DefaultOpenAiEndpoint, openAiEnvironment.Endpoint, "OpenAI environment configuration should default endpoint.");
+                SharedAssert.Equal("openai-key", openAiEnvironment.ApiKey, "OpenAI environment API key should be retained.");
+                SharedAssert.Equal("gpt-live", openAiEnvironment.InferenceModel, "OpenAI environment model should be retained.");
+
+                ClearProviderEnvironment();
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_PROVIDER", "gemini");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_API_KEY", "gemini-key");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_MODEL", "gemini-live");
+                ProviderTestConfiguration? genericFromEnvironment = ProviderTestConfiguration.FromEnvironment();
+                ProviderTestConfiguration genericEnvironment = genericFromEnvironment ?? throw new TestFailureException("Generic environment configuration should be created.");
+                SharedAssert.Equal("gemini", genericEnvironment.ProviderType, "Generic environment provider should be selected.");
+                SharedAssert.Equal(ProviderTestConfiguration.DefaultGeminiEndpoint, genericEnvironment.Endpoint, "Generic Gemini environment configuration should default endpoint.");
+                SharedAssert.Equal("gemini-key", genericEnvironment.ApiKey, "Generic environment API key should be retained.");
+                SharedAssert.Equal("gemini-live", genericEnvironment.InferenceModel, "Generic environment model should be retained.");
+
+                ClearProviderEnvironment();
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_OPENAI_API_KEY", "openai-key");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_GEMINI_API_KEY", "gemini-key");
+                await SharedAssert.ThrowsAsync<ArgumentException>(
+                    () =>
+                    {
+                        ProviderTestConfiguration.FromEnvironment();
+                        return Task.CompletedTask;
+                    },
+                    "Conflicting provider-specific environment groups should throw.").ConfigureAwait(false);
+            }
+            finally
+            {
+                RestoreProviderEnvironment(originalEnvironment);
+            }
         }
 
         private static async Task RunProviderSpecificOptionsClampingAsync(CancellationToken token)
@@ -259,6 +372,295 @@ namespace Test.Shared
                 "ToolChatAsync should reject empty message lists.").ConfigureAwait(false);
         }
 
+        private static async Task RunToolChatStreamingModelsAndValidationAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            ToolCall toolCall = new ToolCall
+            {
+                Id = "call-1",
+                Name = "get_weather",
+                ArgumentsJson = "{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}"
+            };
+
+            ToolChatStreamingResponse response = new ToolChatStreamingResponse();
+            response.ToolCalls.Add(toolCall);
+            ChatMessage assistant = response.ToAssistantMessage();
+            SharedAssert.Equal("assistant", assistant.Role, "Streaming tool response should convert to assistant message.");
+            SharedAssert.Equal(1, assistant.ToolCalls.Count, "Streaming assistant message should include tool calls.");
+
+            ToolChatStreamingResponse textResponse = new ToolChatStreamingResponse();
+            textResponse.Text = "hello";
+            ChatMessage textAssistant = textResponse.ToAssistantMessage();
+            SharedAssert.Equal("hello", textAssistant.Content, "Streaming text response should convert to assistant text message.");
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            await SharedAssert.ThrowsAsync<ArgumentException>(
+                () => client.ToolChatStreamingAsync(new ToolChatRequest(), token),
+                "ToolChatStreamingAsync should reject empty message lists.").ConfigureAwait(false);
+
+            using OpenAiClient missingClient = new OpenAiClient(server.Endpoint + "/missing", "test-key");
+            missingClient.Model = "test-model";
+            missingClient.TimeoutMs = 500;
+
+            ToolChatStreamingResponse failed = await missingClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.False(failed.Success, "Streaming tool chat HTTP errors should produce unsuccessful responses.");
+            SharedAssert.True(failed.StatusCode == 404, "Streaming tool chat HTTP errors should preserve status code.");
+            SharedAssert.NotEmpty(failed.Error, "Streaming tool chat HTTP errors should surface an error message.");
+        }
+
+        private static async Task RunOpenAiChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineChatText(chunks);
+
+            SharedAssert.True(stream.Success, "OpenAI-compatible streaming chat should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "OpenAI-compatible streaming chat should return HTTP 200.");
+            SharedAssert.Equal("hello world", text, "OpenAI-compatible streaming chat should assemble text.");
+            SharedAssert.Equal("stop", stream.FinishReason, "OpenAI-compatible streaming chat should expose finish reason.");
+            SharedAssert.Equal("chatcmpl-stream-local", stream.ResponseId, "OpenAI-compatible streaming chat should expose response id.");
+            SharedAssert.NotNull(stream.Usage, "OpenAI-compatible streaming chat should expose usage.");
+            SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "OpenAI-compatible streaming chat should parse completion tokens.");
+            SharedAssert.True(stream.ChunkCount >= 2, "OpenAI-compatible streaming chat should count text chunks.");
+
+            LocalOpenAiChatRequest recordedRequest = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.Stream == true, "OpenAI-compatible streaming chat request should set stream true.");
+        }
+
+        private static async Task RunOllamaChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineChatText(chunks);
+
+            SharedAssert.True(stream.Success, "Ollama streaming chat should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "Ollama streaming chat should return HTTP 200.");
+            SharedAssert.Equal("hello world", text, "Ollama streaming chat should assemble text.");
+            SharedAssert.Equal("stop", stream.FinishReason, "Ollama streaming chat should expose finish reason.");
+            SharedAssert.NotNull(stream.Usage, "Ollama streaming chat should expose usage.");
+            SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Ollama streaming chat should parse eval count.");
+            SharedAssert.True(stream.ChunkCount >= 2, "Ollama streaming chat should count text chunks.");
+
+            LocalOpenAiChatRequest recordedRequest = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.Stream == true, "Ollama streaming chat request should set stream true.");
+        }
+
+        private static async Task RunGeminiChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineChatText(chunks);
+
+            SharedAssert.True(stream.Success, "Gemini streaming chat should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "Gemini streaming chat should return HTTP 200.");
+            SharedAssert.Equal("pong", text, "Gemini streaming chat should assemble text.");
+            SharedAssert.Equal("STOP", stream.FinishReason, "Gemini streaming chat should expose finish reason.");
+            SharedAssert.Equal("gemini-chat-stream-local", stream.ResponseId, "Gemini streaming chat should expose response id.");
+            SharedAssert.True(stream.ChunkCount >= 1, "Gemini streaming chat should count text chunks.");
+
+            LocalGeminiRequest recordedRequest = DeserializeRecordedGeminiRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.Contents != null && recordedRequest.Contents.Any(), "Gemini streaming chat request should include contents.");
+        }
+
+        private static async Task RunOpenAiGenerationStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
+            List<GenerationStreamingChunk> chunks = await ConsumeGenerationStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineGenerationText(chunks);
+
+            SharedAssert.True(stream.Success, "OpenAI-compatible streaming generation should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "OpenAI-compatible streaming generation should return HTTP 200.");
+            SharedAssert.Equal("generated text", text, "OpenAI-compatible streaming generation should assemble text.");
+            SharedAssert.True(stream.ChunkCount >= 2, "OpenAI-compatible streaming generation should count text chunks.");
+
+            LocalGenerateRequest recordedRequest = DeserializeRecordedGenerateRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.Stream == true, "OpenAI-compatible streaming generation request should set stream true.");
+        }
+
+        private static async Task RunOllamaGenerationStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
+            List<GenerationStreamingChunk> chunks = await ConsumeGenerationStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineGenerationText(chunks);
+
+            SharedAssert.True(stream.Success, "Ollama streaming generation should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "Ollama streaming generation should return HTTP 200.");
+            SharedAssert.Equal("generated text", text, "Ollama streaming generation should assemble text.");
+            SharedAssert.True(stream.ChunkCount >= 2, "Ollama streaming generation should count text chunks.");
+
+            LocalGenerateRequest recordedRequest = DeserializeRecordedGenerateRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.Stream == true, "Ollama streaming generation request should set stream true.");
+        }
+
+        private static async Task RunGeminiGenerationStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
+            List<GenerationStreamingChunk> chunks = await ConsumeGenerationStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineGenerationText(chunks);
+
+            SharedAssert.True(stream.Success, "Gemini streaming generation should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "Gemini streaming generation should return HTTP 200.");
+            SharedAssert.Equal("pong", text, "Gemini streaming generation should assemble text from streamGenerateContent.");
+            SharedAssert.True(stream.ChunkCount >= 1, "Gemini streaming generation should count text chunks.");
+
+            LocalGeminiRequest recordedRequest = DeserializeRecordedGeminiRequest(server.RequestBodies[0]);
+            SharedAssert.True(recordedRequest.GenerationConfig != null, "Gemini streaming generation request should include generationConfig.");
+        }
+
+        private static async Task RunToolChoiceTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using OpenAiClient openAiClient = CreateClient(server);
+            ToolChatRequest openAiRequired = CreateWeatherToolRequest();
+            openAiRequired.ToolChoice = "required";
+            ToolChatResponse openAiRequiredResponse = await openAiClient.ToolChatAsync(openAiRequired, token).ConfigureAwait(false);
+            SharedAssert.True(openAiRequiredResponse.Success, "OpenAI-compatible required tool-choice request should succeed.");
+
+            ToolChatRequest openAiNone = CreateWeatherToolRequest();
+            openAiNone.ToolChoice = "none";
+            ToolChatResponse openAiNoneResponse = await openAiClient.ToolChatAsync(openAiNone, token).ConfigureAwait(false);
+            SharedAssert.True(openAiNoneResponse.Success, "OpenAI-compatible none tool-choice request should succeed.");
+
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
+            ollamaClient.Model = "test-model";
+            ollamaClient.TimeoutMs = 1000;
+            ToolChatRequest ollamaNone = CreateWeatherToolRequest();
+            ollamaNone.ToolChoice = "none";
+            ToolChatResponse ollamaNoneResponse = await ollamaClient.ToolChatAsync(ollamaNone, token).ConfigureAwait(false);
+            SharedAssert.True(ollamaNoneResponse.Success, "Ollama none tool-choice request should succeed.");
+
+            using GeminiClient geminiClient = new GeminiClient(server.Endpoint, "test-key");
+            geminiClient.Model = "test-model";
+            geminiClient.TimeoutMs = 1000;
+            ToolChatRequest geminiRequired = CreateWeatherToolRequest();
+            geminiRequired.ToolChoice = "required";
+            ToolChatResponse geminiRequiredResponse = await geminiClient.ToolChatAsync(geminiRequired, token).ConfigureAwait(false);
+            SharedAssert.True(geminiRequiredResponse.Success, "Gemini required tool-choice request should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalOpenAiChatRequest openAiRequiredRequest = DeserializeRecordedOpenAiRequest(bodies[0]);
+            LocalOpenAiChatRequest openAiNoneRequest = DeserializeRecordedOpenAiRequest(bodies[1]);
+            LocalOpenAiChatRequest ollamaNoneRequest = DeserializeRecordedOpenAiRequest(bodies[2]);
+            LocalGeminiRequest geminiRequiredRequest = DeserializeRecordedGeminiRequest(bodies[3]);
+
+            SharedAssert.Equal("required", openAiRequiredRequest.ToolChoice, "OpenAI-compatible required tool-choice should be sent.");
+            SharedAssert.True(openAiRequiredRequest.Tools != null && openAiRequiredRequest.Tools.Any(), "OpenAI-compatible required tool-choice should include tools.");
+            SharedAssert.Equal("none", openAiNoneRequest.ToolChoice, "OpenAI-compatible none tool-choice should be sent.");
+            SharedAssert.True(openAiNoneRequest.Tools == null || !openAiNoneRequest.Tools.Any(), "OpenAI-compatible none tool-choice should omit tools.");
+            SharedAssert.True(ollamaNoneRequest.Tools == null || !ollamaNoneRequest.Tools.Any(), "Ollama none tool-choice should omit tools.");
+            SharedAssert.True(geminiRequiredRequest.Tools != null && geminiRequiredRequest.Tools.Any(), "Gemini required tool-choice should include tools.");
+        }
+
+        private static async Task RunRequestModelOverridesAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using OpenAiClient openAiClient = CreateClient(server);
+            ToolChatRequest openAiRequest = CreateWeatherToolRequest();
+            openAiRequest.Model = "override-model";
+            ToolChatResponse openAiResponse = await openAiClient.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
+            SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat model override should succeed.");
+
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
+            ollamaClient.Model = "test-model";
+            ollamaClient.TimeoutMs = 1000;
+            ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
+            ollamaRequest.Model = "override-model";
+            ToolChatResponse ollamaResponse = await ollamaClient.ToolChatAsync(ollamaRequest, token).ConfigureAwait(false);
+            SharedAssert.True(ollamaResponse.Success, "Ollama tool chat model override should succeed.");
+
+            using GeminiClient geminiClient = new GeminiClient(server.Endpoint, "test-key");
+            geminiClient.Model = "test-model";
+            geminiClient.TimeoutMs = 1000;
+            ToolChatRequest geminiRequest = CreateWeatherToolRequest();
+            geminiRequest.Model = "override-model";
+            ToolChatResponse geminiResponse = await geminiClient.ToolChatAsync(geminiRequest, token).ConfigureAwait(false);
+            SharedAssert.True(geminiResponse.Success, "Gemini tool chat model override should succeed.");
+
+            LocalOpenAiChatRequest openAiRecorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            LocalOpenAiChatRequest ollamaRecorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[1]);
+            SharedAssert.Equal("override-model", openAiRecorded.Model, "OpenAI-compatible tool chat should send request model override.");
+            SharedAssert.Equal("override-model", ollamaRecorded.Model, "Ollama tool chat should send request model override.");
+            SharedAssert.True(server.RequestPaths[2].Contains("/v1beta/models/override-model:generateContent", StringComparison.Ordinal), "Gemini tool chat should route request model override in the URL.");
+        }
+
+        private static async Task RunStreamingHttpErrorHandlingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using OpenAiClient openAiClient = new OpenAiClient(server.Endpoint + "/missing", "test-key");
+            openAiClient.Model = "test-model";
+            openAiClient.TimeoutMs = 1000;
+            ChatStreamingResponse openAiChat = await openAiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
+            GenerationStreamingResponse openAiGeneration = await openAiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
+            ToolChatStreamingResponse openAiTool = await openAiClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+
+            SharedAssert.False(openAiChat.Success, "OpenAI-compatible streaming chat should surface HTTP startup errors.");
+            SharedAssert.False(openAiGeneration.Success, "OpenAI-compatible streaming generation should surface HTTP startup errors.");
+            SharedAssert.False(openAiTool.Success, "OpenAI-compatible streaming tool chat should surface HTTP startup errors.");
+            SharedAssert.Equal(404, openAiChat.StatusCode, "OpenAI-compatible streaming chat should preserve HTTP status.");
+            SharedAssert.Equal(404, openAiGeneration.StatusCode, "OpenAI-compatible streaming generation should preserve HTTP status.");
+            SharedAssert.Equal(404, openAiTool.StatusCode, "OpenAI-compatible streaming tool chat should preserve HTTP status.");
+
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint + "/missing", "test-key");
+            ollamaClient.Model = "test-model";
+            ollamaClient.TimeoutMs = 1000;
+            ChatStreamingResponse ollamaChat = await ollamaClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
+            GenerationStreamingResponse ollamaGeneration = await ollamaClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
+            ToolChatStreamingResponse ollamaTool = await ollamaClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+
+            SharedAssert.False(ollamaChat.Success, "Ollama streaming chat should surface HTTP startup errors.");
+            SharedAssert.False(ollamaGeneration.Success, "Ollama streaming generation should surface HTTP startup errors.");
+            SharedAssert.False(ollamaTool.Success, "Ollama streaming tool chat should surface HTTP startup errors.");
+            SharedAssert.Equal(404, ollamaChat.StatusCode, "Ollama streaming chat should preserve HTTP status.");
+            SharedAssert.Equal(404, ollamaGeneration.StatusCode, "Ollama streaming generation should preserve HTTP status.");
+            SharedAssert.Equal(404, ollamaTool.StatusCode, "Ollama streaming tool chat should preserve HTTP status.");
+
+            using GeminiClient geminiClient = new GeminiClient(server.Endpoint + "/missing", "test-key");
+            geminiClient.Model = "test-model";
+            geminiClient.TimeoutMs = 1000;
+            ChatStreamingResponse geminiChat = await geminiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
+            GenerationStreamingResponse geminiGeneration = await geminiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
+            ToolChatStreamingResponse geminiTool = await geminiClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+
+            SharedAssert.False(geminiChat.Success, "Gemini streaming chat should surface HTTP startup errors.");
+            SharedAssert.False(geminiGeneration.Success, "Gemini streaming generation should surface HTTP startup errors.");
+            SharedAssert.False(geminiTool.Success, "Gemini streaming tool chat should surface HTTP startup errors.");
+            SharedAssert.Equal(404, geminiChat.StatusCode, "Gemini streaming chat should preserve HTTP status.");
+            SharedAssert.Equal(404, geminiGeneration.StatusCode, "Gemini streaming generation should preserve HTTP status.");
+            SharedAssert.Equal(404, geminiTool.StatusCode, "Gemini streaming tool chat should preserve HTTP status.");
+        }
+
         private static async Task RunOpenAiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
@@ -296,6 +698,80 @@ namespace Test.Shared
                 "OpenAI-compatible follow-up should include tool call id.");
         }
 
+        private static async Task RunOpenAiToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(first.Success, "OpenAI-compatible ToolChatStreamingAsync should start.");
+            SharedAssert.Equal(200, first.StatusCode, "OpenAI-compatible streaming tool chat should return HTTP 200.");
+
+            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+
+            SharedAssert.True(firstChunks.Count > 0, "OpenAI-compatible streaming tool chat should receive chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "OpenAI-compatible streaming tool chat should emit text chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => chunk.ToolCallDeltas.Count > 0), "OpenAI-compatible streaming tool chat should emit tool-call deltas.");
+            SharedAssert.Equal("Checking weather. ", first.Text, "OpenAI-compatible streaming tool chat should accumulate text.");
+            SharedAssert.Equal("tool_calls", first.FinishReason, "OpenAI-compatible streaming tool chat should expose finish reason.");
+            SharedAssert.Equal("chatcmpl-tool-stream-local", first.ResponseId, "OpenAI-compatible streaming tool chat should expose response id.");
+            SharedAssert.Equal(2, first.ToolCalls.Count, "OpenAI-compatible streaming tool chat should accumulate multiple tool calls.");
+            SharedAssert.True(first.ToolCallDeltaCount >= 4, "OpenAI-compatible streaming tool chat should count tool-call deltas.");
+            SharedAssert.True(first.ChunkCount >= 4, "OpenAI-compatible streaming tool chat should count content chunks.");
+            SharedAssert.True(first.TimeToFirstTokenMs >= 0, "OpenAI-compatible streaming tool chat should populate first-token timing.");
+            SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "OpenAI-compatible streaming tool chat should order token timings.");
+            SharedAssert.True(first.OverallRuntimeMs > 0, "OpenAI-compatible streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallTokensPerSecond > 0, "OpenAI-compatible streaming tool chat should populate throughput.");
+            SharedAssert.NotNull(first.Usage, "OpenAI-compatible streaming tool chat should expose usage.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "OpenAI-compatible streaming tool chat should parse completion tokens.");
+
+            SharedAssert.Equal("call-weather-1", first.ToolCalls[0].Id, "OpenAI-compatible streaming tool chat should preserve first tool call id.");
+            SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "OpenAI-compatible streaming tool chat should parse first tool call name.");
+            Dictionary<string, string> firstArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
+            SharedAssert.Equal("Seattle", firstArguments["city"], "OpenAI-compatible streaming tool chat should accumulate split arguments.");
+
+            SharedAssert.Equal("call-weather-2", first.ToolCalls[1].Id, "OpenAI-compatible streaming tool chat should preserve second tool call id.");
+            Dictionary<string, string> secondArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[1].ArgumentsJson);
+            SharedAssert.Equal("Portland", secondArguments["city"], "OpenAI-compatible streaming tool chat should parse second tool call arguments.");
+
+            request.Messages.Add(first.ToAssistantMessage());
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+            foreach (ToolCall call in first.ToolCalls)
+            {
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
+            }
+
+            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+
+            SharedAssert.True(final.Success, "OpenAI-compatible final ToolChatStreamingAsync should start.");
+            SharedAssert.True(finalChunks.Count > 0, "OpenAI-compatible final streaming tool chat should receive chunks.");
+            SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "OpenAI-compatible final streaming response should accumulate text.");
+            SharedAssert.Equal(0, final.ToolCalls.Count, "OpenAI-compatible final streaming response should not accumulate tool calls.");
+            SharedAssert.Equal("stop", final.FinishReason, "OpenAI-compatible final streaming response should expose stop reason.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalOpenAiChatRequest initialRequest = DeserializeRecordedOpenAiRequest(bodies[0]);
+            LocalOpenAiChatRequest followupRequest = DeserializeRecordedOpenAiRequest(bodies[1]);
+
+            SharedAssert.True(initialRequest.Stream == true, "OpenAI-compatible streaming tool request should send stream true.");
+            SharedAssert.True(initialRequest.Tools != null && initialRequest.Tools.Count == 1, "OpenAI-compatible streaming tool request should include one tool.");
+            SharedAssert.Equal("auto", initialRequest.ToolChoice, "OpenAI-compatible streaming tool request should include tool_choice.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => message.ToolCalls != null && message.ToolCalls.Count == 2),
+                "OpenAI-compatible streaming follow-up should include assistant tool calls.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Count(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)) == 2,
+                "OpenAI-compatible streaming follow-up should include both tool results.");
+            SharedAssert.True(followupRequest.Stream == true, "OpenAI-compatible streaming follow-up should send stream true.");
+            SharedAssert.True(followupRequest.Tools == null || followupRequest.Tools.Count == 0, "OpenAI-compatible streaming follow-up should omit tools when ToolChoice is none.");
+        }
+
         private static async Task RunOllamaToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
@@ -330,6 +806,80 @@ namespace Test.Shared
             SharedAssert.True(initialRequest.Tools != null && initialRequest.Tools.Count == 1, "Ollama request should include one tool.");
             SharedAssert.False(initialRequest.Stream == true, "Ollama request should be non-streaming.");
             SharedAssert.True(followupRequest.Tools == null || followupRequest.Tools.Count == 0, "Ollama follow-up should omit tools when ToolChoice is none.");
+        }
+
+        private static async Task RunOllamaToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(first.Success, "Ollama ToolChatStreamingAsync should start.");
+            SharedAssert.Equal(200, first.StatusCode, "Ollama streaming tool chat should return HTTP 200.");
+
+            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+
+            SharedAssert.True(firstChunks.Count > 0, "Ollama streaming tool chat should receive chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Ollama streaming tool chat should emit text chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => chunk.ToolCallDeltas.Count > 0), "Ollama streaming tool chat should emit tool-call deltas.");
+            SharedAssert.Equal("Checking weather. ", first.Text, "Ollama streaming tool chat should accumulate text.");
+            SharedAssert.Equal("tool_calls", first.FinishReason, "Ollama streaming tool chat should expose done reason.");
+            SharedAssert.Equal(2, first.ToolCalls.Count, "Ollama streaming tool chat should accumulate multiple tool calls.");
+            SharedAssert.True(first.ToolCallDeltaCount >= 3, "Ollama streaming tool chat should count tool-call deltas.");
+            SharedAssert.True(first.ChunkCount >= 4, "Ollama streaming tool chat should count content chunks.");
+            SharedAssert.True(first.TimeToFirstTokenMs >= 0, "Ollama streaming tool chat should populate first-token timing.");
+            SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "Ollama streaming tool chat should order token timings.");
+            SharedAssert.True(first.OverallRuntimeMs > 0, "Ollama streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallTokensPerSecond > 0, "Ollama streaming tool chat should populate throughput.");
+            SharedAssert.NotNull(first.Usage, "Ollama streaming tool chat should expose usage.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Ollama streaming tool chat should parse eval count.");
+
+            SharedAssert.Equal("ollama-call-0", first.ToolCalls[0].Id, "Ollama streaming tool chat should synthesize first tool call id.");
+            SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Ollama streaming tool chat should parse first tool call name.");
+            Dictionary<string, string> firstArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
+            SharedAssert.Equal("Seattle", firstArguments["city"], "Ollama streaming tool chat should replace partial object arguments with final arguments.");
+
+            SharedAssert.Equal("ollama-call-1", first.ToolCalls[1].Id, "Ollama streaming tool chat should synthesize second tool call id.");
+            Dictionary<string, string> secondArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[1].ArgumentsJson);
+            SharedAssert.Equal("Portland", secondArguments["city"], "Ollama streaming tool chat should parse second tool call arguments.");
+
+            request.Messages.Add(first.ToAssistantMessage());
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+            foreach (ToolCall call in first.ToolCalls)
+            {
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
+            }
+
+            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+
+            SharedAssert.True(final.Success, "Ollama final ToolChatStreamingAsync should start.");
+            SharedAssert.True(finalChunks.Count > 0, "Ollama final streaming tool chat should receive chunks.");
+            SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Ollama final streaming response should accumulate text.");
+            SharedAssert.Equal(0, final.ToolCalls.Count, "Ollama final streaming response should not accumulate tool calls.");
+            SharedAssert.Equal("stop", final.FinishReason, "Ollama final streaming response should expose stop reason.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalOpenAiChatRequest initialRequest = DeserializeRecordedOpenAiRequest(bodies[0]);
+            LocalOpenAiChatRequest followupRequest = DeserializeRecordedOpenAiRequest(bodies[1]);
+
+            SharedAssert.True(initialRequest.Stream == true, "Ollama streaming tool request should send stream true.");
+            SharedAssert.True(initialRequest.Tools != null && initialRequest.Tools.Count == 1, "Ollama streaming tool request should include one tool.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => message.ToolCalls != null && message.ToolCalls.Count == 2),
+                "Ollama streaming follow-up should include assistant tool calls.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Count(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)) == 2,
+                "Ollama streaming follow-up should include both tool results.");
+            SharedAssert.True(followupRequest.Stream == true, "Ollama streaming follow-up should send stream true.");
+            SharedAssert.True(followupRequest.Tools == null || followupRequest.Tools.Count == 0, "Ollama streaming follow-up should omit tools when ToolChoice is none.");
         }
 
         private static async Task RunGeminiToolChatAsync(CancellationToken token)
@@ -380,6 +930,106 @@ namespace Test.Shared
                         && content.Parts.Any(part => part.FunctionResponse != null
                             && string.Equals(part.FunctionResponse.Name, "get_weather", StringComparison.Ordinal))),
                 "Gemini follow-up should include function response.");
+        }
+
+        private static async Task RunGeminiToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(first.Success, "Gemini ToolChatStreamingAsync should start.");
+            SharedAssert.Equal(200, first.StatusCode, "Gemini streaming tool chat should return HTTP 200.");
+
+            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+
+            SharedAssert.True(firstChunks.Any(), "Gemini streaming tool chat should receive chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Gemini streaming tool chat should emit text chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => chunk.ToolCallDeltas.Any()), "Gemini streaming tool chat should emit tool-call deltas.");
+            SharedAssert.Equal("Checking weather. ", first.Text, "Gemini streaming tool chat should accumulate text.");
+            SharedAssert.Equal("STOP", first.FinishReason, "Gemini streaming tool chat should expose finish reason.");
+            SharedAssert.Equal("gemini-tool-stream-local", first.ResponseId, "Gemini streaming tool chat should expose response id.");
+            SharedAssert.Equal(2, first.ToolCalls.Count, "Gemini streaming tool chat should accumulate multiple tool calls.");
+            SharedAssert.True(first.ToolCallDeltaCount >= 2, "Gemini streaming tool chat should count tool-call deltas.");
+            SharedAssert.True(first.ChunkCount >= 3, "Gemini streaming tool chat should count content chunks.");
+            SharedAssert.True(first.TimeToFirstTokenMs >= 0, "Gemini streaming tool chat should populate first-token timing.");
+            SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "Gemini streaming tool chat should order token timings.");
+            SharedAssert.True(first.OverallRuntimeMs > 0, "Gemini streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallTokensPerSecond > 0, "Gemini streaming tool chat should populate throughput.");
+            SharedAssert.NotNull(first.Usage, "Gemini streaming tool chat should expose usage.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Gemini streaming tool chat should parse candidates token count.");
+
+            SharedAssert.Equal("gemini-call-0", first.ToolCalls[0].Id, "Gemini streaming tool chat should synthesize first tool call id.");
+            SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Gemini streaming tool chat should parse first tool call name.");
+            Dictionary<string, string> firstArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
+            SharedAssert.Equal("Seattle", firstArguments["city"], "Gemini streaming tool chat should parse first tool call args.");
+
+            SharedAssert.Equal("gemini-call-1", first.ToolCalls[1].Id, "Gemini streaming tool chat should synthesize second tool call id.");
+            Dictionary<string, string> secondArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[1].ArgumentsJson);
+            SharedAssert.Equal("Portland", secondArguments["city"], "Gemini streaming tool chat should parse second tool call args.");
+
+            request.Messages.Add(first.ToAssistantMessage());
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+            foreach (ToolCall call in first.ToolCalls)
+            {
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
+            }
+
+            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+
+            SharedAssert.True(final.Success, "Gemini final ToolChatStreamingAsync should start.");
+            SharedAssert.True(finalChunks.Any(), "Gemini final streaming tool chat should receive chunks.");
+            SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Gemini final streaming response should accumulate text.");
+            SharedAssert.Equal(0, final.ToolCalls.Count, "Gemini final streaming response should not accumulate tool calls.");
+            SharedAssert.Equal("STOP", final.FinishReason, "Gemini final streaming response should expose stop reason.");
+            SharedAssert.Equal("gemini-final-stream-local", final.ResponseId, "Gemini final streaming response should expose response id.");
+            SharedAssert.NotNull(final.Usage, "Gemini final streaming response should expose usage.");
+            SharedAssert.Equal(5, final.Usage!.CompletionTokens, "Gemini final streaming response should parse candidates token count.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalGeminiRequest initialRequest = DeserializeRecordedGeminiRequest(bodies[0]);
+            LocalGeminiRequest followupRequest = DeserializeRecordedGeminiRequest(bodies[1]);
+
+            int followupFunctionCallCount = 0;
+            int followupFunctionResponseCount = 0;
+            if (followupRequest.Contents != null)
+            {
+                foreach (LocalGeminiContent content in followupRequest.Contents)
+                {
+                    if (content.Parts == null) continue;
+
+                    foreach (LocalGeminiPart part in content.Parts)
+                    {
+                        if (part.FunctionCall != null
+                            && string.Equals(part.FunctionCall.Name, "get_weather", StringComparison.Ordinal))
+                        {
+                            followupFunctionCallCount++;
+                        }
+
+                        if (part.FunctionResponse != null
+                            && string.Equals(part.FunctionResponse.Name, "get_weather", StringComparison.Ordinal))
+                        {
+                            followupFunctionResponseCount++;
+                        }
+                    }
+                }
+            }
+
+            SharedAssert.True(initialRequest.SystemInstruction?.Parts != null && initialRequest.SystemInstruction.Parts.Count == 1, "Gemini streaming request should map system messages to systemInstruction.");
+            SharedAssert.True(
+                initialRequest.Tools != null
+                    && initialRequest.Tools.Any(tool => tool.FunctionDeclarations != null
+                        && tool.FunctionDeclarations.Any(declaration => string.Equals(declaration.Name, "get_weather", StringComparison.Ordinal))),
+                "Gemini streaming request should include function declarations.");
+            SharedAssert.Equal(2, followupFunctionCallCount, "Gemini streaming follow-up should include assistant function call history.");
+            SharedAssert.Equal(2, followupFunctionResponseCount, "Gemini streaming follow-up should include both function responses.");
+            SharedAssert.True(followupRequest.Tools == null || !followupRequest.Tools.Any(), "Gemini streaming follow-up should omit tools when ToolChoice is none.");
         }
 
         private static async Task RunOpenAiEmbeddingGenerationModelsAsync(CancellationToken token)
@@ -627,7 +1277,7 @@ namespace Test.Shared
             using OpenAiClient client = CreateClient(server);
             client.TimeoutMs = 100;
 
-            ChatStreamingResponse streaming = await client.ChatStreamingAsync("stream", token: token).ConfigureAwait(false);
+            ChatStreamingResponse streaming = await client.ChatStreamingAsync("hang stream", token: token).ConfigureAwait(false);
             SharedAssert.True(streaming.Success, "Local streaming request should start.");
 
             Stopwatch streamWatch = Stopwatch.StartNew();
@@ -651,6 +1301,43 @@ namespace Test.Shared
             SharedAssert.True(streamTimedOut, "Streaming body enumeration should time out.");
             SharedAssert.True(chunks > 0, "Streaming body should yield the initial chunk before timing out.");
             SharedAssert.True(streamWatch.ElapsedMilliseconds < 3000, "Streaming timeout should use the subsecond TimeoutMs value.");
+        }
+
+        private static async Task RunToolChatStreamingBodyTimeoutAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+            client.TimeoutMs = 100;
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.Messages.Clear();
+            request.Messages.Add(ChatMessage.User("hang tool stream"));
+
+            ToolChatStreamingResponse streaming = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(streaming.Success, "Local streaming tool chat request should start.");
+
+            Stopwatch streamWatch = Stopwatch.StartNew();
+            bool streamTimedOut = false;
+            int toolDeltas = 0;
+
+            try
+            {
+                await foreach (ToolChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
+                {
+                    toolDeltas += chunk.ToolCallDeltas.Count;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                streamTimedOut = true;
+            }
+
+            streamWatch.Stop();
+
+            SharedAssert.True(streamTimedOut, "Streaming tool chat body enumeration should time out.");
+            SharedAssert.True(toolDeltas > 0, "Streaming tool chat body should yield the initial tool-call delta before timing out.");
+            SharedAssert.True(streaming.ToolCalls.Count == 1, "Streaming tool chat should accumulate partial tool call metadata before timing out.");
+            SharedAssert.True(streamWatch.ElapsedMilliseconds < 3000, "Streaming tool chat timeout should use the subsecond TimeoutMs value.");
         }
 
         private static async Task RunPostAndRecordDisposesResponseAsync(CancellationToken token)
@@ -678,6 +1365,40 @@ namespace Test.Shared
             }
 
             SharedAssert.True(responseDisposed, "PostAndRecordAsync should dispose the retained response object.");
+        }
+
+        private static Dictionary<string, string?> CaptureProviderEnvironment()
+        {
+            Dictionary<string, string?> values = new Dictionary<string, string?>();
+
+            foreach (string name in _ProviderEnvironmentVariables)
+            {
+                values[name] = Environment.GetEnvironmentVariable(name);
+            }
+
+            return values;
+        }
+
+        private static void ClearProviderEnvironment()
+        {
+            foreach (string name in _ProviderEnvironmentVariables)
+            {
+                Environment.SetEnvironmentVariable(name, null);
+            }
+        }
+
+        private static void RestoreProviderEnvironment(Dictionary<string, string?> values)
+        {
+            foreach (string name in _ProviderEnvironmentVariables)
+            {
+                string? value = null;
+                if (values.TryGetValue(name, out string? capturedValue))
+                {
+                    value = capturedValue;
+                }
+
+                Environment.SetEnvironmentVariable(name, value);
+            }
         }
 
         private static OpenAiClient CreateClient(LocalOpenAiTestServer server)
@@ -739,11 +1460,92 @@ namespace Test.Shared
             return models;
         }
 
+        private static async Task<List<ToolChatStreamingChunk>> ConsumeToolChatStreamAsync(
+            ToolChatStreamingResponse stream,
+            CancellationToken token)
+        {
+            List<ToolChatStreamingChunk> chunks = new List<ToolChatStreamingChunk>();
+
+            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                chunks.Add(chunk);
+            }
+
+            return chunks;
+        }
+
+        private static async Task<List<ChatStreamingChunk>> ConsumeChatStreamAsync(
+            ChatStreamingResponse stream,
+            CancellationToken token)
+        {
+            List<ChatStreamingChunk> chunks = new List<ChatStreamingChunk>();
+
+            await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                chunks.Add(chunk);
+            }
+
+            return chunks;
+        }
+
+        private static async Task<List<GenerationStreamingChunk>> ConsumeGenerationStreamAsync(
+            GenerationStreamingResponse stream,
+            CancellationToken token)
+        {
+            List<GenerationStreamingChunk> chunks = new List<GenerationStreamingChunk>();
+
+            await foreach (GenerationStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                chunks.Add(chunk);
+            }
+
+            return chunks;
+        }
+
+        private static string CombineChatText(List<ChatStreamingChunk> chunks)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            foreach (ChatStreamingChunk chunk in chunks)
+            {
+                if (!string.IsNullOrEmpty(chunk.Text))
+                {
+                    builder.Append(chunk.Text);
+                }
+            }
+
+            return builder.ToString();
+        }
+
+        private static string CombineGenerationText(List<GenerationStreamingChunk> chunks)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            foreach (GenerationStreamingChunk chunk in chunks)
+            {
+                if (!string.IsNullOrEmpty(chunk.Text))
+                {
+                    builder.Append(chunk.Text);
+                }
+            }
+
+            return builder.ToString();
+        }
+
         private static LocalOpenAiChatRequest DeserializeRecordedOpenAiRequest(string requestBody)
         {
             LocalOpenAiChatRequest? request = LocalRequestParser.DeserializeOpenAiChatRequest(requestBody);
             if (request == null)
                 throw new TestFailureException("Recorded request body could not be deserialized as LocalOpenAiChatRequest.");
+
+            return request;
+        }
+
+        private static LocalGenerateRequest DeserializeRecordedGenerateRequest(string requestBody)
+        {
+            LocalGenerateRequest? request = LocalRequestParser.DeserializeGenerateRequest(requestBody);
+            if (request == null)
+                throw new TestFailureException("Recorded request body could not be deserialized as LocalGenerateRequest.");
 
             return request;
         }
@@ -757,20 +1559,5 @@ namespace Test.Shared
             return request;
         }
 
-        private sealed class ProbeOpenAiClient : OpenAiClient
-        {
-            public ProbeOpenAiClient(string endpoint, string apiKey) : base(endpoint, apiKey)
-            {
-                Model = "test-model";
-            }
-
-            public async Task<CompletionHttpResult> PostProbeAsync(CancellationToken token)
-            {
-                string url = Endpoint.TrimEnd('/') + "/v1/chat/completions";
-                string json = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"probe\"}],\"max_tokens\":1}";
-                using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-                return await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
-            }
-        }
     }
 }

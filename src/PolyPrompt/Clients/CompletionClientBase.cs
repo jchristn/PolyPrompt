@@ -2,7 +2,6 @@ namespace PolyPrompt.Clients
 {
     using System.Diagnostics;
     using System.Runtime.CompilerServices;
-    using System.Text;
     using PolyPrompt.Models;
     using SyslogLogging;
 
@@ -251,6 +250,19 @@ namespace PolyPrompt.Clients
         /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
         /// <exception cref="ArgumentException">Thrown when request.Messages is empty.</exception>
         public abstract Task<ToolChatResponse> ToolChatAsync(
+            ToolChatRequest request,
+            CancellationToken token = default);
+
+        /// <summary>
+        /// Send a tool-capable chat completion request and stream response chunks as they arrive.
+        /// Tool execution is owned by the caller; enumerate Chunks, then append ToAssistantMessage and tool-result messages to continue.
+        /// </summary>
+        /// <param name="request">Tool chat request containing messages and tool definitions.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ToolChatStreamingResponse containing metadata, streamed chunks, accumulated text, and requested tool calls.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when request.Messages is empty.</exception>
+        public abstract Task<ToolChatStreamingResponse> ToolChatStreamingAsync(
             ToolChatRequest request,
             CancellationToken token = default);
 
@@ -707,6 +719,101 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
+        /// Wrap a raw tool-chat chunk enumerable with timing and accumulation logic.
+        /// </summary>
+        /// <param name="response">The streaming response object to update.</param>
+        /// <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
+        /// <param name="sw">Stopwatch started before the HTTP request was made.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <param name="owner">Optional disposable owner released when enumeration ends.</param>
+        /// <returns>A wrapped async enumerable that updates timing and accumulated output on the response.</returns>
+        protected async IAsyncEnumerable<ToolChatStreamingChunk> WrapToolChatChunksWithTiming(
+            ToolChatStreamingResponse response,
+            IAsyncEnumerable<ToolChatStreamingChunk> rawChunks,
+            Stopwatch sw,
+            [EnumeratorCancellation] CancellationToken token = default,
+            IDisposable? owner = null)
+        {
+            Dictionary<int, ToolCallAssembly> toolCalls = new Dictionary<int, ToolCallAssembly>();
+
+            try
+            {
+                await foreach (ToolChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
+                {
+                    bool hasText = !string.IsNullOrEmpty(chunk.Text);
+                    bool hasToolDeltas = chunk.ToolCallDeltas != null && chunk.ToolCallDeltas.Count > 0;
+
+                    if (hasText || hasToolDeltas)
+                    {
+                        if (response.ChunkCount == 0)
+                        {
+                            response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
+                        }
+                        response.ChunkCount++;
+                        response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
+                    }
+
+                    if (hasText)
+                    {
+                        response.Text = string.IsNullOrEmpty(response.Text)
+                            ? chunk.Text
+                            : response.Text + chunk.Text;
+                    }
+
+                    if (hasToolDeltas)
+                    {
+                        response.ToolCallDeltaCount += chunk.ToolCallDeltas.Count;
+
+                        foreach (ToolCallDelta delta in chunk.ToolCallDeltas)
+                        {
+                            if (!toolCalls.TryGetValue(delta.Index, out ToolCallAssembly? assembly))
+                            {
+                                assembly = new ToolCallAssembly(delta.Index);
+                                toolCalls[delta.Index] = assembly;
+                            }
+
+                            assembly.Apply(delta);
+                        }
+
+                        RefreshToolCalls(response, toolCalls);
+                    }
+
+                    if (chunk.Usage != null) response.Usage = chunk.Usage;
+                    if (chunk.FinishReason != null) response.FinishReason = chunk.FinishReason;
+                    if (chunk.ResponseId != null) response.ResponseId = chunk.ResponseId;
+                    if (chunk.Model != null) response.Model = chunk.Model;
+
+                    yield return chunk;
+                }
+
+                sw.Stop();
+                response.OverallRuntimeMs = sw.ElapsedMilliseconds;
+
+                int tokenCount = response.Usage?.CompletionTokens ?? response.ChunkCount;
+
+                if (tokenCount > 0 && response.OverallRuntimeMs > 0)
+                {
+                    response.OverallTokensPerSecond = tokenCount / (response.OverallRuntimeMs / 1000.0);
+                }
+
+                if (tokenCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
+                {
+                    double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
+                    response.InterTokenTokensPerSecond = tokenCount / interTokenSec;
+                }
+            }
+            finally
+            {
+                if (sw.IsRunning)
+                {
+                    sw.Stop();
+                    response.OverallRuntimeMs = sw.ElapsedMilliseconds;
+                }
+                owner?.Dispose();
+            }
+        }
+
+        /// <summary>
         /// Wrap a raw generation chunk enumerable with timing-tracking logic.
         /// </summary>
         /// <param name="response">The streaming response object to update with timing.</param>
@@ -866,6 +973,21 @@ namespace PolyPrompt.Clients
             if (excess > 0)
             {
                 _CallDetails.RemoveRange(0, excess);
+            }
+        }
+
+        private static void RefreshToolCalls(
+            ToolChatStreamingResponse response,
+            Dictionary<int, ToolCallAssembly> toolCallAssemblies)
+        {
+            response.ToolCalls.Clear();
+
+            foreach (ToolCallAssembly assembly in toolCallAssemblies.Values.OrderBy(item => item.Index))
+            {
+                if (!string.IsNullOrWhiteSpace(assembly.Name))
+                {
+                    response.ToolCalls.Add(assembly.ToToolCall());
+                }
             }
         }
 

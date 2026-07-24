@@ -5,11 +5,20 @@ namespace Test.Shared
     using PolyPrompt.Options;
     using Touchstone.Core;
 
+    /// <summary>
+    /// Builds Touchstone test suites that exercise live provider endpoints.
+    /// </summary>
     public static class ProviderLiveSuite
     {
         private const string SuiteId = "provider_live";
         private const string BogusModel = "nonexistent-model-xyz-999";
 
+        /// <summary>
+        /// Creates the live provider test suite for the supplied configuration.
+        /// </summary>
+        /// <param name="configuration">Live provider configuration.</param>
+        /// <returns>A Touchstone suite descriptor containing live provider tests.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when configuration is null.</exception>
         public static TestSuiteDescriptor Create(ProviderTestConfiguration configuration)
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
@@ -23,6 +32,8 @@ namespace Test.Shared
                     Case("properties", "Client and option properties behave correctly", token => RunPropertyTestsAsync(configuration, token)),
                     Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token)),
                     Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token)),
+                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token)),
+                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token)),
                     Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token)),
                     Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token)),
                     Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration), skipReason: "OpenAI does not support the legacy completions API."),
@@ -38,6 +49,10 @@ namespace Test.Shared
                 });
         }
 
+        /// <summary>
+        /// Creates a skipped placeholder suite when live provider configuration is not available.
+        /// </summary>
+        /// <returns>A Touchstone suite descriptor containing a skipped provider configuration case.</returns>
         public static TestSuiteDescriptor CreateSkipped()
         {
             return new TestSuiteDescriptor(
@@ -223,7 +238,7 @@ namespace Test.Shared
             ChatCompletionOptions baseOptions = new ChatCompletionOptions();
             baseOptions.Temperature = 0.5;
             baseOptions.TopP = 0.9;
-            baseOptions.MaxTokens = 64;
+            baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 64);
             baseOptions.SystemPrompt = "Respond in exactly one word.";
             ChatResponse baseOptionsResponse = await client.ChatAsync("What color is the sky?", baseOptions, token).ConfigureAwait(false);
             SharedAssert.True(baseOptionsResponse.Success, "Chat with base options should succeed.");
@@ -277,6 +292,95 @@ namespace Test.Shared
             SharedAssert.True(optionsStream.Success, "Streaming chat with options should start.");
             await foreach (ChatStreamingChunk chunk in optionsStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
             SharedAssert.True(optionsStream.OverallRuntimeMs > 0, "Streaming chat with options should complete.");
+        }
+
+        private static async Task RunToolChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using CompletionClientBase client = CreateClient(configuration);
+            ToolChatRequest request = CreateWeatherToolRequest();
+
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            if (!response.Success && IsToolCapabilityError(response.Error))
+            {
+                SharedAssert.True(response.StatusCode.HasValue && response.StatusCode.Value >= 400, "ToolChatAsync unsupported-tool response should include an HTTP error status.");
+                SharedAssert.NotEmpty(response.Error, "ToolChatAsync unsupported-tool response should include an error.");
+                return;
+            }
+
+            SharedAssert.True(response.Success, "ToolChatAsync should succeed.");
+            SharedAssert.True(response.StatusCode.HasValue && response.StatusCode.Value == 200, "ToolChatAsync should return HTTP 200.");
+            SharedAssert.NotEmpty(response.Model, "ToolChatAsync should return a model.");
+            SharedAssert.True(response.OverallRuntimeMs > 0, "ToolChatAsync should populate runtime.");
+            SharedAssert.True(response.Error == null, "ToolChatAsync should not return an error.");
+            SharedAssert.True(response.ToolCalls.Any() || !string.IsNullOrWhiteSpace(response.Text), "ToolChatAsync should return assistant text or tool calls.");
+
+            if (!response.ToolCalls.Any()) return;
+
+            request.Messages.Add(response.ToAssistantMessage());
+            AppendWeatherToolResults(request, response.ToolCalls);
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+
+            ToolChatResponse finalResponse = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(finalResponse.Success, "ToolChatAsync follow-up should succeed.");
+            SharedAssert.True(finalResponse.StatusCode.HasValue && finalResponse.StatusCode.Value == 200, "ToolChatAsync follow-up should return HTTP 200.");
+            SharedAssert.True(finalResponse.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalResponse.Text), "ToolChatAsync follow-up should return assistant text or additional tool calls.");
+        }
+
+        private static async Task RunToolChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using CompletionClientBase client = CreateClient(configuration);
+            ToolChatRequest request = CreateWeatherToolRequest();
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            if (!stream.Success && IsToolCapabilityError(stream.Error))
+            {
+                SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value >= 400, "ToolChatStreamingAsync unsupported-tool response should include an HTTP error status.");
+                SharedAssert.NotEmpty(stream.Error, "ToolChatStreamingAsync unsupported-tool response should include an error.");
+                return;
+            }
+
+            SharedAssert.True(stream.Success, "ToolChatStreamingAsync should start successfully.");
+            SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value == 200, "ToolChatStreamingAsync should return HTTP 200.");
+            SharedAssert.NotEmpty(stream.Model, "ToolChatStreamingAsync should return a model.");
+            SharedAssert.True(stream.Error == null, "ToolChatStreamingAsync should not return an error.");
+
+            int chunkCount = 0;
+            bool sawDone = false;
+
+            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                chunkCount++;
+                if (chunk.Done) sawDone = true;
+            }
+
+            SharedAssert.True(chunkCount > 0, "ToolChatStreamingAsync should receive chunks.");
+            SharedAssert.True(stream.ChunkCount > 0, "ToolChatStreamingAsync should count text or tool-call chunks.");
+            SharedAssert.True(stream.OverallRuntimeMs > 0, "ToolChatStreamingAsync should populate runtime.");
+            SharedAssert.True(stream.TimeToFirstTokenMs >= 0, "ToolChatStreamingAsync should populate TimeToFirstTokenMs.");
+            SharedAssert.True(stream.TimeToLastTokenMs >= stream.TimeToFirstTokenMs, "ToolChatStreamingAsync should order token timings.");
+            SharedAssert.True(sawDone || stream.FinishReason != null, "ToolChatStreamingAsync should expose completion through done chunks or finish reason.");
+            SharedAssert.True(stream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(stream.Text), "ToolChatStreamingAsync should accumulate assistant text or tool calls.");
+
+            if (!stream.ToolCalls.Any()) return;
+
+            request.Messages.Add(stream.ToAssistantMessage());
+            AppendWeatherToolResults(request, stream.ToolCalls);
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+
+            ToolChatStreamingResponse finalStream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(finalStream.Success, "ToolChatStreamingAsync follow-up should start successfully.");
+            SharedAssert.True(finalStream.StatusCode.HasValue && finalStream.StatusCode.Value == 200, "ToolChatStreamingAsync follow-up should return HTTP 200.");
+
+            int finalChunkCount = 0;
+            await foreach (ToolChatStreamingChunk chunk in finalStream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                finalChunkCount++;
+            }
+
+            SharedAssert.True(finalChunkCount > 0, "ToolChatStreamingAsync follow-up should receive chunks.");
+            SharedAssert.True(finalStream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalStream.Text), "ToolChatStreamingAsync follow-up should accumulate assistant text or additional tool calls.");
         }
 
         private static async Task RunEmbeddingSingleTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
@@ -354,7 +458,7 @@ namespace Test.Shared
             GenerationOptions baseOptions = new GenerationOptions();
             baseOptions.Temperature = 0.3;
             baseOptions.TopP = 0.9;
-            baseOptions.MaxTokens = 256;
+            baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256);
             GenerationResponse baseResponse = await client.GenerateAsync("The meaning of life is", baseOptions, token).ConfigureAwait(false);
             SharedAssert.True(baseResponse.Success, "Generation with base options should succeed.");
             SharedAssert.NotEmpty(baseResponse.Text, "Generation with base options should return text.");
@@ -546,6 +650,67 @@ namespace Test.Shared
                 "EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
         }
 
+        private static ToolChatRequest CreateWeatherToolRequest()
+        {
+            ToolChatRequest request = new ToolChatRequest();
+            request.Messages.Add(ChatMessage.System("Use tools when they are helpful. Keep final answers concise."));
+            request.Messages.Add(ChatMessage.User("What is the current weather in Seattle? Use get_weather if tool calling is available."));
+            request.Tools.Add(ToolDefinition.Function(
+                "get_weather",
+                "Get current weather for a city.",
+                WeatherParameters()));
+            request.ToolChoice = "auto";
+            request.MaxTokens = 128;
+            request.Temperature = 0.0;
+            return request;
+        }
+
+        private static Dictionary<string, object> WeatherParameters()
+        {
+            Dictionary<string, object> city = new Dictionary<string, object>
+            {
+                { "type", "string" },
+                { "description", "City name." }
+            };
+
+            Dictionary<string, object> unit = new Dictionary<string, object>
+            {
+                { "type", "string" },
+                { "enum", new List<string> { "fahrenheit", "celsius" } }
+            };
+
+            return new Dictionary<string, object>
+            {
+                { "type", "object" },
+                { "properties", new Dictionary<string, object>
+                    {
+                        { "city", city },
+                        { "unit", unit }
+                    }
+                },
+                { "required", new List<string> { "city" } }
+            };
+        }
+
+        private static void AppendWeatherToolResults(ToolChatRequest request, List<ToolCall> toolCalls)
+        {
+            foreach (ToolCall call in toolCalls)
+            {
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}"));
+            }
+        }
+
+        private static bool IsToolCapabilityError(string? error)
+        {
+            if (string.IsNullOrWhiteSpace(error)) return false;
+
+            return error.Contains("does not support tools", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("doesn't support tools", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("does not support tool", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("function calling is not supported", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("does not support function calling", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static CompletionClientBase CreateClient(ProviderTestConfiguration configuration)
         {
             return CreateClient(configuration.ProviderType, configuration.Endpoint, configuration.ApiKey, configuration.InferenceModel);
@@ -561,7 +726,7 @@ namespace Test.Shared
                 _ => throw new ArgumentException("Unknown provider: " + providerType, nameof(providerType)),
             };
 
-            client.MaxTokens = 128;
+            client.MaxTokens = ResolveLiveMaxTokens(providerType, 128);
 
             if (!string.IsNullOrEmpty(inferenceModel))
                 client.Model = inferenceModel;
@@ -595,7 +760,7 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         TopK = 40,
                         RepeatPenalty = 1.1,
                         Seed = 42,
@@ -606,7 +771,7 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         FrequencyPenalty = 0.0,
                         PresencePenalty = 0.0,
                         Seed = 42,
@@ -617,7 +782,7 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         TopK = 40,
                     };
 
@@ -670,7 +835,7 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         TopK = 40,
                         RepeatPenalty = 1.1,
                         Seed = 42,
@@ -681,7 +846,7 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         FrequencyPenalty = 0.0,
                         PresencePenalty = 0.0,
                     };
@@ -691,13 +856,21 @@ namespace Test.Shared
                     {
                         Temperature = 0.5,
                         TopP = 0.9,
-                        MaxTokens = 64,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         TopK = 40,
                     };
 
                 default:
                     return new GenerationOptions();
             }
+        }
+
+        private static int ResolveLiveMaxTokens(string providerType, int defaultMaxTokens)
+        {
+            if (string.Equals(providerType, "ollama", StringComparison.OrdinalIgnoreCase))
+                return 1024;
+
+            return defaultMaxTokens;
         }
 
         private static bool ModelNameMatches(string available, string requested)

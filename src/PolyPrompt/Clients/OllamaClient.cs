@@ -213,7 +213,7 @@ namespace PolyPrompt.Clients
             Stopwatch sw = Stopwatch.StartNew();
 
             string url = _Endpoint.TrimEnd('/') + "/api/chat";
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, false);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -254,6 +254,60 @@ namespace PolyPrompt.Clients
             }
 
             return toolResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<ToolChatStreamingResponse> ToolChatStreamingAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            string url = _Endpoint.TrimEnd('/') + "/api/chat";
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, true);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST (streaming tool chat) " + url);
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            ToolChatStreamingResponse streamingResponse = new ToolChatStreamingResponse();
+            streamingResponse.Model = model;
+
+            try
+            {
+                StreamingHttpResult streamingResult = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                HttpResponseMessage response = streamingResult.Response;
+                streamingResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    using (streamingResult)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
+                        _Logging.Warn(_Header + "streaming tool chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        streamingResponse.Success = false;
+                        streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    }
+                    return streamingResponse;
+                }
+
+                streamingResponse.Success = true;
+                streamingResponse.Chunks = WrapToolChatChunksWithTiming(streamingResponse, ReadOllamaToolChatChunks(response, streamingResult.Token), sw, streamingResult.Token, streamingResult);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                streamingResponse.Success = false;
+                streamingResponse.Error = ex.Message;
+            }
+
+            return streamingResponse;
         }
 
         /// <inheritdoc />
@@ -825,7 +879,8 @@ namespace PolyPrompt.Clients
             string model,
             int maxTokens,
             double? temperature,
-            double? topP)
+            double? topP,
+            bool stream)
         {
             Dictionary<string, object> modelOptions = new Dictionary<string, object>();
             modelOptions["num_predict"] = maxTokens;
@@ -839,7 +894,7 @@ namespace PolyPrompt.Clients
             {
                 { "model", model },
                 { "messages", BuildOllamaMessages(request.Messages) },
-                { "stream", false },
+                { "stream", stream },
                 { "options", modelOptions }
             };
 
@@ -1097,6 +1152,131 @@ namespace PolyPrompt.Clients
 
                 yield return streamChunk;
             }
+        }
+
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadOllamaToolChatChunks(
+            HttpResponseMessage response,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream);
+
+            string? line;
+            while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                Dictionary<string, object>? chunk = _Serializer.DeserializeJson<Dictionary<string, object>>(line);
+                if (chunk == null) continue;
+
+                ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
+                streamChunk.Model = chunk.ContainsKey("model") ? chunk["model"]?.ToString() : null;
+
+                if (chunk.ContainsKey("created_at"))
+                {
+                    string? createdAt = chunk["created_at"]?.ToString();
+                    if (!string.IsNullOrEmpty(createdAt) && DateTime.TryParse(createdAt, out DateTime parsed))
+                    {
+                        streamChunk.CreatedUtc = parsed.ToUniversalTime();
+                    }
+                }
+
+                if (chunk.ContainsKey("message"))
+                {
+                    string msgJson = _Serializer.SerializeJson(chunk["message"], false);
+                    Dictionary<string, object>? msg = _Serializer.DeserializeJson<Dictionary<string, object>>(msgJson);
+                    if (msg != null)
+                    {
+                        if (msg.ContainsKey("content"))
+                        {
+                            streamChunk.Text = msg["content"]?.ToString();
+                        }
+
+                        if (msg.ContainsKey("tool_calls"))
+                        {
+                            foreach (ToolCallDelta toolDelta in ParseOllamaToolCallDeltas(msg["tool_calls"]))
+                            {
+                                streamChunk.ToolCallDeltas.Add(toolDelta);
+                            }
+                        }
+                    }
+                }
+
+                bool done = IsTruthy(chunk, "done");
+                streamChunk.Done = done;
+
+                if (done)
+                {
+                    streamChunk.FinishReason = chunk.ContainsKey("done_reason") ? chunk["done_reason"]?.ToString() : null;
+
+                    ChatStreamingUsage usage = new ChatStreamingUsage();
+                    usage.PromptTokens = TryGetInt(chunk, "prompt_eval_count");
+                    usage.CompletionTokens = TryGetInt(chunk, "eval_count");
+                    usage.TotalDurationNs = TryGetLong(chunk, "total_duration");
+                    usage.LoadDurationNs = TryGetLong(chunk, "load_duration");
+                    usage.PromptEvalDurationNs = TryGetLong(chunk, "prompt_eval_duration");
+                    usage.EvalDurationNs = TryGetLong(chunk, "eval_duration");
+
+                    if (usage.PromptTokens.HasValue && usage.CompletionTokens.HasValue)
+                    {
+                        usage.TotalTokens = usage.PromptTokens.Value + usage.CompletionTokens.Value;
+                    }
+
+                    streamChunk.Usage = usage;
+                }
+
+                yield return streamChunk;
+            }
+        }
+
+        private List<ToolCallDelta> ParseOllamaToolCallDeltas(object toolCallsObj)
+        {
+            List<ToolCallDelta> result = new List<ToolCallDelta>();
+            string toolCallsJson = _Serializer.SerializeJson(toolCallsObj, false);
+            List<Dictionary<string, object>>? toolCalls = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(toolCallsJson);
+            if (toolCalls == null) return result;
+
+            int fallbackIndex = 0;
+            foreach (Dictionary<string, object> toolCallObj in toolCalls)
+            {
+                int index = TryGetInt(toolCallObj, "index") ?? fallbackIndex;
+                ToolCallDelta delta = new ToolCallDelta();
+                delta.Index = index;
+                delta.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : "ollama-call-" + index;
+                delta.Type = toolCallObj.ContainsKey("type") ? toolCallObj["type"]?.ToString() : "function";
+
+                if (toolCallObj.ContainsKey("function"))
+                {
+                    string functionJson = _Serializer.SerializeJson(toolCallObj["function"], false);
+                    Dictionary<string, object>? function = _Serializer.DeserializeJson<Dictionary<string, object>>(functionJson);
+                    if (function != null)
+                    {
+                        index = TryGetInt(function, "index") ?? index;
+                        delta.Index = index;
+                        delta.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : "ollama-call-" + index;
+                        delta.Name = function.ContainsKey("name") ? function["name"]?.ToString() : null;
+
+                        if (function.ContainsKey("arguments") && function["arguments"] != null)
+                        {
+                            string? argumentsString = function["arguments"]?.ToString();
+                            if (function["arguments"] is string)
+                            {
+                                delta.ArgumentsJsonDelta = argumentsString;
+                            }
+                            else
+                            {
+                                delta.ArgumentsJson = _Serializer.SerializeJson(function["arguments"], false);
+                            }
+                        }
+                    }
+                }
+
+                result.Add(delta);
+                fallbackIndex++;
+            }
+
+            return result;
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadOllamaGenerateChunks(

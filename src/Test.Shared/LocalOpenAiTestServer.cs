@@ -11,6 +11,8 @@ namespace Test.Shared
         private readonly Task _Loop;
         private readonly object _RequestBodiesLock = new object();
         private readonly List<string> _RequestBodies = new List<string>();
+        private readonly object _RequestPathsLock = new object();
+        private readonly List<string> _RequestPaths = new List<string>();
         private bool _Disposed = false;
 
         /// <summary>
@@ -28,6 +30,20 @@ namespace Test.Shared
                 lock (_RequestBodiesLock)
                 {
                     return new List<string>(_RequestBodies);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Detached snapshot of request paths received by the local test server.
+        /// </summary>
+        public List<string> RequestPaths
+        {
+            get
+            {
+                lock (_RequestPathsLock)
+                {
+                    return new List<string>(_RequestPaths);
                 }
             }
         }
@@ -101,6 +117,11 @@ namespace Test.Shared
                     _RequestBodies.Add(requestBody);
                 }
 
+                lock (_RequestPathsLock)
+                {
+                    _RequestPaths.Add(path);
+                }
+
                 if (path == "/v1/chat/completions")
                 {
                     LocalOpenAiChatRequest? request = LocalRequestParser.DeserializeOpenAiChatRequest(requestBody);
@@ -110,9 +131,25 @@ namespace Test.Shared
                         return;
                     }
 
-                    if (request.Stream == true)
+                    if (request.Stream == true && HasToolDefinitions(request) && HasMessageContaining(request, "hang tool stream"))
                     {
-                        await WriteStreamingChatAsync(context).ConfigureAwait(false);
+                        await WriteStreamingOpenAiToolChatHangAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasToolDefinitions(request))
+                    {
+                        await WriteStreamingOpenAiToolChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasToolResultMessage(request))
+                    {
+                        await WriteStreamingOpenAiToolFinalAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasMessageContaining(request, "hang stream"))
+                    {
+                        await WriteStreamingOpenAiChatHangAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true)
+                    {
+                        await WriteStreamingOpenAiChatAsync(context).ConfigureAwait(false);
                     }
                     else if (HasToolDefinitions(request))
                     {
@@ -163,10 +200,17 @@ namespace Test.Shared
                         return;
                     }
 
-                    await WriteJsonAsync(
-                        context,
-                        200,
-                        "{\"choices\":[{\"text\":\"generated text\"}]}").ConfigureAwait(false);
+                    if (request.Stream == true)
+                    {
+                        await WriteStreamingOpenAiGenerateAsync(context).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"choices\":[{\"text\":\"generated text\"}]}").ConfigureAwait(false);
+                    }
                     return;
                 }
 
@@ -179,7 +223,23 @@ namespace Test.Shared
                         return;
                     }
 
-                    if (HasToolDefinitions(request))
+                    if (request.Stream == true && HasToolDefinitions(request) && HasMessageContaining(request, "hang tool stream"))
+                    {
+                        await WriteStreamingOllamaToolChatHangAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasToolDefinitions(request))
+                    {
+                        await WriteStreamingOllamaToolChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasToolResultMessage(request))
+                    {
+                        await WriteStreamingOllamaToolFinalAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true)
+                    {
+                        await WriteStreamingOllamaChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (HasToolDefinitions(request))
                     {
                         await WriteJsonAsync(
                             context,
@@ -228,10 +288,17 @@ namespace Test.Shared
                         return;
                     }
 
-                    await WriteJsonAsync(
-                        context,
-                        200,
-                        "{\"model\":\"test-model\",\"response\":\"generated text\",\"done\":true}").ConfigureAwait(false);
+                    if (request.Stream == true)
+                    {
+                        await WriteStreamingOllamaGenerateAsync(context).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"model\":\"test-model\",\"response\":\"generated text\",\"done\":true}").ConfigureAwait(false);
+                    }
                     return;
                 }
 
@@ -306,7 +373,22 @@ namespace Test.Shared
                         return;
                     }
 
-                    if (HasFunctionDeclarations(request))
+                    if (path.EndsWith(":streamGenerateContent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (HasFunctionDeclarations(request))
+                        {
+                            await WriteStreamingGeminiToolChatAsync(context).ConfigureAwait(false);
+                        }
+                        else if (HasFunctionResponse(request))
+                        {
+                            await WriteStreamingGeminiToolFinalAsync(context).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteStreamingGeminiChatAsync(context).ConfigureAwait(false);
+                        }
+                    }
+                    else if (HasFunctionDeclarations(request))
                     {
                         await WriteJsonAsync(
                             context,
@@ -377,6 +459,13 @@ namespace Test.Shared
                 && request.Messages.Any(message => string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase));
         }
 
+        private static bool HasMessageContaining(LocalOpenAiChatRequest request, string value)
+        {
+            return request.Messages != null
+                && request.Messages.Any(message => message.Content != null
+                    && message.Content.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
         private static bool HasFunctionDeclarations(LocalGeminiRequest request)
         {
             return request.Tools != null
@@ -392,7 +481,21 @@ namespace Test.Shared
                         && !string.IsNullOrWhiteSpace(part.FunctionResponse.Name)));
         }
 
-        private async Task WriteStreamingChatAsync(HttpListenerContext context)
+        private async Task WriteStreamingOpenAiChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"hello \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"world\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOpenAiChatHangAsync(HttpListenerContext context)
         {
             context.Response.StatusCode = 200;
             context.Response.ContentType = "text/event-stream";
@@ -402,6 +505,178 @@ namespace Test.Shared
             byte[] bytes = Encoding.UTF8.GetBytes(chunk);
             await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length, _Cancellation.Token).ConfigureAwait(false);
             await context.Response.OutputStream.FlushAsync(_Cancellation.Token).ConfigureAwait(false);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), _Cancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task WriteStreamingOpenAiGenerateAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"cmpl-stream-local\",\"model\":\"test-model\",\"choices\":[{\"text\":\"generated \",\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cmpl-stream-local\",\"model\":\"test-model\",\"choices\":[{\"text\":\"text\",\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cmpl-stream-local\",\"model\":\"test-model\",\"choices\":[{\"text\":\"\",\"index\":0,\"finish_reason\":\"stop\"}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOpenAiToolChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"Checking \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"weather. \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Sea\"}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"ttle\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}},{\"index\":1,\"id\":\"call-weather-2\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Portland\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOpenAiToolFinalAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-final-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"Seattle is \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-final-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"72 F and clear.\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-final-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":5,\"total_tokens\":25}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOpenAiToolChatHangAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-tool-stream-hang-local\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-hang-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\"}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), _Cancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task WriteStreamingGeminiChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-chat-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"pong\"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-chat-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}]}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingGeminiToolChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-tool-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Checking \"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-tool-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"weather. \"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-tool-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}},{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"Portland\",\"unit\":\"fahrenheit\"}}}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-tool-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":11,\"candidatesTokenCount\":7,\"totalTokenCount\":18}}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingGeminiToolFinalAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Seattle is \"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"72 F and clear.\"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":20,\"candidatesTokenCount\":5,\"totalTokenCount\":25}}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaToolChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"Checking \"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"weather. \"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"index\":0,\"name\":\"get_weather\",\"arguments\":{\"city\":\"Sea\"}}}]},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"index\":0,\"name\":\"get_weather\",\"arguments\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}},{\"function\":{\"index\":1,\"name\":\"get_weather\",\"arguments\":{\"city\":\"Portland\",\"unit\":\"fahrenheit\"}}}]},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"tool_calls\",\"prompt_eval_count\":11,\"eval_count\":7,\"total_duration\":1000,\"load_duration\":100,\"prompt_eval_duration\":200,\"eval_duration\":300}\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"hello \"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"world\"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":3,\"eval_count\":2,\"total_duration\":1000,\"load_duration\":100,\"prompt_eval_duration\":200,\"eval_duration\":300}\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaGenerateAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"response\":\"generated \",\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"response\":\"text\",\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"response\":\"\",\"done\":true}\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaToolFinalAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"Seattle is \"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"72 F and clear.\"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"created_at\":\"2026-07-11T00:00:00Z\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":20,\"eval_count\":5,\"total_duration\":1000,\"load_duration\":100,\"prompt_eval_duration\":200,\"eval_duration\":300}\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaToolChatHangAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"index\":0,\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\"}}]},\"done\":false}\n").ConfigureAwait(false);
 
             try
             {

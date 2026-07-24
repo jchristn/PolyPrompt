@@ -213,6 +213,63 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        public override async Task<ToolChatStreamingResponse> ToolChatStreamingAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            string url = _Endpoint.TrimEnd('/')
+                + "/v1beta/models/" + model + ":streamGenerateContent"
+                + "?alt=sse&key=" + _ApiKey;
+
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST (streaming tool chat) " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":streamGenerateContent");
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            ToolChatStreamingResponse streamingResponse = new ToolChatStreamingResponse();
+            streamingResponse.Model = model;
+
+            try
+            {
+                StreamingHttpResult streamingResult = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                HttpResponseMessage response = streamingResult.Response;
+                streamingResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    using (streamingResult)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
+                        _Logging.Warn(_Header + "streaming tool chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        streamingResponse.Success = false;
+                        streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    }
+                    return streamingResponse;
+                }
+
+                streamingResponse.Success = true;
+                streamingResponse.Chunks = WrapToolChatChunksWithTiming(streamingResponse, ReadGeminiToolChatChunks(response, streamingResult.Token), sw, streamingResult.Token, streamingResult);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                streamingResponse.Success = false;
+                streamingResponse.Error = ex.Message;
+            }
+
+            return streamingResponse;
+        }
+
+        /// <inheritdoc />
         public override async Task<EmbeddingResponse> EmbedAsync(
             string input,
             EmbeddingOptions? options = null,
@@ -1121,6 +1178,160 @@ namespace PolyPrompt.Clients
 
                 yield return streamChunk;
             }
+        }
+
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadGeminiToolChatChunks(
+            HttpResponseMessage response,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream);
+
+            int nextToolCallIndex = 0;
+            string? line;
+            while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data: ")) continue;
+
+                string data = line.Substring(6);
+                if (data == "[DONE]")
+                {
+                    ToolChatStreamingChunk doneChunk = new ToolChatStreamingChunk();
+                    doneChunk.Done = true;
+                    yield return doneChunk;
+                    break;
+                }
+
+                Dictionary<string, object>? chunk = _Serializer.DeserializeJson<Dictionary<string, object>>(data);
+                if (chunk == null) continue;
+
+                ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
+                streamChunk.ResponseId = chunk.ContainsKey("responseId") ? chunk["responseId"]?.ToString() : null;
+                streamChunk.Model = chunk.ContainsKey("modelVersion") ? chunk["modelVersion"]?.ToString() : null;
+                streamChunk.CreatedUtc = DateTime.UtcNow;
+
+                if (chunk.ContainsKey("candidates"))
+                {
+                    string candidatesJson = _Serializer.SerializeJson(chunk["candidates"], false);
+                    List<Dictionary<string, object>>? candidates = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(candidatesJson);
+
+                    if (candidates != null && candidates.Any())
+                    {
+                        Dictionary<string, object> candidate = candidates[0];
+
+                        if (candidate.ContainsKey("finishReason"))
+                        {
+                            streamChunk.FinishReason = candidate["finishReason"]?.ToString();
+                            streamChunk.Done = true;
+                        }
+
+                        if (candidate.ContainsKey("content"))
+                        {
+                            string contentJson = _Serializer.SerializeJson(candidate["content"], false);
+                            Dictionary<string, object>? contentObj = _Serializer.DeserializeJson<Dictionary<string, object>>(contentJson);
+
+                            if (contentObj != null && contentObj.ContainsKey("parts"))
+                            {
+                                string partsJson = _Serializer.SerializeJson(contentObj["parts"], false);
+                                List<Dictionary<string, object>>? parts = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(partsJson);
+
+                                if (parts != null)
+                                {
+                                    foreach (Dictionary<string, object> part in parts)
+                                    {
+                                        if (part.ContainsKey("text"))
+                                        {
+                                            string? text = part["text"]?.ToString();
+                                            streamChunk.Text = string.IsNullOrEmpty(streamChunk.Text)
+                                                ? text
+                                                : streamChunk.Text + text;
+                                        }
+
+                                        if (part.ContainsKey("functionCall"))
+                                        {
+                                            ToolCallDelta? toolDelta = ParseGeminiToolCallDelta(part, nextToolCallIndex);
+                                            if (toolDelta != null)
+                                            {
+                                                streamChunk.ToolCallDeltas.Add(toolDelta);
+                                                nextToolCallIndex = Math.Max(nextToolCallIndex, toolDelta.Index + 1);
+                                            }
+                                            else
+                                            {
+                                                nextToolCallIndex++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (chunk.ContainsKey("usageMetadata"))
+                {
+                    streamChunk.Usage = ParseGeminiUsageMetadata(chunk["usageMetadata"]);
+                }
+
+                yield return streamChunk;
+            }
+        }
+
+        private ToolCallDelta? ParseGeminiToolCallDelta(Dictionary<string, object> part, int fallbackIndex)
+        {
+            if (!part.ContainsKey("functionCall")) return null;
+
+            string functionCallJson = _Serializer.SerializeJson(part["functionCall"], false);
+            Dictionary<string, object>? functionCall = _Serializer.DeserializeJson<Dictionary<string, object>>(functionCallJson);
+            if (functionCall == null || !functionCall.ContainsKey("name")) return null;
+
+            int index = TryGetInt(part, "index")
+                ?? TryGetInt(functionCall, "index")
+                ?? fallbackIndex;
+
+            ToolCallDelta delta = new ToolCallDelta();
+            delta.Index = index;
+            delta.Id = part.ContainsKey("id") ? part["id"]?.ToString() : null;
+            if (string.IsNullOrWhiteSpace(delta.Id) && functionCall.ContainsKey("id"))
+            {
+                delta.Id = functionCall["id"]?.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(delta.Id))
+            {
+                delta.Id = "gemini-call-" + index;
+            }
+
+            delta.Type = "function";
+            delta.Name = functionCall["name"]?.ToString() ?? string.Empty;
+
+            if (functionCall.ContainsKey("args") && functionCall["args"] != null)
+            {
+                delta.ArgumentsJson = _Serializer.SerializeJson(functionCall["args"], false);
+            }
+            else if (functionCall.ContainsKey("arguments") && functionCall["arguments"] != null)
+            {
+                delta.ArgumentsJson = _Serializer.SerializeJson(functionCall["arguments"], false);
+            }
+
+            return delta;
+        }
+
+        private ChatStreamingUsage? ParseGeminiUsageMetadata(object usageMetadata)
+        {
+            string usageJson = _Serializer.SerializeJson(usageMetadata, false);
+            Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
+            if (usageObj == null) return null;
+
+            ChatStreamingUsage usage = new ChatStreamingUsage();
+            if (usageObj.ContainsKey("promptTokenCount") && int.TryParse(usageObj["promptTokenCount"]?.ToString(), out int pt))
+                usage.PromptTokens = pt;
+            if (usageObj.ContainsKey("candidatesTokenCount") && int.TryParse(usageObj["candidatesTokenCount"]?.ToString(), out int ct))
+                usage.CompletionTokens = ct;
+            if (usageObj.ContainsKey("totalTokenCount") && int.TryParse(usageObj["totalTokenCount"]?.ToString(), out int tt))
+                usage.TotalTokens = tt;
+
+            return usage;
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadGeminiGenerateChunks(

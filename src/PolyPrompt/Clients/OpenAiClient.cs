@@ -207,7 +207,7 @@ namespace PolyPrompt.Clients
             Stopwatch sw = Stopwatch.StartNew();
 
             string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, false);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -248,6 +248,60 @@ namespace PolyPrompt.Clients
             }
 
             return toolResponse;
+        }
+
+        /// <inheritdoc />
+        public override async Task<ToolChatStreamingResponse> ToolChatStreamingAsync(
+            ToolChatRequest request,
+            CancellationToken token = default)
+        {
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, true);
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST (streaming tool chat) " + url);
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            ToolChatStreamingResponse streamingResponse = new ToolChatStreamingResponse();
+            streamingResponse.Model = model;
+
+            try
+            {
+                StreamingHttpResult streamingResult = await PostStreamingAsync(url, content, token).ConfigureAwait(false);
+                HttpResponseMessage response = streamingResult.Response;
+                streamingResponse.StatusCode = (int)response.StatusCode;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    using (streamingResult)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
+                        _Logging.Warn(_Header + "streaming tool chat request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        streamingResponse.Success = false;
+                        streamingResponse.Error = "HTTP " + (int)response.StatusCode + ": " + errorBody;
+                    }
+                    return streamingResponse;
+                }
+
+                streamingResponse.Success = true;
+                streamingResponse.Chunks = WrapToolChatChunksWithTiming(streamingResponse, ReadOpenAiToolChatChunks(response, streamingResult.Token), sw, streamingResult.Token, streamingResult);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                streamingResponse.Success = false;
+                streamingResponse.Error = ex.Message;
+            }
+
+            return streamingResponse;
         }
 
         /// <inheritdoc />
@@ -632,7 +686,8 @@ namespace PolyPrompt.Clients
             string model,
             int maxTokens,
             double? temperature,
-            double? topP)
+            double? topP,
+            bool stream)
         {
             Dictionary<string, object> requestBody = new Dictionary<string, object>
             {
@@ -652,6 +707,12 @@ namespace PolyPrompt.Clients
             if (!string.IsNullOrWhiteSpace(request.ToolChoice))
             {
                 requestBody["tool_choice"] = request.ToolChoice;
+            }
+
+            if (stream)
+            {
+                requestBody["stream"] = true;
+                requestBody["stream_options"] = new Dictionary<string, object> { { "include_usage", true } };
             }
 
             return requestBody;
@@ -948,6 +1009,142 @@ namespace PolyPrompt.Clients
 
                 yield return streamChunk;
             }
+        }
+
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadOpenAiToolChatChunks(
+            HttpResponseMessage response,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream);
+
+            string? line;
+            while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
+            {
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (!line.StartsWith("data: ")) continue;
+
+                string data = line.Substring(6);
+                if (data == "[DONE]")
+                {
+                    ToolChatStreamingChunk doneChunk = new ToolChatStreamingChunk();
+                    doneChunk.Done = true;
+                    yield return doneChunk;
+                    break;
+                }
+
+                Dictionary<string, object>? chunk = _Serializer.DeserializeJson<Dictionary<string, object>>(data);
+                if (chunk == null) continue;
+
+                ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
+                streamChunk.ResponseId = chunk.ContainsKey("id") ? chunk["id"]?.ToString() : null;
+                streamChunk.Model = chunk.ContainsKey("model") ? chunk["model"]?.ToString() : null;
+
+                if (chunk.ContainsKey("created"))
+                {
+                    long? created = TryGetLong(chunk, "created");
+                    if (created.HasValue)
+                    {
+                        streamChunk.CreatedUtc = DateTimeOffset.FromUnixTimeSeconds(created.Value).UtcDateTime;
+                    }
+                }
+
+                if (chunk.ContainsKey("choices"))
+                {
+                    string choicesJson = _Serializer.SerializeJson(chunk["choices"], false);
+                    List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
+
+                    if (choices != null && choices.Count > 0)
+                    {
+                        Dictionary<string, object> choice = choices[0];
+
+                        if (choice.ContainsKey("finish_reason") && choice["finish_reason"] != null)
+                        {
+                            streamChunk.FinishReason = choice["finish_reason"]?.ToString();
+                            streamChunk.Done = true;
+                        }
+
+                        if (choice.ContainsKey("delta"))
+                        {
+                            string deltaJson = _Serializer.SerializeJson(choice["delta"], false);
+                            Dictionary<string, object>? delta = _Serializer.DeserializeJson<Dictionary<string, object>>(deltaJson);
+                            if (delta != null)
+                            {
+                                if (delta.ContainsKey("content"))
+                                {
+                                    streamChunk.Text = delta["content"]?.ToString();
+                                }
+
+                                if (delta.ContainsKey("tool_calls"))
+                                {
+                                    foreach (ToolCallDelta toolDelta in ParseOpenAiToolCallDeltas(delta["tool_calls"]))
+                                    {
+                                        streamChunk.ToolCallDeltas.Add(toolDelta);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (chunk.ContainsKey("usage") && chunk["usage"] != null)
+                {
+                    string usageJson = _Serializer.SerializeJson(chunk["usage"], false);
+                    Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
+
+                    if (usageObj != null)
+                    {
+                        ChatStreamingUsage usage = new ChatStreamingUsage();
+                        if (usageObj.ContainsKey("prompt_tokens") && int.TryParse(usageObj["prompt_tokens"]?.ToString(), out int pt))
+                            usage.PromptTokens = pt;
+                        if (usageObj.ContainsKey("completion_tokens") && int.TryParse(usageObj["completion_tokens"]?.ToString(), out int ct))
+                            usage.CompletionTokens = ct;
+                        if (usageObj.ContainsKey("total_tokens") && int.TryParse(usageObj["total_tokens"]?.ToString(), out int tt))
+                            usage.TotalTokens = tt;
+                        streamChunk.Usage = usage;
+                    }
+                }
+
+                yield return streamChunk;
+            }
+        }
+
+        private List<ToolCallDelta> ParseOpenAiToolCallDeltas(object toolCallsObj)
+        {
+            List<ToolCallDelta> result = new List<ToolCallDelta>();
+            string toolCallsJson = _Serializer.SerializeJson(toolCallsObj, false);
+            List<Dictionary<string, object>>? toolCalls = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(toolCallsJson);
+            if (toolCalls == null) return result;
+
+            int fallbackIndex = 0;
+            foreach (Dictionary<string, object> toolCallObj in toolCalls)
+            {
+                int index = TryGetInt(toolCallObj, "index") ?? fallbackIndex;
+                ToolCallDelta delta = new ToolCallDelta();
+                delta.Index = index;
+                delta.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : null;
+                delta.Type = toolCallObj.ContainsKey("type") ? toolCallObj["type"]?.ToString() : null;
+
+                if (toolCallObj.ContainsKey("function"))
+                {
+                    string functionJson = _Serializer.SerializeJson(toolCallObj["function"], false);
+                    Dictionary<string, object>? function = _Serializer.DeserializeJson<Dictionary<string, object>>(functionJson);
+                    if (function != null)
+                    {
+                        delta.Name = function.ContainsKey("name") ? function["name"]?.ToString() : null;
+                        if (function.ContainsKey("arguments"))
+                        {
+                            delta.ArgumentsJsonDelta = function["arguments"]?.ToString();
+                        }
+                    }
+                }
+
+                result.Add(delta);
+                fallbackIndex++;
+            }
+
+            return result;
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadOpenAiGenerateChunks(
