@@ -84,6 +84,15 @@ ChatResponse response = await client.ChatAsync("What is the capital of France?")
 Console.WriteLine(response.Text);
 ```
 
+OpenAI-compatible endpoints may be supplied either as the API root or as a versioned `/v1` base URL. For example, an Ollama instance exposing the OpenAI API can be used as:
+
+```csharp
+using PolyPrompt.Clients;
+
+using OpenAiClient client = new OpenAiClient("http://localhost:11434/v1");
+client.Model = "gpt-oss:20b";
+```
+
 ### Gemini
 
 ```csharp
@@ -683,6 +692,9 @@ dotnet test src/Test.Nunit/Test.Nunit.csproj
 dotnet run --project src/Test.Automated -- --openai-key sk-your-key --openai-model gpt-4o-mini
 dotnet run --project src/Test.Automated -- --ollama-endpoint http://localhost:11434 --ollama-model gpt-oss:20b --ollama-embedding-model all-minilm
 dotnet run --project src/Test.Automated -- --gemini-key your-key --gemini-model gemini-2.5-flash
+
+# Ollama can also be validated through its OpenAI-compatible /v1 API.
+dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11434/v1 --openai-model gpt-oss:20b --openai-embedding-model all-minilm
 
 # Live tool-chat cases verify successful tool use when the configured model supports tools,
 # and verify the provider's unsupported-model error when it does not.

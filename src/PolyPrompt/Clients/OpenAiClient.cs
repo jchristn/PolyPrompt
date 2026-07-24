@@ -53,7 +53,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            string url = BuildApiUrl("chat/completions");
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, false);
 
@@ -146,7 +146,7 @@ namespace PolyPrompt.Clients
         {
             ResolveOptions(options, out int maxTokens, out double? temperature, out double? topP, out string? systemPrompt);
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            string url = BuildApiUrl("chat/completions");
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, true);
 
@@ -206,7 +206,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            string url = BuildApiUrl("chat/completions");
             Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, false);
 
             string json = _Serializer.SerializeJson(requestBody, false);
@@ -257,7 +257,7 @@ namespace PolyPrompt.Clients
         {
             ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/chat/completions";
+            string url = BuildApiUrl("chat/completions");
             Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, true);
 
             string json = _Serializer.SerializeJson(requestBody, false);
@@ -325,7 +325,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/embeddings";
+            string url = BuildApiUrl("embeddings");
 
             Dictionary<string, object> requestBody = new Dictionary<string, object>
             {
@@ -423,7 +423,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/completions";
+            string url = BuildApiUrl("completions");
 
             Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, model, maxTokens, temperature, topP, options as OpenAiGenerationOptions, false);
 
@@ -488,7 +488,7 @@ namespace PolyPrompt.Clients
         {
             ResolveGenerationOptions(options, out string model, out int maxTokens, out double? temperature, out double? topP);
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/completions";
+            string url = BuildApiUrl("completions");
 
             Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, model, maxTokens, temperature, topP, options as OpenAiGenerationOptions, true);
 
@@ -540,7 +540,7 @@ namespace PolyPrompt.Clients
         public override async IAsyncEnumerable<ModelInformation> ListModelsAsync(
             [EnumeratorCancellation] CancellationToken token = default)
         {
-            string url = _Endpoint.TrimEnd('/') + "/v1/models";
+            string url = BuildApiUrl("models");
 
             _Logging.Debug(_Header + "GET " + url);
 
@@ -593,7 +593,7 @@ namespace PolyPrompt.Clients
             if (string.IsNullOrWhiteSpace(model))
                 throw new ArgumentNullException(nameof(model));
 
-            string url = _Endpoint.TrimEnd('/') + "/v1/models/" + Uri.EscapeDataString(model);
+            string url = BuildApiUrl("models/" + Uri.EscapeDataString(model));
             _Logging.Debug(_Header + "GET " + url);
 
             try
@@ -642,6 +642,17 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Private-Methods
+
+        private string BuildApiUrl(string path)
+        {
+            string endpoint = _Endpoint.TrimEnd('/');
+            string normalizedPath = path.TrimStart('/');
+
+            if (endpoint.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+                return endpoint + "/" + normalizedPath;
+
+            return endpoint + "/v1/" + normalizedPath;
+        }
 
         private Dictionary<string, object> BuildChatRequestBody(
             string prompt, int maxTokens, string? systemPrompt,

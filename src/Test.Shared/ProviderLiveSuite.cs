@@ -867,7 +867,8 @@ namespace Test.Shared
 
         private static int ResolveLiveMaxTokens(string providerType, int defaultMaxTokens)
         {
-            if (string.Equals(providerType, "ollama", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(providerType, "ollama", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(providerType, "openai", StringComparison.OrdinalIgnoreCase))
                 return 1024;
 
             return defaultMaxTokens;

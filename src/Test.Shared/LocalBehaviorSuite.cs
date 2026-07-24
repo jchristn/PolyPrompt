@@ -50,6 +50,7 @@ namespace Test.Shared
                     Case("provider_test_configuration", "Provider test configuration defaults and environment groups", RunProviderTestConfigurationAsync),
                     Case("provider_specific_options_clamping", "Provider-specific options clamp values", RunProviderSpecificOptionsClampingAsync),
                     Case("provider_chat_request_translation", "Provider chat request translation", RunProviderChatRequestTranslationAsync),
+                    Case("openai_versioned_endpoint_base", "OpenAI-compatible client accepts versioned endpoint base", RunOpenAiVersionedEndpointBaseAsync),
                     Case("tool_chat_models_and_validation", "Tool chat models and validation", RunToolChatModelsAndValidationAsync),
                     Case("tool_chat_streaming_models_and_validation", "Tool chat streaming models and validation", RunToolChatStreamingModelsAndValidationAsync),
                     Case("openai_chat_streaming", "OpenAI-compatible streaming chat flow", RunOpenAiChatStreamingAsync),
@@ -316,6 +317,35 @@ namespace Test.Shared
             SharedAssert.True(ollamaRequest.Stream == false, "Ollama non-streaming chat should send stream false.");
             SharedAssert.True(geminiRequest.GenerationConfig != null && geminiRequest.GenerationConfig.MaxOutputTokens == 456, "Gemini chat should map max tokens.");
             SharedAssert.True(geminiRequest.Contents != null && geminiRequest.Contents.Count >= 1, "Gemini chat should include content messages.");
+        }
+
+        private static async Task RunOpenAiVersionedEndpointBaseAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = new OpenAiClient(server.Endpoint + "/v1", "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "OpenAI-compatible ChatAsync should accept a /v1 endpoint base.");
+            SharedAssert.Equal("pong", chat.Text, "OpenAI-compatible ChatAsync should receive the local response.");
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "OpenAI-compatible ToolChatStreamingAsync should accept a /v1 endpoint base.");
+
+            int toolDeltaCount = 0;
+            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                toolDeltaCount += chunk.ToolCallDeltas.Count;
+            }
+
+            SharedAssert.True(toolDeltaCount > 0, "OpenAI-compatible versioned endpoint stream should emit tool-call deltas.");
+            SharedAssert.True(stream.ToolCalls.Any(), "OpenAI-compatible versioned endpoint stream should accumulate tool calls.");
+
+            List<string> paths = server.RequestPaths;
+            SharedAssert.Equal("/v1/chat/completions", paths[0], "OpenAI-compatible ChatAsync should not double-prefix /v1.");
+            SharedAssert.Equal("/v1/chat/completions", paths[1], "OpenAI-compatible ToolChatStreamingAsync should not double-prefix /v1.");
+            SharedAssert.False(paths.Any(path => path.Contains("/v1/v1/", StringComparison.OrdinalIgnoreCase)), "OpenAI-compatible versioned endpoint requests should never contain /v1/v1/.");
         }
 
         private static async Task RunToolChatModelsAndValidationAsync(CancellationToken token)
