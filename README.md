@@ -13,7 +13,7 @@ PolyPrompt is a lightweight, unified .NET library for chat completions, tool cal
 PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning three different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers.
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
-- **Tool Calling** - Provider-normalized function declarations, model tool calls, and tool-result follow-up messages
+- **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
 - **Text Generation** - Streaming and non-streaming text generation (completion-style)
 - **Embeddings** - Single and batch embedding vector generation for semantic search and RAG
 - **Model Management** - List models, check existence, get model details, pull, and delete
@@ -52,7 +52,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **1.5.0**.
+Current documented package version: **2.0.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -150,7 +150,7 @@ Console.WriteLine(response.Text);
 
 ### Tool Calling
 
-Tool calling is explicit. Use `ToolChatAsync` when a model may request application functions, then execute those functions in your code and send the result back as another message. PolyPrompt normalizes the provider protocol; it does not run your tools for you.
+Tool calling is explicit. Use `ToolChatAsync` or `ToolChatStreamingAsync` when a model may request application functions, then execute those functions in your code and send the result back as another message. PolyPrompt normalizes the provider protocol; it does not run your tools for you.
 
 ```csharp
 using PolyPrompt.Clients;
@@ -209,6 +209,39 @@ request.ToolChoice = "none";
 ToolChatResponse final = await client.ToolChatAsync(request);
 Console.WriteLine(final.Text);
 ```
+
+### Streaming Tool Calling
+
+`ToolChatStreamingAsync` streams assistant text and tool-call deltas while accumulating final `Text` and `ToolCalls` on the response as you enumerate `Chunks`. OpenAI-compatible, Ollama, and Gemini clients support it.
+
+```csharp
+ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
+
+await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
+{
+    if (!string.IsNullOrEmpty(chunk.Text))
+    {
+        Console.Write(chunk.Text);
+    }
+}
+
+if (stream.ToolCalls.Count > 0)
+{
+    request.Messages.Add(stream.ToAssistantMessage());
+
+    foreach (ToolCall call in stream.ToolCalls)
+    {
+        string resultJson = "{\"temperature\":72,\"conditions\":\"clear\"}";
+        request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultJson));
+    }
+}
+```
+
+Provider protocol shapes differ:
+
+- **OpenAI-compatible** uses `/v1/chat/completions` SSE chunks and parses `delta.tool_calls` argument fragments.
+- **Ollama** uses `/api/chat` newline-delimited JSON chunks and parses streamed `message.tool_calls`.
+- **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same `GenerateContentRequest` body shape as `ToolChatAsync`: `contents`, optional `systemInstruction`, `tools.functionDeclarations`, and `toolConfig`. It parses streamed `GenerateContentResponse` chunks from `candidates[].content.parts[]`, including `text`, complete `functionCall` objects, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
 
 ### Streaming Chat
 
@@ -534,6 +567,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 | `ChatAsync` | Non-streaming chat completion |
 | `ChatStreamingAsync` | Streaming chat completion with timing metrics |
 | `ToolChatAsync` | Tool-capable chat completion that returns assistant text and requested tool calls |
+| `ToolChatStreamingAsync` | Streaming tool-capable chat completion that returns text chunks, tool-call deltas, and accumulated final tool calls |
 | `EmbedAsync(string)` | Generate embedding for a single text |
 | `EmbedAsync(List<string>)` | Generate embeddings for a batch of texts |
 | `GenerateAsync` | Non-streaming text generation |
@@ -548,7 +582,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 
 ### Tool Calling Models
 
-`ToolChatAsync` uses a message-based request because tool calling is inherently multi-step. A model can return tool calls instead of final text, and the caller decides how to execute those tools.
+`ToolChatAsync` and `ToolChatStreamingAsync` use a message-based request because tool calling is inherently multi-step. A model can return tool calls instead of final text, and the caller decides how to execute those tools.
 
 | Type | Purpose |
 |------|---------|
@@ -556,7 +590,10 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 | `ChatMessage` | Represents system, user, assistant, and tool-result messages |
 | `ToolDefinition` | Declares a callable function with a JSON Schema parameter object |
 | `ToolCall` | Represents a model-requested tool name and JSON arguments |
+| `ToolCallDelta` | Represents a streamed update to a tool call ID, name, type, or argument JSON |
 | `ToolChatResponse` | Contains assistant text, tool calls, status, timing, and finish metadata |
+| `ToolChatStreamingChunk` | Contains streamed assistant text, tool-call deltas, finish metadata, and usage |
+| `ToolChatStreamingResponse` | Contains streamed chunks plus accumulated assistant text, final tool calls, status, timing, and finish metadata |
 
 ### Provider-Specific Options
 
@@ -588,35 +625,41 @@ Each provider exposes option classes that extend the base options with provider-
 |---------|--------|--------|--------|
 | Chat (non-streaming) | Yes | Yes | Yes |
 | Chat (streaming) | Yes | Yes | Yes |
-| Tool Calling | Yes | Yes | Yes |
-| Text Generation | Yes | Legacy only | Yes |
+| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes |
+| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes |
+| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes |
+| Text Generation (streaming) | Yes | Legacy completions API only | Yes |
 | Embeddings (single) | Yes | Yes | Yes |
 | Embeddings (batch) | Yes | Yes | Yes |
 | List Models | Yes | Yes | Yes |
 | Model Exists | Yes | Yes | Yes |
 | Get Model Info | Yes | Yes | Yes |
-| Pull Model | Yes | No | No |
-| Delete Model | Yes | No | No |
+| Pull Model | Yes | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` |
+| Delete Model | Yes | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` |
 | Validate Connectivity | Yes | Yes | Yes |
+
+Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape.
+
+Ollama tool calling is model-dependent. For example, `gemma3:4b` is a valid Ollama chat, streaming chat, and generation model, but Ollama reports that it does not support tools. Use a tool-capable model such as `gpt-oss:20b` when you want the live suite to exercise actual Ollama tool-call and streaming tool-call paths.
 
 ## Project Structure
 
 ```
 PolyPrompt/
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ PolyPrompt/              # Core library (NuGet package)
-â”‚   â”‚   â”œâ”€â”€ Clients/             # CompletionClientBase, OllamaClient, OpenAiClient, GeminiClient
-â”‚   â”‚   â”œâ”€â”€ Models/              # Request/response data models
-â”‚   â”‚   â””â”€â”€ Options/             # Provider-specific option classes
-â”‚   â”œâ”€â”€ OllamaConsole/           # Interactive Ollama test harness
-â”‚   â”œâ”€â”€ OpenAIConsole/           # Interactive OpenAI test harness
-â”‚   â”œâ”€â”€ GeminiConsole/           # Interactive Gemini test harness
-â”‚   â”œâ”€â”€ Test.Shared/             # Shared Touchstone test descriptors
-â”‚   â”œâ”€â”€ Test.Automated/          # Touchstone console runner
-â”‚   â”œâ”€â”€ Test.Xunit/              # xUnit adapter over Test.Shared
-â”‚   â””â”€â”€ Test.Nunit/              # NUnit adapter over Test.Shared
-â””â”€â”€ assets/
-    â””â”€â”€ logo.png
+|-- src/
+|   |-- PolyPrompt/              # Core library (NuGet package)
+|   |   |-- Clients/             # CompletionClientBase, OllamaClient, OpenAiClient, GeminiClient
+|   |   |-- Models/              # Request/response data models
+|   |   `-- Options/             # Provider-specific option classes
+|   |-- OllamaConsole/           # Interactive Ollama test harness, including tc/toolchat
+|   |-- OpenAIConsole/           # Interactive OpenAI test harness, including tc/toolchat
+|   |-- GeminiConsole/           # Interactive Gemini test harness, including tc/toolchat
+|   |-- Test.Shared/             # Shared Touchstone test descriptors
+|   |-- Test.Automated/          # Touchstone console runner
+|   |-- Test.Xunit/              # xUnit adapter over Test.Shared
+|   `-- Test.Nunit/              # NUnit adapter over Test.Shared
+`-- assets/
+    `-- logo.png
 ```
 
 ## Building from Source
@@ -629,25 +672,37 @@ dotnet build src/PolyPrompt.sln
 ## Running the Automated Tests
 
 ```bash
-# Local self-tests for timeout, cancellation, response disposal, CallDetails, and tool calling
+# Local self-tests for request translation, timeout, cancellation, response disposal, CallDetails, chat, streaming chat, tool chat, streaming tool chat, generation, embeddings, and model management
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest
 
 # Local self-tests through xUnit and NUnit
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 
-# Live provider tests through the Touchstone console runner
-dotnet run --project src/Test.Automated -- ollama http://localhost:11434
-dotnet run --project src/Test.Automated -- openai https://api.openai.com sk-your-key gpt-4o text-embedding-3-small
-dotnet run --project src/Test.Automated -- gemini https://generativelanguage.googleapis.com your-key gemini-2.5-flash gemini-embedding-001
+# Live provider tests through the Touchstone console runner. OpenAI and Gemini default to their public API endpoints.
+dotnet run --project src/Test.Automated -- --openai-key sk-your-key --openai-model gpt-4o-mini
+dotnet run --project src/Test.Automated -- --ollama-endpoint http://localhost:11434 --ollama-model gpt-oss:20b --ollama-embedding-model all-minilm
+dotnet run --project src/Test.Automated -- --gemini-key your-key --gemini-model gemini-2.5-flash
+
+# Live tool-chat cases verify successful tool use when the configured model supports tools,
+# and verify the provider's unsupported-model error when it does not.
+
+# Generic named form and positional form are also supported
+dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b --embedding-model all-minilm
+dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
 
 # Live provider tests can also be enabled for xUnit and NUnit with environment variables
 set POLYPROMPT_TEST_PROVIDER=ollama
 set POLYPROMPT_TEST_ENDPOINT=http://localhost:11434
-set POLYPROMPT_TEST_MODEL=gemma3:4b
+set POLYPROMPT_TEST_MODEL=gpt-oss:20b
 set POLYPROMPT_TEST_EMBEDDING_MODEL=all-minilm
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
+
+# Provider-specific environment variables can be used instead of POLYPROMPT_TEST_PROVIDER
+set POLYPROMPT_TEST_OPENAI_API_KEY=sk-your-key
+set POLYPROMPT_TEST_OPENAI_MODEL=gpt-4o-mini
+dotnet test src/Test.Xunit/Test.Xunit.csproj
 ```
 
 ## Issues and Discussions

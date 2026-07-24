@@ -126,6 +126,17 @@
             <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
             <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Send a tool-capable chat completion request and stream response chunks as they arrive.
+            Tool execution is owned by the caller; enumerate Chunks, then append ToAssistantMessage and tool-result messages to continue.
+            </summary>
+            <param name="request">Tool chat request containing messages and tool definitions.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ToolChatStreamingResponse containing metadata, streamed chunks, accumulated text, and requested tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <summary>
             Generate an embedding for a single input string.
@@ -288,6 +299,17 @@
             <param name="owner">Optional disposable owner released when enumeration ends.</param>
             <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapToolChatChunksWithTiming(PolyPrompt.Models.ToolChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ToolChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
+            <summary>
+            Wrap a raw tool-chat chunk enumerable with timing and accumulation logic.
+            </summary>
+            <param name="response">The streaming response object to update.</param>
+            <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
+            <param name="sw">Stopwatch started before the HTTP request was made.</param>
+            <param name="token">Cancellation token.</param>
+            <param name="owner">Optional disposable owner released when enumeration ends.</param>
+            <returns>A wrapped async enumerable that updates timing and accumulated output on the response.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.WrapGenerationChunksWithTiming(PolyPrompt.Models.GenerationStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.GenerationStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
             <summary>
             Wrap a raw generation chunk enumerable with timing-tracking logic.
@@ -411,6 +433,9 @@
         <member name="M:PolyPrompt.Clients.GeminiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.GeminiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -454,6 +479,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
@@ -500,6 +528,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
@@ -1232,6 +1263,42 @@
             <typeparam name="T">Argument model type.</typeparam>
             <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
         </member>
+        <member name="T:PolyPrompt.Models.ToolCallDelta">
+            <summary>
+            Incremental update for a streamed tool call.
+            Providers may emit tool call IDs, names, and arguments across separate chunks.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.Index">
+            <summary>
+            Provider tool call index within the assistant response.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.Id">
+            <summary>
+            Provider tool call identifier. May be null when the provider does not emit IDs.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.Type">
+            <summary>
+            Provider tool call type. Usually function.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.Name">
+            <summary>
+            Tool/function name requested by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.ArgumentsJsonDelta">
+            <summary>
+            Incremental JSON argument fragment emitted by the provider.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.ArgumentsJson">
+            <summary>
+            Complete JSON argument object for this tool call when the provider emits full arguments.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Models.ToolChatRequest">
             <summary>
             Request for a tool-capable chat completion.
@@ -1326,6 +1393,154 @@
         <member name="M:PolyPrompt.Models.ToolChatResponse.ToAssistantMessage">
             <summary>
             Convert this response into an assistant message that can be appended to the next ToolChatRequest.
+            </summary>
+            <returns>An assistant message containing either text or tool calls.</returns>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolChatStreamingChunk">
+            <summary>
+            A single chunk from a streaming tool-capable chat completion response.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Text">
+            <summary>
+            Assistant text content of this chunk. May be null or empty for metadata-only or tool-call chunks.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ToolCallDeltas">
+            <summary>
+            Tool call deltas emitted in this chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Model">
+            <summary>
+            The model that generated this chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Done">
+            <summary>
+            Whether this is the final chunk in the stream.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.FinishReason">
+            <summary>
+            The reason generation finished. Present on the final chunk.
+            Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Usage">
+            <summary>
+            Token usage and timing statistics. Typically only populated on the final chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ResponseId">
+            <summary>
+            Response identifier for correlation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.CreatedUtc">
+            <summary>
+            UTC timestamp of when this chunk was created.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ToolChatStreamingResponse">
+            <summary>
+            Top-level response from a streaming tool-capable chat completion request.
+            Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
+            Timing and accumulated output fields are populated as chunks are consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Text">
+            <summary>
+            Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCalls">
+            <summary>
+            Tool calls accumulated from streamed tool-call deltas.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Model">
+            <summary>
+            The model name used for this completion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ResponseId">
+            <summary>
+            Provider response identifier for correlation. May be null when the provider does not emit one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.FinishReason">
+            <summary>
+            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Success">
+            <summary>
+            Whether the streaming request was initiated successfully.
+            If false, check Error for details.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.StatusCode">
+            <summary>
+            HTTP status code from the streaming request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Error">
+            <summary>
+            Error message if the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Chunks">
+            <summary>
+            The async enumerable of streaming chunks.
+            Enumerate this to receive text and tool-call deltas as they arrive.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime in milliseconds from request start to last chunk received.
+            Updated after all chunks have been consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.TimeToFirstTokenMs">
+            <summary>
+            Time in milliseconds from request start to the first text or tool-call delta chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.TimeToLastTokenMs">
+            <summary>
+            Time in milliseconds from request start to the last text or tool-call delta chunk.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ChunkCount">
+            <summary>
+            Number of chunks containing text or tool-call deltas.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCallDeltaCount">
+            <summary>
+            Number of streamed tool-call deltas received.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.OverallTokensPerSecond">
+            <summary>
+            Tokens per second calculated over the overall runtime.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.InterTokenTokensPerSecond">
+            <summary>
+            Tokens per second calculated between first and last streamed content arrival.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Usage">
+            <summary>
+            Final token usage from the stream.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ToolChatStreamingResponse.ToAssistantMessage">
+            <summary>
+            Convert this response into an assistant message that can be appended to the next ToolChatRequest.
+            Enumerate Chunks before calling this method so streamed tool calls are fully accumulated.
             </summary>
             <returns>An assistant message containing either text or tool calls.</returns>
         </member>
