@@ -18,7 +18,7 @@ PolyPrompt provides a single, consistent API surface for interacting with multip
 - **Embeddings** - Single and batch embedding vector generation for semantic search and RAG
 - **Model Management** - List models, check existence, get model details, pull, and delete
 - **Connectivity Validation** - Verify provider reachability before running workloads
-- **Timing Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput
+- **Timing & Usage Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput, plus provider-reported token usage (prompt/completion/total) on responses when the provider returns it
 - **Call Recording** - Every HTTP call is recorded with full request/response details for debugging and auditing
 - **Provider-Specific Options** - Fine-tune each provider's unique parameters without losing portability
 
@@ -52,7 +52,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.0.0**.
+Current documented package version: **2.0.1**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -588,6 +588,17 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 ```
 
 ## API Reference
+
+### Constructors
+
+Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `endpoint` | `string` | provider default | API endpoint URL |
+| `apiKey` | `string?` | `null` | API key; when non-empty an `Authorization: Bearer` header is added |
+| `logging` | `LoggingModule?` | `null` | Logging module; a new instance is created when omitted |
+| `httpClient` | `HttpClient?` | `null` | Transport to use. When supplied, the caller owns and disposes it (see [Custom HttpClient](#custom-httpclient-custom-transport-tls-or-proxy)); when omitted, the client creates and owns its own |
 
 ### Client Properties
 
