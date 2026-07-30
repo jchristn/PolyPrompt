@@ -46,11 +46,13 @@ namespace PolyPrompt.Clients
         /// <param name="endpoint">Ollama server endpoint URL. Default: http://localhost:11434.</param>
         /// <param name="apiKey">API key (nullable, typically not needed for Ollama). Default: null.</param>
         /// <param name="logging">Logging module. Default: new instance.</param>
+        /// <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         public OllamaClient(
             string endpoint = "http://localhost:11434",
             string? apiKey = null,
-            LoggingModule? logging = null)
-            : base(endpoint, apiKey, logging ?? new LoggingModule())
+            LoggingModule? logging = null,
+            HttpClient? httpClient = null)
+            : base(endpoint, apiKey, logging ?? new LoggingModule(), httpClient)
         {
             _Header = "[Ollama] ";
             Model = "gemma3:4b";

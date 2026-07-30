@@ -21,11 +21,13 @@ namespace PolyPrompt.Clients
         /// <param name="endpoint">OpenAI API endpoint URL. Default: https://api.openai.com.</param>
         /// <param name="apiKey">API key (required for OpenAI). Default: null.</param>
         /// <param name="logging">Logging module. Default: new instance.</param>
+        /// <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         public OpenAiClient(
             string endpoint = "https://api.openai.com",
             string? apiKey = null,
-            LoggingModule? logging = null)
-            : base(endpoint, apiKey, logging ?? new LoggingModule())
+            LoggingModule? logging = null,
+            HttpClient? httpClient = null)
+            : base(endpoint, apiKey, logging ?? new LoggingModule(), httpClient)
         {
             _Header = "[OpenAI] ";
             Model = "gpt-4o-mini";

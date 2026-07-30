@@ -518,6 +518,41 @@ catch (OperationCanceledException)
 non-streaming requests and streaming response bodies. Values must be greater than
 zero and are not silently clamped.
 
+### Custom HttpClient (custom transport, TLS, or proxy)
+
+Every client constructor accepts an optional `HttpClient`. When you supply one, PolyPrompt
+uses it for all requests and does not dispose it — you retain ownership. This lets you
+configure the transport, for example to trust a self-signed certificate on an internal
+endpoint, or to route requests through a proxy. When omitted, the client creates and owns
+its own `HttpClient` as before.
+
+```csharp
+using System.Net.Http;
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+// Example: relax TLS certificate validation for a trusted internal endpoint.
+HttpClientHandler handler = new HttpClientHandler
+{
+    ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+};
+using HttpClient httpClient = new HttpClient(handler);
+
+using OpenAiClient client = new OpenAiClient(
+    "https://internal-llm.example.corp/v1",
+    apiKey: "sk-your-api-key",
+    logging: null,
+    httpClient: httpClient);
+client.Model = "gpt-oss:20b";
+
+ChatResponse response = await client.ChatAsync("Hello!");
+Console.WriteLine(response.Text);
+```
+
+The client sets the injected `HttpClient`'s `Timeout` to infinite so per-request timeouts can
+be governed by `TimeoutMs`. If you share one `HttpClient` across multiple clients, give it an
+infinite timeout yourself, since its timeout can no longer be changed once it has sent a request.
+
 ### Provider-Agnostic Code
 
 ```csharp

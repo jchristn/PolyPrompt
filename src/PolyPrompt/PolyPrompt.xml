@@ -29,6 +29,12 @@
             HTTP client for API requests.
             </summary>
         </member>
+        <member name="F:PolyPrompt.Clients.CompletionClientBase._OwnsHttpClient">
+            <summary>
+            Whether this instance created (and therefore owns and disposes) <see cref="F:PolyPrompt.Clients.CompletionClientBase._HttpClient"/>.
+            False when the client was supplied by the caller, in which case the caller retains ownership.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Clients.CompletionClientBase._Serializer">
             <summary>
             Serializer instance.
@@ -89,13 +95,23 @@
             Maximum number of call details retained by this client. Set to zero to disable recording.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.CompletionClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
             Initialize a new CompletionClientBase.
             </summary>
             <param name="endpoint">Endpoint URL.</param>
             <param name="apiKey">API key (nullable).</param>
             <param name="logging">Logging module.</param>
+            <param name="httpClient">
+            Optional HTTP client to use for all requests. When supplied, the caller retains ownership and is
+            responsible for disposing it; <see cref="M:PolyPrompt.Clients.CompletionClientBase.Dispose"/> will not dispose an injected client. This lets
+            callers configure the transport (for example a custom <see cref="T:System.Net.Http.HttpClientHandler"/>
+            that relaxes TLS certificate validation, or a proxy). When null, an internally owned client is
+            created. The client's <see cref="P:System.Net.Http.HttpClient.Timeout"/> is set to
+            <see cref="F:System.Threading.Timeout.InfiniteTimeSpan"/> (per-request timeouts are enforced via
+            <see cref="P:PolyPrompt.Clients.CompletionClientBase.TimeoutMs"/>); if an injected client has already sent a request its timeout cannot be
+            changed and is left as configured, so callers sharing a client should give it an infinite timeout.
+            </param>
         </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <summary>
@@ -416,13 +432,14 @@
             Client for the Google Gemini API supporting chat completions, embeddings, and text generation.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.GeminiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+        <member name="M:PolyPrompt.Clients.GeminiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
             Initialize a new GeminiClient.
             </summary>
             <param name="endpoint">Gemini API endpoint URL. Default: https://generativelanguage.googleapis.com.</param>
             <param name="apiKey">Google API key (required). Default: null.</param>
             <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         </member>
         <member name="M:PolyPrompt.Clients.GeminiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <inheritdoc />
@@ -464,13 +481,14 @@
             Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.OllamaClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+        <member name="M:PolyPrompt.Clients.OllamaClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
             Initialize a new OllamaClient.
             </summary>
             <param name="endpoint">Ollama server endpoint URL. Default: http://localhost:11434.</param>
             <param name="apiKey">API key (nullable, typically not needed for Ollama). Default: null.</param>
             <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <inheritdoc />
@@ -513,13 +531,14 @@
             Client for the OpenAI-compatible API supporting chat completions, embeddings, and text generation.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.OpenAiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule)">
+        <member name="M:PolyPrompt.Clients.OpenAiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
             Initialize a new OpenAiClient.
             </summary>
             <param name="endpoint">OpenAI API endpoint URL. Default: https://api.openai.com.</param>
             <param name="apiKey">API key (required for OpenAI). Default: null.</param>
             <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <inheritdoc />

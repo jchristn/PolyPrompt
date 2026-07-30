@@ -21,11 +21,13 @@ namespace PolyPrompt.Clients
         /// <param name="endpoint">Gemini API endpoint URL. Default: https://generativelanguage.googleapis.com.</param>
         /// <param name="apiKey">Google API key (required). Default: null.</param>
         /// <param name="logging">Logging module. Default: new instance.</param>
+        /// <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
         public GeminiClient(
             string endpoint = "https://generativelanguage.googleapis.com",
             string? apiKey = null,
-            LoggingModule? logging = null)
-            : base(endpoint, apiKey, logging ?? new LoggingModule())
+            LoggingModule? logging = null,
+            HttpClient? httpClient = null)
+            : base(endpoint, apiKey, logging ?? new LoggingModule(), httpClient)
         {
             _Header = "[Gemini] ";
             Model = "gemini-2.5-flash";

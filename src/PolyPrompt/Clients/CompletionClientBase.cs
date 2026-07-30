@@ -47,6 +47,12 @@ namespace PolyPrompt.Clients
         protected readonly HttpClient _HttpClient;
 
         /// <summary>
+        /// Whether this instance created (and therefore owns and disposes) <see cref="_HttpClient"/>.
+        /// False when the client was supplied by the caller, in which case the caller retains ownership.
+        /// </summary>
+        private readonly bool _OwnsHttpClient;
+
+        /// <summary>
         /// Serializer instance.
         /// </summary>
         protected readonly SerializationHelper.Serializer _Serializer = new SerializationHelper.Serializer();
@@ -203,13 +209,38 @@ namespace PolyPrompt.Clients
         /// <param name="endpoint">Endpoint URL.</param>
         /// <param name="apiKey">API key (nullable).</param>
         /// <param name="logging">Logging module.</param>
-        protected CompletionClientBase(string endpoint, string? apiKey, LoggingModule logging)
+        /// <param name="httpClient">
+        /// Optional HTTP client to use for all requests. When supplied, the caller retains ownership and is
+        /// responsible for disposing it; <see cref="Dispose"/> will not dispose an injected client. This lets
+        /// callers configure the transport (for example a custom <see cref="System.Net.Http.HttpClientHandler"/>
+        /// that relaxes TLS certificate validation, or a proxy). When null, an internally owned client is
+        /// created. The client's <see cref="HttpClient.Timeout"/> is set to
+        /// <see cref="Timeout.InfiniteTimeSpan"/> (per-request timeouts are enforced via
+        /// <see cref="TimeoutMs"/>); if an injected client has already sent a request its timeout cannot be
+        /// changed and is left as configured, so callers sharing a client should give it an infinite timeout.
+        /// </param>
+        protected CompletionClientBase(string endpoint, string? apiKey, LoggingModule logging, HttpClient? httpClient = null)
         {
             _Endpoint = endpoint ?? throw new ArgumentNullException(nameof(endpoint));
             _ApiKey = apiKey;
             _Logging = logging ?? throw new ArgumentNullException(nameof(logging));
-            _HttpClient = new HttpClient();
-            _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
+            _OwnsHttpClient = httpClient is null;
+            _HttpClient = httpClient ?? new HttpClient();
+
+            // Per-request timeouts are enforced via TimeoutMs, so the transport's own timeout must be
+            // disabled. Setting Timeout throws once a client has already sent a request; for an injected
+            // client that has been used (for example, shared across clients) we leave its timeout as the
+            // caller configured it.
+            if (_HttpClient.Timeout != Timeout.InfiniteTimeSpan)
+            {
+                try
+                {
+                    _HttpClient.Timeout = Timeout.InfiniteTimeSpan;
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
         }
 
         #endregion
@@ -435,7 +466,11 @@ namespace PolyPrompt.Clients
         /// </summary>
         public void Dispose()
         {
-            _HttpClient?.Dispose();
+            if (_OwnsHttpClient)
+            {
+                _HttpClient?.Dispose();
+            }
+
             GC.SuppressFinalize(this);
         }
 

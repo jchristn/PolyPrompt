@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.1 (2026-07-30)
+
+### Added
+
+- Added an optional `HttpClient` parameter to `CompletionClientBase` and the `OpenAiClient`, `OllamaClient`, and `GeminiClient` constructors. When supplied, the client uses the injected transport — letting callers configure a custom `HttpClientHandler` (for example to relax TLS certificate validation for self-signed endpoints, or to route through a proxy) — and does not dispose it; the caller retains ownership. When omitted, an internally owned client is created as before, preserving existing behavior.
+- Added local Touchstone coverage verifying the injected `HttpClient` carries requests and is not disposed when the client is disposed.
+
 ## v2.0.0 (2026-07-24)
 
 ### Added

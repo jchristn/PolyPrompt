@@ -78,6 +78,7 @@ namespace Test.Shared
                     Case("streaming_body_timeout", "Streaming timeout covers the response body", RunStreamingBodyTimeoutAsync),
                     Case("tool_chat_streaming_body_timeout", "Streaming tool chat timeout covers the response body", RunToolChatStreamingBodyTimeoutAsync),
                     Case("post_and_record_disposes_response", "PostAndRecordAsync disposes non-streaming responses", RunPostAndRecordDisposesResponseAsync),
+                    Case("injected_http_client", "Injected HttpClient is used and not disposed by the client", RunInjectedHttpClientAsync),
                 });
         }
 
@@ -116,6 +117,62 @@ namespace Test.Shared
 
             client.ClearCallDetails();
             SharedAssert.Equal(0, client.CallDetails.Count, "ClearCallDetails should clear retained entries.");
+        }
+
+        private static async Task RunInjectedHttpClientAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            // A counting handler proves the injected transport is the one actually used for requests.
+            CountingHandler handler = new CountingHandler(new HttpClientHandler());
+            HttpClient shared = new HttpClient(handler);
+
+            using (OpenAiClient client = new OpenAiClient(server.Endpoint, apiKey: null, logging: null, httpClient: shared))
+            {
+                client.Model = "test-model";
+                client.TimeoutMs = 1000;
+
+                ChatResponse response = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+                SharedAssert.True(response.Success, "Chat via an injected HttpClient should succeed.");
+                SharedAssert.Equal("pong", response.Text, "The injected HttpClient should carry the request to the local server.");
+            }
+
+            SharedAssert.True(handler.Count >= 1, "The injected HttpClient's handler should have processed at least one request.");
+
+            // Disposing the PolyPrompt client must NOT dispose an injected HttpClient: reuse it in a
+            // second client and confirm it still works (a disposed HttpClient would throw here).
+            int countAfterFirst = handler.Count;
+            using (OpenAiClient reuse = new OpenAiClient(server.Endpoint, apiKey: null, logging: null, httpClient: shared))
+            {
+                reuse.Model = "test-model";
+                reuse.TimeoutMs = 1000;
+
+                ChatResponse second = await reuse.ChatAsync("again", token: token).ConfigureAwait(false);
+                SharedAssert.True(second.Success, "An injected HttpClient should remain usable after the first client is disposed.");
+            }
+
+            SharedAssert.True(handler.Count > countAfterFirst, "Reusing the injected HttpClient should route another request through it.");
+
+            // The caller still owns the injected client and is responsible for disposing it.
+            shared.Dispose();
+        }
+
+        private sealed class CountingHandler : DelegatingHandler
+        {
+            private int _Count;
+
+            public CountingHandler(HttpMessageHandler innerHandler)
+                : base(innerHandler)
+            {
+            }
+
+            public int Count => Volatile.Read(ref _Count);
+
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref _Count);
+                return base.SendAsync(request, cancellationToken);
+            }
         }
 
         private static async Task RunClientOptionsAndGuardsAsync(CancellationToken token)
