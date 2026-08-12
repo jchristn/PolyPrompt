@@ -68,6 +68,18 @@ namespace Test.Shared
                     Case("ollama_tool_chat_streaming", "Ollama streaming tool chat flow", RunOllamaToolChatStreamingAsync),
                     Case("gemini_tool_chat", "Gemini tool chat flow", RunGeminiToolChatAsync),
                     Case("gemini_tool_chat_streaming", "Gemini streaming tool chat flow", RunGeminiToolChatStreamingAsync),
+                    Case("reasoning_effort_openai_toolchat", "Reasoning effort maps to OpenAI reasoning_effort", RunReasoningEffortOpenAiToolChatAsync),
+                    Case("reasoning_effort_openai_toolchat_streaming", "Reasoning effort maps to OpenAI reasoning_effort (streaming)", RunReasoningEffortOpenAiToolChatStreamingAsync),
+                    Case("reasoning_effort_instance_default", "Reasoning effort instance default is applied", RunReasoningEffortInstanceDefaultAsync),
+                    Case("reasoning_effort_request_overrides_instance", "Reasoning effort request overrides instance default", RunReasoningEffortRequestOverridesInstanceAsync),
+                    Case("reasoning_effort_gemini_toolchat", "Reasoning effort maps to Gemini thinkingConfig", RunReasoningEffortGeminiToolChatAsync),
+                    Case("reasoning_effort_ollama_toolchat", "Reasoning effort maps to Ollama think", RunReasoningEffortOllamaToolChatAsync),
+                    Case("reasoning_effort_projection_defaults", "Reasoning effort level projections return defaults", RunReasoningEffortProjectionDefaultsAsync),
+                    Case("reasoning_effort_presets_and_implicit", "Reasoning effort presets and implicit conversion", RunReasoningEffortPresetsAndImplicitAsync),
+                    Case("reasoning_effort_overrides_win", "Reasoning effort per-provider overrides win", RunReasoningEffortOverridesWinAsync),
+                    Case("reasoning_effort_override_clamping", "Reasoning effort override setters clamp/validate", RunReasoningEffortOverrideClampingAsync),
+                    Case("reasoning_effort_absent_by_default", "Reasoning effort is omitted when unset", RunReasoningEffortAbsentByDefaultAsync),
+                    Case("reasoning_effort_undefined_level_throws", "Reasoning effort undefined level throws", RunReasoningEffortUndefinedLevelThrowsAsync),
                     Case("openai_embedding_generation_models", "OpenAI-compatible embeddings, generation, and models", RunOpenAiEmbeddingGenerationModelsAsync),
                     Case("ollama_embedding_generation_models", "Ollama embeddings, generation, and models", RunOllamaEmbeddingGenerationModelsAsync),
                     Case("gemini_embedding_generation_models", "Gemini embeddings, generation, and models", RunGeminiEmbeddingGenerationModelsAsync),
@@ -1117,6 +1129,283 @@ namespace Test.Shared
             SharedAssert.Equal(2, followupFunctionCallCount, "Gemini streaming follow-up should include assistant function call history.");
             SharedAssert.Equal(2, followupFunctionResponseCount, "Gemini streaming follow-up should include both function responses.");
             SharedAssert.True(followupRequest.Tools == null || !followupRequest.Tools.Any(), "Gemini streaming follow-up should omit tools when ToolChoice is none.");
+        }
+
+        private static async Task RunReasoningEffortOpenAiToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ReasoningEffortLevel[] levels =
+            {
+                ReasoningEffortLevel.Minimal,
+                ReasoningEffortLevel.Low,
+                ReasoningEffortLevel.Medium,
+                ReasoningEffortLevel.High
+            };
+            string[] wire = { "minimal", "low", "medium", "high" };
+
+            for (int i = 0; i < levels.Length; i++)
+            {
+                ToolChatRequest request = CreateWeatherToolRequest();
+                request.ReasoningEffort = levels[i];   // exercises the implicit ReasoningEffortLevel -> ReasoningEffort conversion
+                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                SharedAssert.True(response.Success, "OpenAI-compatible tool chat with reasoning effort should succeed.");
+            }
+
+            List<string> bodies = server.RequestBodies;
+            for (int i = 0; i < levels.Length; i++)
+            {
+                LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(bodies[i]);
+                SharedAssert.Equal(wire[i], recorded.ReasoningEffort, "OpenAI-compatible tool chat should send reasoning_effort for each level.");
+            }
+        }
+
+        private static async Task RunReasoningEffortOpenAiToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = ReasoningEffort.High;
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("high", recorded.ReasoningEffort, "OpenAI-compatible streaming tool chat should send reasoning_effort.");
+            SharedAssert.True(recorded.Stream == true, "OpenAI-compatible streaming tool chat should still set stream true.");
+        }
+
+        private static async Task RunReasoningEffortInstanceDefaultAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+            client.ReasoningEffort = ReasoningEffort.High;
+
+            ToolChatRequest request = CreateWeatherToolRequest();   // no per-request effort
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "OpenAI-compatible tool chat with instance-default effort should succeed.");
+
+            LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("high", recorded.ReasoningEffort, "Instance-default reasoning effort should be applied when the request has none.");
+        }
+
+        private static async Task RunReasoningEffortRequestOverridesInstanceAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+            client.ReasoningEffort = ReasoningEffort.Low;
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = ReasoningEffort.High;
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "OpenAI-compatible tool chat overriding the instance default should succeed.");
+
+            LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("high", recorded.ReasoningEffort, "Per-request reasoning effort should win over the instance default.");
+        }
+
+        private static async Task RunReasoningEffortGeminiToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ToolChatRequest high = CreateWeatherToolRequest();
+            high.ReasoningEffort = ReasoningEffort.High;
+            ToolChatResponse highResponse = await client.ToolChatAsync(high, token).ConfigureAwait(false);
+            SharedAssert.True(highResponse.Success, "Gemini tool chat with high reasoning effort should succeed.");
+
+            ToolChatRequest minimal = CreateWeatherToolRequest();
+            minimal.ReasoningEffort = ReasoningEffort.Minimal;
+            ToolChatResponse minimalResponse = await client.ToolChatAsync(minimal, token).ConfigureAwait(false);
+            SharedAssert.True(minimalResponse.Success, "Gemini tool chat with minimal reasoning effort should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalGeminiRequest highRequest = DeserializeRecordedGeminiRequest(bodies[0]);
+            LocalGeminiRequest minimalRequest = DeserializeRecordedGeminiRequest(bodies[1]);
+
+            SharedAssert.Equal(-1, highRequest.GenerationConfig!.ThinkingBudget, "Gemini high effort should map to a dynamic thinking budget (-1).");
+            SharedAssert.Equal(0, minimalRequest.GenerationConfig!.ThinkingBudget, "Gemini minimal effort should disable thinking (0).");
+        }
+
+        private static async Task RunReasoningEffortOllamaToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ToolChatRequest medium = CreateWeatherToolRequest();
+            medium.ReasoningEffort = ReasoningEffort.Medium;
+            ToolChatResponse mediumResponse = await client.ToolChatAsync(medium, token).ConfigureAwait(false);
+            SharedAssert.True(mediumResponse.Success, "Ollama tool chat with medium reasoning effort should succeed.");
+
+            ToolChatRequest minimal = CreateWeatherToolRequest();
+            minimal.ReasoningEffort = ReasoningEffort.Minimal;
+            ToolChatResponse minimalResponse = await client.ToolChatAsync(minimal, token).ConfigureAwait(false);
+            SharedAssert.True(minimalResponse.Success, "Ollama tool chat with minimal reasoning effort should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalOpenAiChatRequest mediumRequest = DeserializeRecordedOpenAiRequest(bodies[0]);
+            LocalOpenAiChatRequest minimalRequest = DeserializeRecordedOpenAiRequest(bodies[1]);
+
+            SharedAssert.Equal("medium", mediumRequest.Think, "Ollama medium effort should send think as the level string.");
+            SharedAssert.True(minimalRequest.ThinkBool == false, "Ollama minimal effort should send think:false.");
+        }
+
+        private static async Task RunReasoningEffortProjectionDefaultsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            SharedAssert.Equal("minimal", new ReasoningEffort(ReasoningEffortLevel.Minimal).ToOpenAiWireValue(), "Minimal maps to OpenAI 'minimal'.");
+            SharedAssert.Equal("low", new ReasoningEffort(ReasoningEffortLevel.Low).ToOpenAiWireValue(), "Low maps to OpenAI 'low'.");
+            SharedAssert.Equal("medium", new ReasoningEffort(ReasoningEffortLevel.Medium).ToOpenAiWireValue(), "Medium maps to OpenAI 'medium'.");
+            SharedAssert.Equal("high", new ReasoningEffort(ReasoningEffortLevel.High).ToOpenAiWireValue(), "High maps to OpenAI 'high'.");
+
+            SharedAssert.Equal(0, new ReasoningEffort(ReasoningEffortLevel.Minimal).ToGeminiThinkingBudget(), "Minimal maps to Gemini budget 0.");
+            SharedAssert.Equal(1024, new ReasoningEffort(ReasoningEffortLevel.Low).ToGeminiThinkingBudget(), "Low maps to Gemini budget 1024.");
+            SharedAssert.Equal(8192, new ReasoningEffort(ReasoningEffortLevel.Medium).ToGeminiThinkingBudget(), "Medium maps to Gemini budget 8192.");
+            SharedAssert.Equal(-1, new ReasoningEffort(ReasoningEffortLevel.High).ToGeminiThinkingBudget(), "High maps to Gemini budget -1.");
+
+            SharedAssert.True(new ReasoningEffort(ReasoningEffortLevel.Minimal).ToOllamaThink() is false, "Minimal maps to Ollama think:false.");
+            SharedAssert.Equal("low", (string)new ReasoningEffort(ReasoningEffortLevel.Low).ToOllamaThink(), "Low maps to Ollama think 'low'.");
+            SharedAssert.Equal("medium", (string)new ReasoningEffort(ReasoningEffortLevel.Medium).ToOllamaThink(), "Medium maps to Ollama think 'medium'.");
+            SharedAssert.Equal("high", (string)new ReasoningEffort(ReasoningEffortLevel.High).ToOllamaThink(), "High maps to Ollama think 'high'.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunReasoningEffortPresetsAndImplicitAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            SharedAssert.Equal(ReasoningEffortLevel.Minimal, ReasoningEffort.Minimal.Level, "Minimal preset should carry the Minimal level.");
+            SharedAssert.Equal(ReasoningEffortLevel.Low, ReasoningEffort.Low.Level, "Low preset should carry the Low level.");
+            SharedAssert.Equal(ReasoningEffortLevel.Medium, ReasoningEffort.Medium.Level, "Medium preset should carry the Medium level.");
+            SharedAssert.Equal(ReasoningEffortLevel.High, ReasoningEffort.High.Level, "High preset should carry the High level.");
+
+            ReasoningEffort implicitEffort = ReasoningEffortLevel.Low;
+            SharedAssert.Equal(ReasoningEffortLevel.Low, implicitEffort.Level, "Implicit conversion should carry the level.");
+            SharedAssert.True(
+                implicitEffort.OpenAiValue == null && implicitEffort.GeminiThinkingBudget == null && implicitEffort.OllamaThink == null,
+                "Implicit conversion should leave all overrides unset.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunReasoningEffortOverridesWinAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using GeminiClient gemini = new GeminiClient(server.Endpoint, "test-key");
+            gemini.Model = "test-model";
+            gemini.TimeoutMs = 1000;
+            ToolChatRequest geminiRequest = CreateWeatherToolRequest();
+            geminiRequest.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+            ToolChatResponse geminiResponse = await gemini.ToolChatAsync(geminiRequest, token).ConfigureAwait(false);
+            SharedAssert.True(geminiResponse.Success, "Gemini tool chat with an overridden budget should succeed.");
+
+            using OpenAiClient openAi = CreateClient(server);
+            ToolChatRequest openAiRequest = CreateWeatherToolRequest();
+            openAiRequest.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+            ToolChatResponse openAiResponse = await openAi.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
+            SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat with a Gemini-only override should succeed.");
+
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Model = "test-model";
+            ollama.TimeoutMs = 1000;
+            ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
+            ollamaRequest.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Minimal) { OllamaThink = "true" };
+            ToolChatResponse ollamaResponse = await ollama.ToolChatAsync(ollamaRequest, token).ConfigureAwait(false);
+            SharedAssert.True(ollamaResponse.Success, "Ollama tool chat with a think override should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalGeminiRequest geminiRecorded = DeserializeRecordedGeminiRequest(bodies[0]);
+            LocalOpenAiChatRequest openAiRecorded = DeserializeRecordedOpenAiRequest(bodies[1]);
+            LocalOpenAiChatRequest ollamaRecorded = DeserializeRecordedOpenAiRequest(bodies[2]);
+
+            SharedAssert.Equal(16000, geminiRecorded.GenerationConfig!.ThinkingBudget, "Gemini override budget should win over the level default.");
+            SharedAssert.Equal("high", openAiRecorded.ReasoningEffort, "OpenAI mapping should still derive 'high' from the level when only the Gemini value is overridden.");
+            SharedAssert.True(ollamaRecorded.ThinkBool == true, "Ollama think override 'true' should be emitted as a JSON boolean.");
+        }
+
+        private static async Task RunReasoningEffortOverrideClampingAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            ReasoningEffort effort = new ReasoningEffort(ReasoningEffortLevel.Medium);
+
+            effort.GeminiThinkingBudget = -5;
+            SharedAssert.Equal(-1, effort.GeminiThinkingBudget, "Gemini budget should clamp to the -1 floor.");
+            effort.GeminiThinkingBudget = 999999;
+            SharedAssert.Equal(32768, effort.GeminiThinkingBudget, "Gemini budget should clamp to the 32768 ceiling.");
+            effort.GeminiThinkingBudget = null;
+            SharedAssert.True(effort.GeminiThinkingBudget == null, "Gemini budget should accept null to revert to the level default.");
+
+            effort.OpenAiValue = " HIGH ";
+            SharedAssert.Equal("high", effort.OpenAiValue, "OpenAI override should normalize case and whitespace.");
+            effort.OpenAiValue = "banana";
+            SharedAssert.True(effort.OpenAiValue == null, "Unrecognized OpenAI override should revert to null.");
+            SharedAssert.Equal("medium", effort.ToOpenAiWireValue(), "A reverted OpenAI override should fall back to the level default.");
+
+            effort.OllamaThink = "MEDIUM";
+            SharedAssert.Equal("medium", effort.OllamaThink, "Ollama override should normalize case.");
+            effort.OllamaThink = "maybe";
+            SharedAssert.True(effort.OllamaThink == null, "Unrecognized Ollama override should revert to null.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunReasoningEffortAbsentByDefaultAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using OpenAiClient openAi = CreateClient(server);
+            ToolChatResponse openAiResponse = await openAi.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat without reasoning effort should succeed.");
+
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Model = "test-model";
+            ollama.TimeoutMs = 1000;
+            ToolChatResponse ollamaResponse = await ollama.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(ollamaResponse.Success, "Ollama tool chat without reasoning effort should succeed.");
+
+            using GeminiClient gemini = new GeminiClient(server.Endpoint, "test-key");
+            gemini.Model = "test-model";
+            gemini.TimeoutMs = 1000;
+            ToolChatResponse geminiResponse = await gemini.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(geminiResponse.Success, "Gemini tool chat without reasoning effort should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalOpenAiChatRequest openAiRecorded = DeserializeRecordedOpenAiRequest(bodies[0]);
+            LocalOpenAiChatRequest ollamaRecorded = DeserializeRecordedOpenAiRequest(bodies[1]);
+            LocalGeminiRequest geminiRecorded = DeserializeRecordedGeminiRequest(bodies[2]);
+
+            SharedAssert.True(openAiRecorded.ReasoningEffort == null, "OpenAI-compatible request should omit reasoning_effort by default.");
+            SharedAssert.True(ollamaRecorded.Think == null && ollamaRecorded.ThinkBool == null, "Ollama request should omit think by default.");
+            SharedAssert.True(geminiRecorded.GenerationConfig != null && geminiRecorded.GenerationConfig.ThinkingBudget == null, "Gemini request should omit thinkingConfig by default.");
+        }
+
+        private static async Task RunReasoningEffortUndefinedLevelThrowsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            ReasoningEffort effort = new ReasoningEffort { Level = (ReasoningEffortLevel)999 };
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => { effort.ToOpenAiWireValue(); return Task.CompletedTask; },
+                "An undefined level should throw from ToOpenAiWireValue.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => { effort.ToGeminiThinkingBudget(); return Task.CompletedTask; },
+                "An undefined level should throw from ToGeminiThinkingBudget.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => { effort.ToOllamaThink(); return Task.CompletedTask; },
+                "An undefined level should throw from ToOllamaThink.").ConfigureAwait(false);
         }
 
         private static async Task RunOpenAiEmbeddingGenerationModelsAsync(CancellationToken token)

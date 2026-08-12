@@ -207,7 +207,7 @@ namespace PolyPrompt.Clients
             ToolChatRequest request,
             CancellationToken token = default)
         {
-            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP, out ReasoningEffort? reasoningEffort);
 
             ToolChatResponse toolResponse = new ToolChatResponse();
             toolResponse.Model = model;
@@ -215,7 +215,7 @@ namespace PolyPrompt.Clients
             Stopwatch sw = Stopwatch.StartNew();
 
             string url = _Endpoint.TrimEnd('/') + "/api/chat";
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, false);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, reasoningEffort, false);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -263,10 +263,10 @@ namespace PolyPrompt.Clients
             ToolChatRequest request,
             CancellationToken token = default)
         {
-            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP, out ReasoningEffort? reasoningEffort);
 
             string url = _Endpoint.TrimEnd('/') + "/api/chat";
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, true);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, model, maxTokens, temperature, topP, reasoningEffort, true);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -882,6 +882,7 @@ namespace PolyPrompt.Clients
             int maxTokens,
             double? temperature,
             double? topP,
+            ReasoningEffort? reasoningEffort,
             bool stream)
         {
             Dictionary<string, object> modelOptions = new Dictionary<string, object>();
@@ -899,6 +900,11 @@ namespace PolyPrompt.Clients
                 { "stream", stream },
                 { "options", modelOptions }
             };
+
+            if (reasoningEffort != null)
+            {
+                requestBody["think"] = reasoningEffort.ToOllamaThink();
+            }
 
             if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
             {

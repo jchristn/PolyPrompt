@@ -15,6 +15,9 @@ namespace Test.Shared
             request.Stream = GetBool(data, "stream");
             request.Messages = ParseOpenAiMessages(GetList(data, "messages"));
             request.Tools = ParseOpenAiTools(GetList(data, "tools"));
+            request.ReasoningEffort = GetString(data, "reasoning_effort");
+            request.Think = GetString(data, "think");
+            request.ThinkBool = GetBool(data, "think");
             return request;
         }
 
@@ -233,6 +236,13 @@ namespace Test.Shared
             config.MaxOutputTokens = GetInt(item, "maxOutputTokens");
             config.Temperature = GetDouble(item, "temperature");
             config.TopP = GetDouble(item, "topP");
+
+            Dictionary<string, object>? thinkingConfig = GetDictionary(item, "thinkingConfig");
+            if (thinkingConfig != null)
+            {
+                config.ThinkingBudget = GetInt(thinkingConfig, "thinkingBudget");
+            }
+
             return config;
         }
 

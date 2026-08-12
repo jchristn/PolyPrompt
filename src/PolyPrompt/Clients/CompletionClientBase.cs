@@ -17,6 +17,7 @@ namespace PolyPrompt.Clients
         private int _TimeoutMs = 120000;
         private double? _Temperature = null;
         private double? _TopP = null;
+        private ReasoningEffort? _ReasoningEffort = null;
         private string? _SystemPrompt = null;
         private readonly object _CallDetailsLock = new object();
         private readonly List<CompletionCallDetail> _CallDetails = new List<CompletionCallDetail>();
@@ -146,6 +147,16 @@ namespace PolyPrompt.Clients
                 else
                     _TopP = null;
             }
+        }
+
+        /// <summary>
+        /// Default reasoning effort applied to tool chat requests that do not specify their own. Set to
+        /// null to send no reasoning field unless a request supplies one.
+        /// </summary>
+        public ReasoningEffort? ReasoningEffort
+        {
+            get { return _ReasoningEffort; }
+            set { _ReasoningEffort = value; }
         }
 
         /// <summary>
@@ -579,6 +590,7 @@ namespace PolyPrompt.Clients
         /// <param name="maxTokens">Resolved max tokens.</param>
         /// <param name="temperature">Resolved temperature.</param>
         /// <param name="topP">Resolved top-p.</param>
+        /// <param name="reasoningEffort">Resolved reasoning effort, or null when none applies.</param>
         /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
         /// <exception cref="ArgumentException">Thrown when request.Messages is empty.</exception>
         protected void ResolveToolChatRequest(
@@ -586,7 +598,8 @@ namespace PolyPrompt.Clients
             out string model,
             out int maxTokens,
             out double? temperature,
-            out double? topP)
+            out double? topP,
+            out ReasoningEffort? reasoningEffort)
         {
             ArgumentNullException.ThrowIfNull(request);
 
@@ -597,6 +610,7 @@ namespace PolyPrompt.Clients
             maxTokens = request.MaxTokens ?? _MaxTokens;
             temperature = request.Temperature ?? _Temperature;
             topP = request.TopP ?? _TopP;
+            reasoningEffort = request.ReasoningEffort ?? _ReasoningEffort;
         }
 
         /// <summary>

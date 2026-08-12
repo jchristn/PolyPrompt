@@ -252,6 +252,32 @@ Provider protocol shapes differ:
 - **Ollama** uses `/api/chat` newline-delimited JSON chunks and parses streamed `message.tool_calls`.
 - **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same `GenerateContentRequest` body shape as `ToolChatAsync`: `contents`, optional `systemInstruction`, `tools.functionDeclarations`, and `toolConfig`. It parses streamed `GenerateContentResponse` chunks from `candidates[].content.parts[]`, including `text`, complete `functionCall` objects, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
 
+### Reasoning Effort
+
+Reasoning-capable models can trade latency and cost against depth of reasoning. `ReasoningEffort` is a provider-neutral value object: a semantic `ReasoningEffortLevel` (`Minimal`, `Low`, `Medium`, `High`) supplies per-provider defaults, and PolyPrompt projects it onto whatever each provider expects. Set it on the `ToolChatRequest` (or as a client-wide default via `client.ReasoningEffort`); the request value wins over the client default. When neither is set, no reasoning field is sent and the request body is unchanged.
+
+```csharp
+// Common case: a preset (or the level enum, via implicit conversion).
+ToolChatRequest request = new ToolChatRequest { ReasoningEffort = ReasoningEffort.High };
+request.Messages.Add(ChatMessage.User("Refactor this function and explain the tradeoffs."));
+ToolChatResponse response = await client.ToolChatAsync(request);
+
+// Tuned case: keep the semantic level, override just one provider's parameter.
+request.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+```
+
+Each level's default projection per provider (every value is individually overridable, and each override setter clamps/validates its input):
+
+| `ReasoningEffortLevel` | OpenAI `reasoning_effort` | Gemini `thinkingConfig.thinkingBudget` | Ollama `think` |
+|---|---|---|---|
+| `Minimal` | `"minimal"` | `0` (off) | `false` |
+| `Low` | `"low"` | `1024` | `"low"` |
+| `Medium` | `"medium"` | `8192` | `"medium"` |
+| `High` | `"high"` | `-1` (dynamic) | `"high"` |
+| _unset_ | *(omitted)* | *(omitted)* | *(omitted)* |
+
+Overrides live on the value object: `OpenAiValue` (clamped to `minimal`/`low`/`medium`/`high`), `GeminiThinkingBudget` (clamped to `-1..32768`), and `OllamaThink` (clamped to `low`/`medium`/`high`/`true`/`false`). An unrecognized string override reverts to null and falls back to the level default. Ollama support is model-dependent (for example `gpt-oss`); providers with no reasoning concept simply ignore an omitted field.
+
 ### Streaming Chat
 
 ```csharp
@@ -611,6 +637,7 @@ Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`) has a cons
 | `TimeoutMs` | `int` | `120000` | HTTP timeout in milliseconds; must be greater than zero |
 | `Temperature` | `double?` | `null` | Sampling temperature (0.0 to 2.0) |
 | `TopP` | `double?` | `null` | Nucleus sampling threshold (0.0 to 1.0) |
+| `ReasoningEffort` | `ReasoningEffort?` | `null` | Default reasoning effort for tool chat; a request value overrides it |
 | `SystemPrompt` | `string?` | `null` | System prompt for chat completions |
 | `CallDetails` | `List<CompletionCallDetail>` | empty | Detached snapshot of recorded HTTP call details |
 | `MaxCallDetails` | `int` | `1000` | Maximum retained call details; set to 0 to disable recording |
@@ -642,6 +669,7 @@ Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`) has a cons
 | Type | Purpose |
 |------|---------|
 | `ToolChatRequest` | Contains messages, tool definitions, tool choice, and generation overrides |
+| `ReasoningEffort` | Provider-neutral reasoning effort: a `ReasoningEffortLevel` plus clamped per-provider overrides and projection methods |
 | `ChatMessage` | Represents system, user, assistant, and tool-result messages |
 | `ToolDefinition` | Declares a callable function with a JSON Schema parameter object |
 | `ToolCall` | Represents a model-requested tool name and JSON arguments |
@@ -682,6 +710,7 @@ Each provider exposes option classes that extend the base options with provider-
 | Chat (streaming) | Yes | Yes | Yes |
 | Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes |
 | Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes |
+| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget |
 | Text Generation (non-streaming) | Yes | Legacy completions API only | Yes |
 | Text Generation (streaming) | Yes | Legacy completions API only | Yes |
 | Embeddings (single) | Yes | Yes | Yes |

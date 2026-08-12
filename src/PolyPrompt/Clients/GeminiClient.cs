@@ -160,7 +160,7 @@ namespace PolyPrompt.Clients
             ToolChatRequest request,
             CancellationToken token = default)
         {
-            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP, out ReasoningEffort? reasoningEffort);
 
             ToolChatResponse toolResponse = new ToolChatResponse();
             toolResponse.Model = model;
@@ -171,7 +171,7 @@ namespace PolyPrompt.Clients
                 + "/v1beta/models/" + model + ":generateContent"
                 + "?key=" + _ApiKey;
 
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP, reasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -219,13 +219,13 @@ namespace PolyPrompt.Clients
             ToolChatRequest request,
             CancellationToken token = default)
         {
-            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP);
+            ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP, out ReasoningEffort? reasoningEffort);
 
             string url = _Endpoint.TrimEnd('/')
                 + "/v1beta/models/" + model + ":streamGenerateContent"
                 + "?alt=sse&key=" + _ApiKey;
 
-            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP);
+            Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP, reasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -790,7 +790,8 @@ namespace PolyPrompt.Clients
             ToolChatRequest request,
             int maxTokens,
             double? temperature,
-            double? topP)
+            double? topP,
+            ReasoningEffort? reasoningEffort)
         {
             Dictionary<string, object> generationConfig = new Dictionary<string, object>
             {
@@ -799,6 +800,14 @@ namespace PolyPrompt.Clients
 
             if (temperature.HasValue) generationConfig["temperature"] = temperature.Value;
             if (topP.HasValue) generationConfig["topP"] = topP.Value;
+
+            if (reasoningEffort != null)
+            {
+                generationConfig["thinkingConfig"] = new Dictionary<string, object>
+                {
+                    { "thinkingBudget", reasoningEffort.ToGeminiThinkingBudget() }
+                };
+            }
 
             Dictionary<string, object> requestBody = new Dictionary<string, object>
             {

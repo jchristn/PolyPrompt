@@ -80,6 +80,12 @@ namespace PolyPrompt.Models
             }
         }
 
+        /// <summary>
+        /// Optional reasoning effort for reasoning-capable models. Null uses the client default, and when
+        /// both are null no reasoning field is sent (the provider default is used).
+        /// </summary>
+        public ReasoningEffort? ReasoningEffort { get; set; } = null;
+
         #endregion
     }
 }
