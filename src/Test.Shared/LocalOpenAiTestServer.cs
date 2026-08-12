@@ -131,6 +131,36 @@ namespace Test.Shared
                         return;
                     }
 
+                    if (HasMessageContaining(request, "reasonempty"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"cc-reasonempty\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"pong\",\"reasoning_content\":\"\"},\"finish_reason\":\"stop\",\"index\":0}]}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && HasMessageContaining(request, "reasoncapture") && HasToolDefinitions(request))
+                    {
+                        await WriteStreamingOpenAiToolChatReasoningAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && HasMessageContaining(request, "reasoncapture"))
+                    {
+                        await WriteStreamingOpenAiChatReasoningAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (HasMessageContaining(request, "reasoncapture"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"cc-reason\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"pong\",\"reasoning_content\":\"Let me think.\"},\"finish_reason\":\"stop\",\"index\":0}]}").ConfigureAwait(false);
+                        return;
+                    }
+
                     if (request.Stream == true && HasToolDefinitions(request) && HasMessageContaining(request, "hang tool stream"))
                     {
                         await WriteStreamingOpenAiToolChatHangAsync(context).ConfigureAwait(false);
@@ -220,6 +250,30 @@ namespace Test.Shared
                     if (request == null)
                     {
                         await WriteJsonAsync(context, 400, "{\"error\":\"invalid request\"}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (HasMessageContaining(request, "reasoncapture") && HasToolDefinitions(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"thinking\":\"Let me think.\",\"tool_calls\":[{\"function\":{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Seattle\"}}}]},\"done\":true,\"done_reason\":\"tool_calls\"}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && HasMessageContaining(request, "reasoncapture"))
+                    {
+                        await WriteStreamingOllamaChatReasoningAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (HasMessageContaining(request, "reasoncapture"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"pong\",\"thinking\":\"Let me think.\"},\"done\":true,\"done_reason\":\"stop\"}").ConfigureAwait(false);
                         return;
                     }
 
@@ -375,7 +429,11 @@ namespace Test.Shared
 
                     if (path.EndsWith(":streamGenerateContent", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (HasFunctionDeclarations(request))
+                        if (GeminiHasText(request, "reasoncapture"))
+                        {
+                            await WriteStreamingGeminiChatReasoningAsync(context).ConfigureAwait(false);
+                        }
+                        else if (HasFunctionDeclarations(request))
                         {
                             await WriteStreamingGeminiToolChatAsync(context).ConfigureAwait(false);
                         }
@@ -387,6 +445,13 @@ namespace Test.Shared
                         {
                             await WriteStreamingGeminiChatAsync(context).ConfigureAwait(false);
                         }
+                    }
+                    else if (GeminiHasText(request, "reasoncapture"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"responseId\":\"gemini-reason-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"thought\":true,\"text\":\"Let me think.\"},{\"text\":\"pong\"}]},\"finishReason\":\"STOP\",\"index\":0}]}").ConfigureAwait(false);
                     }
                     else if (HasFunctionDeclarations(request))
                     {
@@ -479,6 +544,14 @@ namespace Test.Shared
                 && request.Contents.Any(content => content.Parts != null
                     && content.Parts.Any(part => part.FunctionResponse != null
                         && !string.IsNullOrWhiteSpace(part.FunctionResponse.Name)));
+        }
+
+        private static bool GeminiHasText(LocalGeminiRequest request, string value)
+        {
+            return request.Contents != null
+                && request.Contents.Any(content => content.Parts != null
+                    && content.Parts.Any(part => part.Text != null
+                        && part.Text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0));
         }
 
         private async Task WriteStreamingOpenAiChatAsync(HttpListenerContext context)
@@ -685,6 +758,64 @@ namespace Test.Shared
             catch (OperationCanceledException)
             {
             }
+        }
+
+        private async Task WriteStreamingOpenAiChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-reason-stream\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"reasoning_content\":\"Let me \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-reason-stream\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"reasoning_content\":\"think.\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-reason-stream\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"content\":\"pong\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-reason-stream\",\"model\":\"test-model\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOpenAiToolChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-tool-reason\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"Planning \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-tool-reason\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"reasoning_content\":\"the call.\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-tool-reason\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"content\":\"Checking. \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-tool-reason\",\"model\":\"test-model\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle\\\"}\"}}]},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"cc-tool-reason\",\"model\":\"test-model\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingOllamaChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/x-ndjson";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"thinking\":\"Let me \",\"content\":\"\"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"thinking\":\"think.\",\"content\":\"\"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"pong\"},\"done\":false}\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"done\":true,\"done_reason\":\"stop\",\"prompt_eval_count\":3,\"eval_count\":2,\"total_duration\":1000,\"load_duration\":100,\"prompt_eval_duration\":200,\"eval_duration\":300}\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingGeminiChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-reason-stream\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"thought\":true,\"text\":\"Let me think.\"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-reason-stream\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"pong\"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-reason-stream\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}]}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
         }
 
         private static async Task WriteJsonAsync(HttpListenerContext context, int statusCode, string json)

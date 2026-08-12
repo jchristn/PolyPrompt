@@ -11,6 +11,13 @@ namespace PolyPrompt.Models
         public string? Text { get; set; }
 
         /// <summary>
+        /// Reasoning ("thinking") content of this chunk, kept separate from <see cref="Text"/>. Null when the
+        /// chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI reasoning_content,
+        /// Ollama message.thinking, Gemini thought parts).
+        /// </summary>
+        public string? ReasoningText { get; set; }
+
+        /// <summary>
         /// The model that generated this chunk.
         /// </summary>
         public string? Model { get; set; }

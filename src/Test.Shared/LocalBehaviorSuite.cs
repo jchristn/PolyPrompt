@@ -80,6 +80,16 @@ namespace Test.Shared
                     Case("reasoning_effort_override_clamping", "Reasoning effort override setters clamp/validate", RunReasoningEffortOverrideClampingAsync),
                     Case("reasoning_effort_absent_by_default", "Reasoning effort is omitted when unset", RunReasoningEffortAbsentByDefaultAsync),
                     Case("reasoning_effort_undefined_level_throws", "Reasoning effort undefined level throws", RunReasoningEffortUndefinedLevelThrowsAsync),
+                    Case("reasoning_openai_chat", "OpenAI non-streaming chat surfaces reasoning", RunReasoningOpenAiChatAsync),
+                    Case("reasoning_openai_chat_streaming", "OpenAI streaming chat surfaces reasoning", RunReasoningOpenAiChatStreamingAsync),
+                    Case("reasoning_openai_toolchat_streaming", "OpenAI streaming tool chat surfaces reasoning without leaking into text", RunReasoningOpenAiToolChatStreamingAsync),
+                    Case("reasoning_ollama_toolchat", "Ollama non-streaming tool chat surfaces reasoning", RunReasoningOllamaToolChatAsync),
+                    Case("reasoning_ollama_chat_streaming", "Ollama streaming chat surfaces reasoning", RunReasoningOllamaChatStreamingAsync),
+                    Case("reasoning_gemini_chat", "Gemini non-streaming chat splits thought and text", RunReasoningGeminiChatAsync),
+                    Case("reasoning_gemini_chat_streaming", "Gemini streaming chat splits thought and text", RunReasoningGeminiChatStreamingAsync),
+                    Case("reasoning_absent_by_default", "No reasoning leaves the fields null", RunReasoningAbsentByDefaultAsync),
+                    Case("reasoning_empty_is_null", "Empty reasoning normalizes to null", RunReasoningEmptyIsNullAsync),
+                    Case("reasoning_not_resent", "Reasoning is not carried into a follow-up message", RunReasoningNotResentAsync),
                     Case("openai_embedding_generation_models", "OpenAI-compatible embeddings, generation, and models", RunOpenAiEmbeddingGenerationModelsAsync),
                     Case("ollama_embedding_generation_models", "Ollama embeddings, generation, and models", RunOllamaEmbeddingGenerationModelsAsync),
                     Case("gemini_embedding_generation_models", "Gemini embeddings, generation, and models", RunGeminiEmbeddingGenerationModelsAsync),
@@ -1406,6 +1416,165 @@ namespace Test.Shared
             await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
                 () => { effort.ToOllamaThink(); return Task.CompletedTask; },
                 "An undefined level should throw from ToOllamaThink.").ConfigureAwait(false);
+        }
+
+        private static async Task RunReasoningOpenAiChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "OpenAI reasoning chat should succeed.");
+            SharedAssert.Equal("pong", response.Text, "OpenAI reasoning chat should return the answer text.");
+            SharedAssert.Equal("Let me think.", response.Reasoning, "OpenAI reasoning chat should surface reasoning.");
+        }
+
+        private static async Task RunReasoningOpenAiChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "OpenAI reasoning streaming chat should start.");
+            SharedAssert.Equal("pong", CombineChatText(chunks), "OpenAI reasoning streaming chat should assemble the answer.");
+            SharedAssert.Equal("Let me think.", stream.Reasoning, "OpenAI reasoning streaming chat should accumulate reasoning.");
+            SharedAssert.True(chunks.Any(c => !string.IsNullOrEmpty(c.ReasoningText)), "reasoning deltas should be present on chunks.");
+            SharedAssert.False(CombineChatText(chunks).Contains("think", StringComparison.Ordinal), "reasoning must not leak into text.");
+        }
+
+        private static async Task RunReasoningOpenAiToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "OpenAI reasoning tool chat should start.");
+            SharedAssert.Equal("Planning the call.", stream.Reasoning, "OpenAI reasoning tool chat should accumulate reasoning.");
+            SharedAssert.Equal("Checking. ", stream.Text, "OpenAI reasoning tool chat should accumulate answer text separately.");
+            SharedAssert.True(stream.ToolCalls.Count == 1, "OpenAI reasoning tool chat should still surface the tool call.");
+            SharedAssert.True(chunks.Any(c => !string.IsNullOrEmpty(c.ReasoningText)), "reasoning deltas should be present on chunks.");
+            SharedAssert.False((stream.Text ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not leak into text.");
+        }
+
+        private static async Task RunReasoningOllamaToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Ollama reasoning tool chat should succeed.");
+            SharedAssert.Equal("Let me think.", response.Reasoning, "Ollama reasoning tool chat should surface thinking.");
+            SharedAssert.True(response.ToolCalls.Count == 1, "Ollama reasoning tool chat should surface the tool call.");
+        }
+
+        private static async Task RunReasoningOllamaChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "Ollama reasoning streaming chat should start.");
+            SharedAssert.Equal("pong", CombineChatText(chunks), "Ollama reasoning streaming chat should assemble the answer.");
+            SharedAssert.Equal("Let me think.", stream.Reasoning, "Ollama reasoning streaming chat should accumulate thinking.");
+        }
+
+        private static async Task RunReasoningGeminiChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Gemini reasoning chat should succeed.");
+            SharedAssert.Equal("pong", response.Text, "Gemini reasoning chat should return the answer text.");
+            SharedAssert.Equal("Let me think.", response.Reasoning, "Gemini reasoning chat should surface the thought part.");
+        }
+
+        private static async Task RunReasoningGeminiChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "Gemini reasoning streaming chat should start.");
+            SharedAssert.Equal("pong", CombineChatText(chunks), "Gemini reasoning streaming chat should assemble the answer.");
+            SharedAssert.Equal("Let me think.", stream.Reasoning, "Gemini reasoning streaming chat should accumulate the thought.");
+            SharedAssert.False(CombineChatText(chunks).Contains("Let me", StringComparison.Ordinal), "the thought must not leak into text.");
+        }
+
+        private static async Task RunReasoningAbsentByDefaultAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+
+            using OpenAiClient openAi = CreateClient(server);
+            ChatResponse openAiResponse = await openAi.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(openAiResponse.Reasoning == null, "OpenAI chat without reasoning should leave Reasoning null.");
+
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Model = "test-model";
+            ollama.TimeoutMs = 1000;
+            ChatResponse ollamaResponse = await ollama.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(ollamaResponse.Reasoning == null, "Ollama chat without reasoning should leave Reasoning null.");
+
+            using GeminiClient gemini = new GeminiClient(server.Endpoint, "test-key");
+            gemini.Model = "test-model";
+            gemini.TimeoutMs = 1000;
+            ChatResponse geminiResponse = await gemini.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(geminiResponse.Reasoning == null, "Gemini chat without reasoning should leave Reasoning null.");
+        }
+
+        private static async Task RunReasoningEmptyIsNullAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ChatResponse response = await client.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "empty-reasoning response should succeed.");
+            SharedAssert.Equal("pong", response.Text, "empty-reasoning response should still return text.");
+            SharedAssert.True(response.Reasoning == null, "empty reasoning should normalize to null.");
+        }
+
+        private static async Task RunReasoningNotResentAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using OpenAiClient client = CreateClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            SharedAssert.NotEmpty(stream.Reasoning, "precondition: the turn produced reasoning.");
+
+            ChatMessage assistant = stream.ToAssistantMessage();
+            SharedAssert.False((assistant.Content ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not be carried into the follow-up message content.");
+            foreach (ToolCall call in assistant.ToolCalls)
+            {
+                SharedAssert.False((call.ArgumentsJson ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not appear in tool call arguments.");
+            }
+        }
+
+        private static ToolChatRequest CreateReasoningToolRequest()
+        {
+            ToolChatRequest request = new ToolChatRequest();
+            request.Messages.Add(ChatMessage.User("reasoncapture: what is the weather in Seattle?"));
+            request.Tools.Add(ToolDefinition.Function(
+                "get_weather",
+                "Get current weather for a city.",
+                WeatherParameters()));
+            return request;
         }
 
         private static async Task RunOpenAiEmbeddingGenerationModelsAsync(CancellationToken token)

@@ -278,6 +278,28 @@ Each level's default projection per provider (every value is individually overri
 
 Overrides live on the value object: `OpenAiValue` (clamped to `minimal`/`low`/`medium`/`high`), `GeminiThinkingBudget` (clamped to `-1..32768`), and `OllamaThink` (clamped to `low`/`medium`/`high`/`true`/`false`). An unrecognized string override reverts to null and falls back to the level default. Ollama support is model-dependent (for example `gpt-oss`); providers with no reasoning concept simply ignore an omitted field.
 
+### Reasoning / Thinking Output
+
+Where effort controls how hard a model thinks, this returns the thinking itself. A reasoning model emits its deliberation on a separate channel — OpenAI `reasoning_content`, Ollama `message.thinking`, Gemini `thought` parts — and PolyPrompt surfaces it distinct from the answer text. Streamed chunks carry a `ReasoningText` delta; responses carry an accumulated `Reasoning`. Both are null when the model produced no reasoning, so responses without it are unchanged.
+
+```csharp
+ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
+await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
+{
+    if (chunk.ReasoningText != null) Console.Write(chunk.ReasoningText); // the thinking
+    if (chunk.Text != null) Console.Write(chunk.Text);                   // the answer
+}
+// After enumeration: stream.Reasoning holds the full thinking, stream.Text the full answer.
+```
+
+`Reasoning` is available on `ChatResponse`, `ChatStreamingResponse`, `ToolChatResponse`, and `ToolChatStreamingResponse`; `ReasoningText` is on `ChatStreamingChunk` and `ToolChatStreamingChunk`. Reasoning is kept out of `Text`, normalized to null when empty, and is return-only: `ToAssistantMessage()` never carries it into a follow-up request, since providers do not want their own reasoning echoed back.
+
+| Provider | Reasoning source |
+|---|---|
+| OpenAI-compatible | `reasoning_content` (fallback `reasoning`) |
+| Ollama | `message.thinking` |
+| Gemini | `content.parts[]` with `thought: true` |
+
 ### Streaming Chat
 
 ```csharp
@@ -711,6 +733,7 @@ Each provider exposes option classes that extend the base options with provider-
 | Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes |
 | Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes |
 | Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget |
+| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts |
 | Text Generation (non-streaming) | Yes | Legacy completions API only | Yes |
 | Text Generation (streaming) | Yes | Legacy completions API only | Yes |
 | Embeddings (single) | Yes | Yes | Yes |

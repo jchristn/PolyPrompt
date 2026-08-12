@@ -81,6 +81,13 @@ namespace PolyPrompt.Models
         /// </summary>
         public string? ResponseId { get; set; }
 
+        /// <summary>
+        /// Reasoning ("thinking") content accumulated from streamed chunks, kept separate from the text
+        /// chunks. Null when the model produced no reasoning. Populated as chunks are consumed; a convenience
+        /// so callers need not re-concatenate <see cref="ChatStreamingChunk.ReasoningText"/> themselves.
+        /// </summary>
+        public string? Reasoning { get; set; }
+
         private static async IAsyncEnumerable<ChatStreamingChunk> EmptyChunks()
         {
             yield break;

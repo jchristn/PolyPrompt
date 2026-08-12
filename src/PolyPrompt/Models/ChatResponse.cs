@@ -12,6 +12,12 @@ namespace PolyPrompt.Models
         public string? Text { get; set; }
 
         /// <summary>
+        /// Reasoning ("thinking") content returned by the model, kept separate from <see cref="Text"/>. Null
+        /// when the model produced no reasoning. Returned to the caller for display or logging.
+        /// </summary>
+        public string? Reasoning { get; set; }
+
+        /// <summary>
         /// The model name used for this completion.
         /// </summary>
         public string Model { get; set; } = string.Empty;

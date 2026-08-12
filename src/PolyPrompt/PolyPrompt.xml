@@ -425,6 +425,15 @@
             <param name="key">The key to look up.</param>
             <returns>The long value or null.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.NormalizeReasoning(System.String)">
+            <summary>
+            Normalizes a reasoning value: returns null for null/empty/whitespace, otherwise the value
+            unchanged. Callers use this so an absent or empty reasoning channel surfaces as null rather than
+            an empty string.
+            </summary>
+            <param name="value">The raw reasoning string.</param>
+            <returns>The value, or null when it is null/empty/whitespace.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.IsTruthy(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
             <summary>
             Check if a dictionary value represents a truthy boolean.
@@ -688,6 +697,12 @@
             The completion text returned by the model.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Reasoning">
+            <summary>
+            Reasoning ("thinking") content returned by the model, kept separate from <see cref="P:PolyPrompt.Models.ChatResponse.Text"/>. Null
+            when the model produced no reasoning. Returned to the caller for display or logging.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ChatResponse.Model">
             <summary>
             The model name used for this completion.
@@ -721,6 +736,13 @@
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.Text">
             <summary>
             The text content of this chunk. May be null or empty for metadata-only chunks.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.ReasoningText">
+            <summary>
+            Reasoning ("thinking") content of this chunk, kept separate from <see cref="P:PolyPrompt.Models.ChatStreamingChunk.Text"/>. Null when the
+            chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI reasoning_content,
+            Ollama message.thinking, Gemini thought parts).
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.Model">
@@ -834,6 +856,13 @@
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.ResponseId">
             <summary>
             Response identifier for correlation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Reasoning">
+            <summary>
+            Reasoning ("thinking") content accumulated from streamed chunks, kept separate from the text
+            chunks. Null when the model produced no reasoning. Populated as chunks are consumed; a convenience
+            so callers need not re-concatenate <see cref="P:PolyPrompt.Models.ChatStreamingChunk.ReasoningText"/> themselves.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ChatStreamingUsage">
@@ -1472,6 +1501,13 @@
             Assistant text returned by the model. May be null when the model requested tool calls.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Reasoning">
+            <summary>
+            Reasoning ("thinking") content returned by the model, kept separate from <see cref="P:PolyPrompt.Models.ToolChatResponse.Text"/>. Null
+            when the model produced no reasoning. Returned to the caller for display or logging; it is not
+            carried into a follow-up request.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ToolChatResponse.ToolCalls">
             <summary>
             Tool calls requested by the model.
@@ -1528,6 +1564,13 @@
             Assistant text content of this chunk. May be null or empty for metadata-only or tool-call chunks.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ReasoningText">
+            <summary>
+            Reasoning ("thinking") content of this chunk, kept separate from <see cref="P:PolyPrompt.Models.ToolChatStreamingChunk.Text"/>. Null when the
+            chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI
+            reasoning_content, Ollama message.thinking, Gemini thought parts).
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ToolCallDeltas">
             <summary>
             Tool call deltas emitted in this chunk.
@@ -1574,6 +1617,13 @@
         <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Text">
             <summary>
             Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Reasoning">
+            <summary>
+            Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
+            <see cref="P:PolyPrompt.Models.ToolChatStreamingResponse.Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
+            This is returned to the caller for display or logging; it is not carried into a follow-up request.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCalls">

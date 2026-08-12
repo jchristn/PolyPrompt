@@ -13,6 +13,14 @@ namespace PolyPrompt.Clients
     /// </summary>
     public class GeminiClient : CompletionClientBase
     {
+        #region Private-Members
+
+        // Gemini marks reasoning ("thought summary") parts with a truthy "thought" flag. Centralized so the
+        // literal is defined once rather than inlined.
+        private const string ThoughtKey = "thought";
+
+        #endregion
+
         #region Constructors-and-Factories
 
         /// <summary>
@@ -77,6 +85,7 @@ namespace PolyPrompt.Clients
                 }
 
                 chatResponse.Text = ExtractTextFromResponse(responseBody);
+                chatResponse.Reasoning = ExtractReasoningFromResponse(responseBody);
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -998,9 +1007,18 @@ namespace PolyPrompt.Clients
                     string? text = part["text"]?.ToString();
                     if (!string.IsNullOrWhiteSpace(text))
                     {
-                        toolResponse.Text = string.IsNullOrEmpty(toolResponse.Text)
-                            ? text
-                            : toolResponse.Text + text;
+                        if (IsTruthy(part, ThoughtKey))
+                        {
+                            toolResponse.Reasoning = string.IsNullOrEmpty(toolResponse.Reasoning)
+                                ? text
+                                : toolResponse.Reasoning + text;
+                        }
+                        else
+                        {
+                            toolResponse.Text = string.IsNullOrEmpty(toolResponse.Text)
+                                ? text
+                                : toolResponse.Text + text;
+                        }
                     }
                 }
 
@@ -1160,9 +1178,28 @@ namespace PolyPrompt.Clients
                                 string partsJson = _Serializer.SerializeJson(contentObj["parts"], false);
                                 List<Dictionary<string, object>>? parts = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(partsJson);
 
-                                if (parts != null && parts.Count > 0 && parts[0].ContainsKey("text"))
+                                if (parts != null)
                                 {
-                                    streamChunk.Text = parts[0]["text"]?.ToString();
+                                    foreach (Dictionary<string, object> part in parts)
+                                    {
+                                        if (!part.ContainsKey("text")) continue;
+                                        string? partText = part["text"]?.ToString();
+                                        if (string.IsNullOrEmpty(partText)) continue;
+
+                                        // A thought part is reasoning; keep it out of Text.
+                                        if (IsTruthy(part, ThoughtKey))
+                                        {
+                                            streamChunk.ReasoningText = string.IsNullOrEmpty(streamChunk.ReasoningText)
+                                                ? partText
+                                                : streamChunk.ReasoningText + partText;
+                                        }
+                                        else
+                                        {
+                                            streamChunk.Text = string.IsNullOrEmpty(streamChunk.Text)
+                                                ? partText
+                                                : streamChunk.Text + partText;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1255,9 +1292,18 @@ namespace PolyPrompt.Clients
                                         if (part.ContainsKey("text"))
                                         {
                                             string? text = part["text"]?.ToString();
-                                            streamChunk.Text = string.IsNullOrEmpty(streamChunk.Text)
-                                                ? text
-                                                : streamChunk.Text + text;
+                                            if (IsTruthy(part, ThoughtKey))
+                                            {
+                                                streamChunk.ReasoningText = string.IsNullOrEmpty(streamChunk.ReasoningText)
+                                                    ? text
+                                                    : streamChunk.ReasoningText + text;
+                                            }
+                                            else
+                                            {
+                                                streamChunk.Text = string.IsNullOrEmpty(streamChunk.Text)
+                                                    ? text
+                                                    : streamChunk.Text + text;
+                                            }
                                         }
 
                                         if (part.ContainsKey("functionCall"))
@@ -1406,10 +1452,49 @@ namespace PolyPrompt.Clients
 
         private string? ExtractTextFromResponse(string responseBody)
         {
+            List<Dictionary<string, object>>? parts = ExtractResponseParts(responseBody, warnOnMissing: true);
+            if (parts == null) return null;
+
+            string combined = string.Empty;
+            foreach (Dictionary<string, object> part in parts)
+            {
+                // A thought part is reasoning, not answer text; it must never appear in Text.
+                if (IsTruthy(part, ThoughtKey)) continue;
+                if (part.ContainsKey("text"))
+                {
+                    string? text = part["text"]?.ToString();
+                    if (!string.IsNullOrEmpty(text)) combined += text;
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(combined) ? null : combined;
+        }
+
+        private string? ExtractReasoningFromResponse(string responseBody)
+        {
+            List<Dictionary<string, object>>? parts = ExtractResponseParts(responseBody, warnOnMissing: false);
+            if (parts == null) return null;
+
+            string combined = string.Empty;
+            foreach (Dictionary<string, object> part in parts)
+            {
+                if (!IsTruthy(part, ThoughtKey)) continue;
+                if (part.ContainsKey("text"))
+                {
+                    string? text = part["text"]?.ToString();
+                    if (!string.IsNullOrEmpty(text)) combined += text;
+                }
+            }
+
+            return NormalizeReasoning(combined);
+        }
+
+        private List<Dictionary<string, object>>? ExtractResponseParts(string responseBody, bool warnOnMissing)
+        {
             Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
             if (responseObj == null || !responseObj.ContainsKey("candidates"))
             {
-                _Logging.Warn(_Header + "response missing 'candidates' field");
+                if (warnOnMissing) _Logging.Warn(_Header + "response missing 'candidates' field");
                 return null;
             }
 
@@ -1427,10 +1512,7 @@ namespace PolyPrompt.Clients
             string partsJson = _Serializer.SerializeJson(contentObj["parts"], false);
             List<Dictionary<string, object>>? parts = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(partsJson);
 
-            if (parts == null || parts.Count == 0) return null;
-
-            string? completionText = parts[0].ContainsKey("text") ? parts[0]["text"]?.ToString() : null;
-            return string.IsNullOrWhiteSpace(completionText) ? null : completionText;
+            return parts != null && parts.Count > 0 ? parts : null;
         }
 
         #endregion

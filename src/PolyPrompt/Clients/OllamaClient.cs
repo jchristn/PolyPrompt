@@ -17,6 +17,9 @@ namespace PolyPrompt.Clients
 
         private int? _ContextLength = null;
 
+        // Provider wire field name, centralized so the literal is defined once rather than inlined.
+        private const string ThinkingKey = "thinking";
+
         #endregion
 
         #region Public-Members
@@ -126,6 +129,7 @@ namespace PolyPrompt.Clients
 
                 string? completionText = message["content"]?.ToString();
                 chatResponse.Text = string.IsNullOrWhiteSpace(completionText) ? null : completionText.Trim();
+                chatResponse.Reasoning = message.ContainsKey(ThinkingKey) ? NormalizeReasoning(message[ThinkingKey]?.ToString()) : null;
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -1009,6 +1013,11 @@ namespace PolyPrompt.Clients
                 toolResponse.Text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             }
 
+            if (message.ContainsKey(ThinkingKey))
+            {
+                toolResponse.Reasoning = NormalizeReasoning(message[ThinkingKey]?.ToString());
+            }
+
             if (message.ContainsKey("tool_calls"))
             {
                 string toolCallsJson = _Serializer.SerializeJson(message["tool_calls"], false);
@@ -1133,6 +1142,11 @@ namespace PolyPrompt.Clients
                     {
                         streamChunk.Text = msg["content"]?.ToString();
                     }
+
+                    if (msg != null && msg.ContainsKey(ThinkingKey))
+                    {
+                        streamChunk.ReasoningText = NormalizeReasoning(msg[ThinkingKey]?.ToString());
+                    }
                 }
 
                 bool done = IsTruthy(chunk, "done");
@@ -1199,6 +1213,11 @@ namespace PolyPrompt.Clients
                         if (msg.ContainsKey("content"))
                         {
                             streamChunk.Text = msg["content"]?.ToString();
+                        }
+
+                        if (msg.ContainsKey(ThinkingKey))
+                        {
+                            streamChunk.ReasoningText = NormalizeReasoning(msg[ThinkingKey]?.ToString());
                         }
 
                         if (msg.ContainsKey("tool_calls"))

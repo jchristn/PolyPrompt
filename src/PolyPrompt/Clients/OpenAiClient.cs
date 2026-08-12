@@ -13,6 +13,14 @@ namespace PolyPrompt.Clients
     /// </summary>
     public class OpenAiClient : CompletionClientBase
     {
+        #region Private-Members
+
+        // Provider wire field names, centralized so the literals are defined once rather than inlined.
+        private const string ReasoningContentKey = "reasoning_content";
+        private const string ReasoningKey = "reasoning";
+
+        #endregion
+
         #region Constructors-and-Factories
 
         /// <summary>
@@ -120,6 +128,7 @@ namespace PolyPrompt.Clients
 
                 string? completionText = message["content"]?.ToString();
                 chatResponse.Text = string.IsNullOrWhiteSpace(completionText) ? null : completionText.Trim();
+                chatResponse.Reasoning = ReadOpenAiReasoning(message);
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -864,6 +873,8 @@ namespace PolyPrompt.Clients
                 toolResponse.Text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             }
 
+            toolResponse.Reasoning = ReadOpenAiReasoning(message);
+
             if (message.ContainsKey("tool_calls"))
             {
                 string toolCallsJson = _Serializer.SerializeJson(message["tool_calls"], false);
@@ -895,6 +906,23 @@ namespace PolyPrompt.Clients
                 ? function["arguments"]?.ToString() ?? "{}"
                 : "{}";
             return toolCall;
+        }
+
+        private static string? ReadOpenAiReasoning(Dictionary<string, object> obj)
+        {
+            // Reasoning models on the OpenAI-compatible surface use "reasoning_content"; some servers use
+            // "reasoning". Read either and normalize an empty value to null.
+            string? value = null;
+            if (obj.ContainsKey(ReasoningContentKey) && obj[ReasoningContentKey] != null)
+            {
+                value = obj[ReasoningContentKey]?.ToString();
+            }
+            else if (obj.ContainsKey(ReasoningKey) && obj[ReasoningKey] != null)
+            {
+                value = obj[ReasoningKey]?.ToString();
+            }
+
+            return NormalizeReasoning(value);
         }
 
         private static string NormalizeOpenAiRole(string? role)
@@ -1004,6 +1032,11 @@ namespace PolyPrompt.Clients
                             {
                                 streamChunk.Text = delta["content"]?.ToString();
                             }
+
+                            if (delta != null)
+                            {
+                                streamChunk.ReasoningText = ReadOpenAiReasoning(delta);
+                            }
                         }
                     }
                 }
@@ -1094,6 +1127,8 @@ namespace PolyPrompt.Clients
                                 {
                                     streamChunk.Text = delta["content"]?.ToString();
                                 }
+
+                                streamChunk.ReasoningText = ReadOpenAiReasoning(delta);
 
                                 if (delta.ContainsKey("tool_calls"))
                                 {

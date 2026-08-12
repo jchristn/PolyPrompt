@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.2.0 (2026-08-12)
+
+### Added
+
+- Added reasoning ("thinking") capture returned to the caller. Streamed chunks expose `ReasoningText` and responses expose an accumulated `Reasoning`, on both chat (`ChatStreamingChunk`/`ChatStreamingResponse`/`ChatResponse`) and tool chat (`ToolChatStreamingChunk`/`ToolChatStreamingResponse`/`ToolChatResponse`), across the OpenAI-compatible, Ollama, and Gemini clients — parsed from `reasoning_content` (fallback `reasoning`), `message.thinking`, and Gemini `thought` parts respectively. Reasoning is kept separate from answer text, normalized to null when absent or empty, accumulated to match the streamed deltas, and is return-only (never carried into a follow-up request via `ToAssistantMessage`).
+- Added local Touchstone coverage for reasoning capture and accumulation per provider and path, plus negative cases proving no-reasoning responses stay null, empty reasoning normalizes to null, reasoning never leaks into text, and reasoning is not resent in a follow-up message.
+
+### Changed
+
+- Centralized provider reasoning field-name literals as per-client constants (`reasoning_content`/`reasoning`, `thinking`, `thought`) to reduce the fragility of inlined wire-field strings.
+
 ## v2.1.0 (2026-08-12)
 
 ### Added

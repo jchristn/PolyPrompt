@@ -723,7 +723,9 @@ namespace PolyPrompt.Clients
             {
                 await foreach (ChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
                 {
-                    if (!string.IsNullOrEmpty(chunk.Text))
+                    bool hasReasoning = !string.IsNullOrEmpty(chunk.ReasoningText);
+
+                    if (!string.IsNullOrEmpty(chunk.Text) || hasReasoning)
                     {
                         if (response.ChunkCount == 0)
                         {
@@ -731,6 +733,13 @@ namespace PolyPrompt.Clients
                         }
                         response.ChunkCount++;
                         response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
+                    }
+
+                    if (hasReasoning)
+                    {
+                        response.Reasoning = string.IsNullOrEmpty(response.Reasoning)
+                            ? chunk.ReasoningText
+                            : response.Reasoning + chunk.ReasoningText;
                     }
 
                     if (chunk.Usage != null) response.Usage = chunk.Usage;
@@ -791,8 +800,9 @@ namespace PolyPrompt.Clients
                 {
                     bool hasText = !string.IsNullOrEmpty(chunk.Text);
                     bool hasToolDeltas = chunk.ToolCallDeltas != null && chunk.ToolCallDeltas.Count > 0;
+                    bool hasReasoning = !string.IsNullOrEmpty(chunk.ReasoningText);
 
-                    if (hasText || hasToolDeltas)
+                    if (hasText || hasToolDeltas || hasReasoning)
                     {
                         if (response.ChunkCount == 0)
                         {
@@ -807,6 +817,13 @@ namespace PolyPrompt.Clients
                         response.Text = string.IsNullOrEmpty(response.Text)
                             ? chunk.Text
                             : response.Text + chunk.Text;
+                    }
+
+                    if (hasReasoning)
+                    {
+                        response.Reasoning = string.IsNullOrEmpty(response.Reasoning)
+                            ? chunk.ReasoningText
+                            : response.Reasoning + chunk.ReasoningText;
                     }
 
                     if (hasToolDeltas)
@@ -1142,6 +1159,18 @@ namespace PolyPrompt.Clients
             string? val = dict[key]?.ToString();
             if (long.TryParse(val, out long result)) return result;
             return null;
+        }
+
+        /// <summary>
+        /// Normalizes a reasoning value: returns null for null/empty/whitespace, otherwise the value
+        /// unchanged. Callers use this so an absent or empty reasoning channel surfaces as null rather than
+        /// an empty string.
+        /// </summary>
+        /// <param name="value">The raw reasoning string.</param>
+        /// <returns>The value, or null when it is null/empty/whitespace.</returns>
+        protected static string? NormalizeReasoning(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value;
         }
 
         /// <summary>
