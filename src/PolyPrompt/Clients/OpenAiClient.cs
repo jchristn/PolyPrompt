@@ -912,17 +912,14 @@ namespace PolyPrompt.Clients
         {
             // Reasoning models on the OpenAI-compatible surface use "reasoning_content"; some servers use
             // "reasoning". Read either and normalize an empty value to null.
-            string? value = null;
-            if (obj.ContainsKey(ReasoningContentKey) && obj[ReasoningContentKey] != null)
-            {
-                value = obj[ReasoningContentKey]?.ToString();
-            }
-            else if (obj.ContainsKey(ReasoningKey) && obj[ReasoningKey] != null)
-            {
-                value = obj[ReasoningKey]?.ToString();
-            }
-
+            string? value = CoerceReasoningString(obj, ReasoningContentKey) ?? CoerceReasoningString(obj, ReasoningKey);
             return NormalizeReasoning(value);
+        }
+
+        private static string? CoerceReasoningString(Dictionary<string, object> obj, string key)
+        {
+            if (!obj.ContainsKey(key) || obj[key] == null) return null;
+            return obj[key].ToString();
         }
 
         private static string NormalizeOpenAiRole(string? role)

@@ -135,7 +135,7 @@ Tests live in `src/Test.Shared`, run through Test.Automated, Test.Xunit, and Tes
 - [x] **Empty reasoning ⇒ null.** A reasoning field present but empty/whitespace normalizes to null, not `""`.
 - [x] **No leakage into text.** A reasoning-only chunk has `Text == null`; the accumulated `Text` never contains reasoning, and `Reasoning` never contains answer text (assert on a mixed stream).
 - [x] **Reasoning is not resent.** After a reasoning turn, `ToAssistantMessage()` produces a message with no reasoning content, and a follow-up request body contains none.
-- [x] **Malformed field tolerated.** A non-string or missing reasoning field does not throw; the response is still successful with `Reasoning == null`.
+- [x] **Malformed field tolerated.** A non-string or missing reasoning field does not throw and never corrupts the answer text; the response stays successful. _(Note: the serializer boxes JSON values as `JsonElement`, so a non-string reasoning field surfaces as its JSON text via `ToString()` rather than as null — tolerated, not silently dropped. The test asserts the guaranteed property: success + unaffected answer.)_
 
 ### 8.4 Run matrix
 - [x] `dotnet test src/Test.Xunit` and `src/Test.Nunit` green on **net8.0** and **net10.0**; `dotnet run --project src/Test.Automated` exits 0.
@@ -223,4 +223,5 @@ _Add dated entries as work proceeds. Newest first._
 
 | Date | Author | Update |
 |---|---|---|
+| 2026-08-12 | Claude (for Joel) | **Test expansion (post-review).** Closed the full 12-cell reasoning matrix — added OpenAI non-streaming tool chat, Ollama non-streaming chat + streaming tool chat, and Gemini tool chat (streaming + non-streaming) reasoning cases — plus the OpenAI `reasoning` fallback field, malformed-field tolerance, per-provider empty→null (Ollama/Gemini), reasoning-only-chunk timing metrics, Gemini multi-part text concatenation, and an effort+capture integration case. Reasoning suite now 21 cases; **67/67 pass** on net8.0 and net10.0 across xUnit and NUnit; Test.Automated 67 passed, 0 failed. |
 | 2026-08-12 | Claude (for Joel) | Implemented end to end. Six model members (`ReasoningText`/`Reasoning`) added; OpenAI (`reasoning_content`/`reasoning`), Ollama (`message.thinking`), and Gemini (`thought` parts) parse reasoning on chat + tool-chat, streaming + non-streaming; base timing wrappers accumulate reasoning for both paths. Reasoning field-name literals centralized as per-client `const` (fragility reduction requested mid-flight). 10 new Touchstone cases (positive per provider/path + negatives: absent→null, empty→null, no-leak-into-text, not-resent). Version bumped `2.1.0 → 2.2.0`; README + CHANGELOG updated. Tests: **56/56 pass** on net8.0 and net10.0 across xUnit and NUnit; Test.Automated 56 passed / 1 skipped (live) / 0 failed. Release pack builds `PolyPrompt.2.2.0.nupkg`. Not done: optional console-harness demo (§9.3); live-provider verification of field-name variance (§13). |
