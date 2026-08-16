@@ -57,12 +57,37 @@ namespace Test.Shared
 
         public static LocalOpenAiTestServer Start()
         {
-            int port = GetFreePort();
-            string prefix = "http://127.0.0.1:" + port + "/";
-            HttpListener listener = new HttpListener();
-            listener.Prefixes.Add(prefix);
-            listener.Start();
-            return new LocalOpenAiTestServer(listener, prefix);
+            // GetFreePort releases the port before the HttpListener binds it, so a concurrent
+            // process can claim it in the gap (HttpListenerException, Win32 error 32). Retry on a
+            // fresh port a handful of times so heavily loaded / parallel hosts do not flake.
+            const int maxAttempts = 10;
+            HttpListenerException? lastError = null;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                int port = GetFreePort();
+                string prefix = "http://127.0.0.1:" + port + "/";
+                HttpListener listener = new HttpListener();
+                listener.Prefixes.Add(prefix);
+
+                try
+                {
+                    listener.Start();
+                }
+                catch (HttpListenerException ex)
+                {
+                    lastError = ex;
+                    try { listener.Close(); } catch { }
+                    continue;
+                }
+
+                return new LocalOpenAiTestServer(listener, prefix);
+            }
+
+            throw new HttpListenerException(
+                lastError?.ErrorCode ?? 0,
+                "Unable to bind a local test server after " + maxAttempts + " attempts: "
+                    + (lastError?.Message ?? "unknown error"));
         }
 
         public void Dispose()

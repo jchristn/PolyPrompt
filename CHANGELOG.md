@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.2.1 (2026-08-15)
+
+### Changed
+
+- Updated the `SyslogLogging` dependency from 2.0.13 to 2.2.1. No PolyPrompt API or behavior changes.
+
+### Tests
+
+- Updated test tooling: `Microsoft.NET.Test.Sdk` (17.14.1 to 18.9.0), `coverlet.collector` (6.0.4 to 10.0.1), `xunit.runner.visualstudio` (3.1.4 to 4.0.0), `NUnit` (4.3.2 to 4.6.1), `NUnit.Analyzers` (4.7.0 to 4.14.0), and `NUnit3TestAdapter` (5.0.0 to 6.2.0).
+- Hardened the local test HTTP server against a port-binding race: `LocalOpenAiTestServer.Start()` now retries on a fresh port when a concurrent process claims the selected port between allocation and bind, fixing an intermittent `HttpListenerException` (Win32 error 32) under parallel/loaded test hosts.
+
 ## v2.2.0 (2026-08-12)
 
 ### Added
