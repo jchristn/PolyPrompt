@@ -74,6 +74,10 @@ namespace Test.Shared
             request.EncodingFormat = GetString(data, "encoding_format");
             request.Truncate = GetInt(data, "truncate");
             request.Options = GetDictionary(data, "options");
+            request.InputType = GetString(data, "input_type");
+            request.Truncation = GetBool(data, "truncation");
+            request.OutputDimension = GetInt(data, "output_dimension");
+            request.OutputDtype = GetString(data, "output_dtype");
             return request;
         }
 

@@ -6,11 +6,11 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Google Gemini**, and **Anthropic Claude** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Google Gemini**, **Anthropic Claude**, and **VoyageAI** APIs. Write your LLM integration code once and swap providers without changing your application logic.
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning four different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers.
+PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning five different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability — VoyageAI is embeddings-only, and Anthropic has no embeddings API — so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol.
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
 - **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
@@ -26,11 +26,11 @@ PolyPrompt provides a single, consistent API surface for interacting with multip
 
 PolyPrompt is a good fit when you need to:
 
-- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, Google Gemini, or Anthropic Claude) without rewriting integration code
+- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, Google Gemini, Anthropic Claude, or VoyageAI for embeddings) without rewriting integration code
 - **Add tool-backed workflows** - Let models request application functions while your code stays in charge of tool execution
 - **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, Gemini, and Anthropic to evaluate quality, latency, and cost
 - **Prototype rapidly** - Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
-- **Build RAG pipelines** - Generate embeddings for document chunks using any provider's embedding models, then query with semantic search
+- **Build RAG pipelines** - Generate embeddings for document chunks using Ollama, OpenAI, Gemini, or purpose-built VoyageAI embedding models (with retrieval-role `input_type` hints and Matryoshka output dimensions), then query with semantic search
 - **Create AI-powered CLI tools** - The simple API makes it easy to add LLM capabilities to command-line applications
 - **Manage local model infrastructure** - Pull, list, inspect, and delete Ollama models programmatically
 - **Monitor LLM performance** - Use built-in timing metrics and call recording to track latency, throughput, and errors in production
@@ -52,7 +52,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.3.0**.
+Current documented package version: **2.4.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -128,6 +128,31 @@ Anthropic authenticates with the `x-api-key` and `anthropic-version` headers rat
 ```csharp
 client.WorkspaceId = "wrkspc_your-workspace-id"; // sends the anthropic-workspace-id header
 ```
+
+### VoyageAI (embeddings only)
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+using PolyPrompt.Options;
+
+using VoyageAiClient client = new VoyageAiClient(
+    "https://api.voyageai.com",
+    "pa-your-api-key");
+client.Model = "voyage-3.5";
+
+VoyageAiEmbeddingOptions options = new VoyageAiEmbeddingOptions();
+options.InputType = "document";      // or "query" at retrieval time
+options.OutputDimension = 1024;      // Matryoshka dimensions: 256, 512, 1024, 2048
+
+EmbeddingResponse response = await client.EmbedAsync("The quick brown fox.", options);
+if (response.Success && response.Embeddings.Count > 0)
+{
+    Console.WriteLine("Dimensions: " + response.Embeddings[0].Embedding.Length);
+}
+```
+
+VoyageAI is an embeddings-only provider: chat, tool calling, generation, and model management throw `NotSupportedException`, and `ValidateConnectivityAsync` probes with a minimal embeddings request because VoyageAI has no model listing endpoint.
 
 ## Detailed Examples
 
@@ -644,6 +669,8 @@ CompletionClientBase CreateClient(string provider, string endpoint, string? apiK
             return new GeminiClient(endpoint, apiKey);
         case "anthropic":
             return new AnthropicClient(endpoint, apiKey);
+        case "voyageai":
+            return new VoyageAiClient(endpoint, apiKey); // embeddings only
         default:
             throw new ArgumentException("Unknown provider: " + provider);
     }
@@ -666,7 +693,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 
 ### Constructors
 
-Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
+Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -739,6 +766,7 @@ Each provider exposes option classes that extend the base options with provider-
 | **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` |
 | **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` |
 | **Anthropic** | `AnthropicChatCompletionOptions` | — (embeddings unsupported) | `AnthropicGenerationOptions` |
+| **VoyageAI** | — (chat unsupported) | `VoyageAiEmbeddingOptions` | — (generation unsupported) |
 
 **Ollama-specific parameters:** `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`
 
@@ -748,6 +776,8 @@ Each provider exposes option classes that extend the base options with provider-
 
 **Anthropic-specific parameters:** `TopK`, `StopSequences`. Note that current Claude models (Opus 4.7 and later) reject sampling parameters (`temperature`, `top_p`, `top_k`) with a 400; leave them unset for those models.
 
+**VoyageAI-specific parameters:** `InputType` (`query`/`document` retrieval-role hint), `Truncation`, `OutputDimension` (256/512/1024/2048 on Matryoshka-capable models), `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`)
+
 ### Default Models
 
 | Provider | Default Inference Model | Suggested Embedding Model |
@@ -756,29 +786,32 @@ Each provider exposes option classes that extend the base options with provider-
 | OpenAI | `gpt-4o-mini` | `text-embedding-3-small` |
 | Gemini | `gemini-2.5-flash` | `gemini-embedding-001` |
 | Anthropic | `claude-opus-4-8` | — (no embeddings API) |
+| VoyageAI | — (embeddings only) | `voyage-3.5` |
 
 ### Provider Feature Support
 
-| Feature | Ollama | OpenAI | Gemini | Anthropic |
-|---------|--------|--------|--------|-----------|
-| Chat (non-streaming) | Yes | Yes | Yes | Yes |
-| Chat (streaming) | Yes | Yes | Yes | Yes |
-| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes |
-| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes |
-| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget | Via adaptive `thinking` + `output_config.effort` |
-| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts | Via `thinking` blocks |
-| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API |
-| Text Generation (streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API |
-| Embeddings (single) | Yes | Yes | Yes | No - `EmbedAsync` throws `NotSupportedException` |
-| Embeddings (batch) | Yes | Yes | Yes | No - `EmbedAsync` throws `NotSupportedException` |
-| List Models | Yes | Yes | Yes | Yes, with pagination |
-| Model Exists | Yes | Yes | Yes | Yes |
-| Get Model Info | Yes | Yes | Yes | Yes |
-| Pull Model | Yes | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` |
-| Delete Model | Yes | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` |
-| Validate Connectivity | Yes | Yes | Yes | Yes |
+| Feature | Ollama | OpenAI | Gemini | Anthropic | VoyageAI |
+|---------|--------|--------|--------|-----------|----------|
+| Chat (non-streaming) | Yes | Yes | Yes | Yes | No |
+| Chat (streaming) | Yes | Yes | Yes | Yes | No |
+| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes | No |
+| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes | No |
+| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget | Via adaptive `thinking` + `output_config.effort` | No |
+| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts | Via `thinking` blocks | No |
+| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API | No |
+| Text Generation (streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API | No |
+| Embeddings (single) | Yes | Yes | Yes | No | Yes |
+| Embeddings (batch) | Yes | Yes | Yes | No | Yes |
+| List Models | Yes | Yes | Yes | Yes, with pagination | No |
+| Model Exists | Yes | Yes | Yes | Yes | No |
+| Get Model Info | Yes | Yes | Yes | Yes | No |
+| Pull Model | Yes | No | No | No | No |
+| Delete Model | Yes | No | No | No | No |
+| Validate Connectivity | Yes | Yes | Yes | Yes | Yes, via a minimal embeddings request |
 
-Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape.
+Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability — `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, and everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI.
+
+Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape. One VoyageAI-specific note: `ListModelsAsync` throws at call time (VoyageAI has no model listing endpoint), and `ValidateConnectivityAsync` therefore probes with a minimal one-word embeddings request instead.
 
 Ollama tool calling is model-dependent. For example, `gemma3:4b` is a valid Ollama chat, streaming chat, and generation model, but Ollama reports that it does not support tools. Use a tool-capable model such as `gpt-oss:20b` when you want the live suite to exercise actual Ollama tool-call and streaming tool-call paths.
 
@@ -795,6 +828,7 @@ PolyPrompt/
 |   |-- OpenAIConsole/           # Interactive OpenAI test harness, including tc/toolchat
 |   |-- GeminiConsole/           # Interactive Gemini test harness, including tc/toolchat
 |   |-- AnthropicConsole/        # Interactive Anthropic test harness, including tc/toolchat
+|   |-- VoyageAIConsole/         # Interactive VoyageAI embeddings test harness
 |   |-- Test.Shared/             # Shared Touchstone test descriptors
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Xunit/              # xUnit adapter over Test.Shared
@@ -831,13 +865,17 @@ dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --ant
 
 # Anthropic has no embeddings API; the live embedding cases are skipped for it.
 
+# VoyageAI is embeddings-only; chat, tool-chat, generation, and model-listing live cases
+# are skipped, and model-management cases assert the unsupported behavior.
+dotnet run --project src/Test.Automated -- --voyageai-key pa-your-key --voyageai-embedding-model voyage-3.5
+
 # Ollama can also be validated through its OpenAI-compatible /v1 API.
 dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11434/v1 --openai-model gpt-oss:20b --openai-embedding-model all-minilm
 
 # Live tool-chat cases verify successful tool use when the configured model supports tools,
 # and verify the provider's unsupported-model error when it does not.
 
-# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic)
+# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic | voyageai)
 dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b --embedding-model all-minilm
 dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
 
@@ -850,7 +888,7 @@ dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 
 # Provider-specific environment variables can be used instead of POLYPROMPT_TEST_PROVIDER
-# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*)
+# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*, POLYPROMPT_TEST_VOYAGEAI_*)
 set POLYPROMPT_TEST_OPENAI_API_KEY=sk-your-key
 set POLYPROMPT_TEST_OPENAI_MODEL=gpt-4o-mini
 dotnet test src/Test.Xunit/Test.Xunit.csproj

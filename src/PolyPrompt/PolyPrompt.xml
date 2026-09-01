@@ -667,6 +667,126 @@
         <member name="M:PolyPrompt.Clients.OpenAiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="T:PolyPrompt.Clients.VoyageAiClient">
+            <summary>
+            Client for the VoyageAI API. VoyageAI is an embeddings-only provider: single and batch embeddings
+            are fully supported, while chat, tool chat, text generation, and model management have no VoyageAI
+            API and throw <see cref="T:System.NotSupportedException"/>. Connectivity validation is implemented with a
+            minimal embeddings request because VoyageAI has no model listing endpoint.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new VoyageAiClient.
+            </summary>
+            <param name="endpoint">VoyageAI API endpoint URL. Default: https://api.voyageai.com.</param>
+            <param name="apiKey">VoyageAI API key (required); when non-empty an Authorization: Bearer header is added. Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no chat API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no chat API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="request">Tool chat request.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no tool calling API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="request">Tool chat request.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no tool calling API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no text generation API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI is an embeddings-only provider.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no text generation API.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI does not provide a model management API. Thrown when the method is
+            called, not when the returned sequence is enumerated.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no model listing endpoint.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ModelExistsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI does not provide a model management API. This overrides the base
+            implementation, which would otherwise swallow the ListModelsAsync exception and silently
+            return false.
+            </summary>
+            <param name="model">The model name to search for.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no model listing endpoint.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. VoyageAI does not provide a model management API.
+            </summary>
+            <param name="model">The model name to look up.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; VoyageAI has no model information endpoint.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Validate connectivity by sending a minimal single-word embeddings request, because VoyageAI has
+            no model listing endpoint to probe. The probe uses the configured <see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/>
+            and consumes a negligible number of tokens.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the provider accepted the embeddings request, false otherwise.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
         <member name="T:PolyPrompt.Models.ChatCompletionOptions">
             <summary>
             Base options for chat completion requests.
@@ -2120,6 +2240,40 @@
         <member name="P:PolyPrompt.Options.OpenAiGenerationOptions.Logprobs">
             <summary>
             Include log probabilities. Null uses API default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.VoyageAiEmbeddingOptions">
+            <summary>
+            VoyageAI-specific options for embedding requests.
+            These map to fields in the VoyageAI /v1/embeddings request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VoyageAiEmbeddingOptions.InputType">
+            <summary>
+            Input type hint (input_type). Valid values are "query" and "document"; values are normalized
+            (trimmed, lower-cased) and an unrecognized value reverts to null. Null omits the field so
+            embeddings are generated without a retrieval-role prefix.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VoyageAiEmbeddingOptions.Truncation">
+            <summary>
+            Whether over-length inputs are truncated to the model context length (truncation). Null omits
+            the field and uses the provider default (true). When false, over-length inputs cause an error.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VoyageAiEmbeddingOptions.OutputDimension">
+            <summary>
+            Output embedding dimension (output_dimension). Valid values are 256, 512, 1024, and 2048 on the
+            models that support Matryoshka embeddings; a value outside that set reverts to null. Null omits
+            the field and uses the model default dimension.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VoyageAiEmbeddingOptions.OutputDtype">
+            <summary>
+            Output value data type (output_dtype). Valid values are "float" (default), "int8", "uint8",
+            "binary", and "ubinary"; values are normalized (trimmed, lower-cased) and an unrecognized value
+            reverts to null. Null omits the field. Quantized outputs are surfaced through the same float
+            vector on <see cref="T:PolyPrompt.Models.EmbeddingResult"/>.
             </summary>
         </member>
     </members>

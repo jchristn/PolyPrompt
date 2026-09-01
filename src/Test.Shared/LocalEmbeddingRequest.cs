@@ -13,5 +13,14 @@ namespace Test.Shared
         public int? Truncate { get; set; }
 
         public Dictionary<string, object>? Options { get; set; }
+
+        // VoyageAI request fields.
+        public string? InputType { get; set; }
+
+        public bool? Truncation { get; set; }
+
+        public int? OutputDimension { get; set; }
+
+        public string? OutputDtype { get; set; }
     }
 }
