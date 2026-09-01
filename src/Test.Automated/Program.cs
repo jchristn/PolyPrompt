@@ -118,11 +118,13 @@ namespace Test.Automated
             bool hasOpenAi = HasAnyOption(options, "--openai-key", "--openai-api-key", "--openai-endpoint", "--openai-model", "--openai-embedding-model");
             bool hasOllama = HasAnyOption(options, "--ollama-key", "--ollama-api-key", "--ollama-endpoint", "--ollama-model", "--ollama-embedding-model");
             bool hasGemini = HasAnyOption(options, "--gemini-key", "--gemini-api-key", "--gemini-endpoint", "--gemini-model", "--gemini-embedding-model");
+            bool hasAnthropic = HasAnyOption(options, "--anthropic-key", "--anthropic-api-key", "--anthropic-endpoint", "--anthropic-model", "--anthropic-workspace");
 
             int providerCount = 0;
             if (hasOpenAi) providerCount++;
             if (hasOllama) providerCount++;
             if (hasGemini) providerCount++;
+            if (hasAnthropic) providerCount++;
 
             if (providerCount == 0) return null;
 
@@ -147,6 +149,18 @@ namespace Test.Automated
                     GetFirstOption(options, "--ollama-key", "--ollama-api-key"),
                     GetOption(options, "--ollama-model"),
                     GetOption(options, "--ollama-embedding-model"));
+            }
+
+            if (hasAnthropic)
+            {
+                ProviderTestConfiguration anthropic = ProviderTestConfiguration.CreateWithDefaults(
+                    "anthropic",
+                    GetOption(options, "--anthropic-endpoint"),
+                    GetFirstOption(options, "--anthropic-key", "--anthropic-api-key"),
+                    GetOption(options, "--anthropic-model"),
+                    null);
+                anthropic.AnthropicWorkspaceId = GetOption(options, "--anthropic-workspace");
+                return anthropic;
             }
 
             return ProviderTestConfiguration.CreateWithDefaults(
@@ -185,8 +199,9 @@ namespace Test.Automated
             bool hasOpenAi = HasAnyOption(options, "--openai-key", "--openai-api-key", "--openai-endpoint", "--openai-model", "--openai-embedding-model");
             bool hasOllama = HasAnyOption(options, "--ollama-key", "--ollama-api-key", "--ollama-endpoint", "--ollama-model", "--ollama-embedding-model");
             bool hasGemini = HasAnyOption(options, "--gemini-key", "--gemini-api-key", "--gemini-endpoint", "--gemini-model", "--gemini-embedding-model");
+            bool hasAnthropic = HasAnyOption(options, "--anthropic-key", "--anthropic-api-key", "--anthropic-endpoint", "--anthropic-model", "--anthropic-workspace");
 
-            if (hasOpenAi || hasOllama || hasGemini)
+            if (hasOpenAi || hasOllama || hasGemini || hasAnthropic)
                 throw new ArgumentException("--provider cannot be combined with provider-specific options.");
 
             if (string.IsNullOrWhiteSpace(provider))
@@ -260,13 +275,14 @@ namespace Test.Automated
             Console.WriteLine("  --openai-key <key> [--openai-endpoint <url>] [--openai-model <model>] [--openai-embedding-model <model>]");
             Console.WriteLine("  --ollama-endpoint <url> [--ollama-key <key>] [--ollama-model <model>] [--ollama-embedding-model <model>]");
             Console.WriteLine("  --gemini-key <key> [--gemini-endpoint <url>] [--gemini-model <model>] [--gemini-embedding-model <model>]");
-            Console.WriteLine("  --provider <ollama|openai|gemini> [--endpoint <url>] [--key <key>] [--model <model>] [--embedding-model <model>]");
+            Console.WriteLine("  --anthropic-key <key> [--anthropic-endpoint <url>] [--anthropic-model <model>] [--anthropic-workspace <id>]");
+            Console.WriteLine("  --provider <ollama|openai|gemini|anthropic> [--endpoint <url>] [--key <key>] [--model <model>] [--embedding-model <model>]");
             Console.WriteLine();
-            Console.WriteLine("  provider        : ollama | openai | gemini");
-            Console.WriteLine("  endpoint        : Provider API endpoint URL. OpenAI and Gemini default to their public APIs.");
+            Console.WriteLine("  provider        : ollama | openai | gemini | anthropic");
+            Console.WriteLine("  endpoint        : Provider API endpoint URL. OpenAI, Gemini, and Anthropic default to their public APIs.");
             Console.WriteLine("  apikey          : API key (optional for Ollama)");
             Console.WriteLine("  model           : Inference model override (optional, uses provider default)");
-            Console.WriteLine("  embedding-model : Embedding model override (optional, uses provider default)");
+            Console.WriteLine("  embedding-model : Embedding model override (optional; Anthropic has no embeddings API)");
             Console.WriteLine();
             Console.WriteLine("Environment variables:");
             Console.WriteLine("  POLYPROMPT_TEST_PROVIDER");
@@ -277,12 +293,14 @@ namespace Test.Automated
             Console.WriteLine("  POLYPROMPT_TEST_OPENAI_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_OLLAMA_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_GEMINI_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
+            Console.WriteLine("  POLYPROMPT_TEST_ANTHROPIC_API_KEY / ENDPOINT / MODEL / WORKSPACE_ID");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine("  Test.Automated selftest");
             Console.WriteLine("  Test.Automated --openai-key sk-... --openai-model gpt-4o-mini");
             Console.WriteLine("  Test.Automated --ollama-endpoint http://localhost:11434 --ollama-model gemma3:4b");
             Console.WriteLine("  Test.Automated --gemini-key AIza... --gemini-model gemini-2.5-flash");
+            Console.WriteLine("  Test.Automated --anthropic-key sk-ant-... --anthropic-model claude-opus-4-8");
             Console.WriteLine("  Test.Automated ollama http://localhost:11434 \"\" gemma3:4b all-minilm");
         }
     }

@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.3.0 (2026-08-31)
+
+### Added
+
+- Added Anthropic (Claude) as a fourth provider through `AnthropicClient`, targeting the Anthropic Messages API (`POST /v1/messages`). Supported surface: chat (non-streaming and streaming over SSE), tool chat (non-streaming and streaming, including `tool_use` content blocks, split `input_json_delta` argument accumulation, and tool-result follow-up turns as user-role `tool_result` blocks), text generation mapped onto the Messages API as a single-user-turn request, model listing with `has_more`/`last_id` pagination, model lookup, model existence checks, connectivity validation, call recording, timing metrics, and token usage. Two gaps are intentional and explicit: Anthropic has no embeddings API, so both `EmbedAsync` overloads throw `NotSupportedException`, and `PullModelAsync`/`DeleteModelAsync` throw `NotSupportedException` like the other cloud providers.
+- Added Anthropic authentication via the `x-api-key` and `anthropic-version` request headers (no bearer Authorization). The version value is configurable through `AnthropicClient.AnthropicVersion` (default `2023-06-01`), and identity-linked API keys are supported through `AnthropicClient.WorkspaceId`, which sends the `anthropic-workspace-id` header.
+- Added the Anthropic projection to `ReasoningEffort`: levels map to `output_config.effort` (`low`/`low`/`medium`/`high`) with adaptive thinking (`thinking: {type: "adaptive", display: "summarized"}`) sent for `Low` and above and omitted for `Minimal`. A clamped `AnthropicEffort` override (`low`/`medium`/`high`/`xhigh`/`max`) wins over the level default, with `ToAnthropicEffort()` and `SendsAnthropicThinking()` projection methods.
+- Added Anthropic reasoning ("thinking") capture: `thinking` content blocks and streamed `thinking_delta` events surface as `Reasoning`/`ReasoningText`, kept separate from answer text and never carried into follow-up requests.
+- Added `AnthropicChatCompletionOptions` and `AnthropicGenerationOptions` with `TopK` and `StopSequences`. No embedding options class exists because embeddings are unsupported.
+- Added the `AnthropicConsole` interactive test harness to the solution, mirroring the other provider consoles including `tc`/`toolchat` and streamed reasoning display.
+- Added local Touchstone coverage for the Anthropic client: request translation (top-level `system`, mandatory `max_tokens`, `x-api-key`/`anthropic-version` headers, workspace header add/remove, no bearer header), streaming chat and generation, tool chat and streaming tool chat with split-argument accumulation and merged tool-result turns, tool-choice mapping (`auto`/`any`/`none`/named tool), per-request model overrides, model list pagination, reasoning-effort projection and override clamping, and reasoning capture. Negative cases prove embeddings and pull/delete throw `NotSupportedException`, HTTP errors surface without throwing, a `refusal` stop reason is a successful response with the finish reason exposed, empty thinking normalizes to null, thinking never leaks into text or follow-up messages, and `TimeoutMs` covers streaming body enumeration.
+- Added Anthropic live-provider support to `Test.Automated` (`--anthropic-key`, `--anthropic-endpoint`, `--anthropic-model`, `--anthropic-workspace`) and the `POLYPROMPT_TEST_ANTHROPIC_*` environment variables; live embedding cases skip for Anthropic and pull/delete assert the unsupported behavior.
+
+### Changed
+
+- Updated README documentation, the provider capability matrix, default model table, and package metadata for the fourth provider; package version is now 2.3.0.
+
 ## v2.2.1 (2026-08-15)
 
 ### Changed

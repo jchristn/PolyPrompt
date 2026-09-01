@@ -40,6 +40,28 @@ namespace Test.Shared
             return request;
         }
 
+        public static LocalAnthropicRequest? DeserializeAnthropicRequest(string requestBody)
+        {
+            Dictionary<string, object>? data = DeserializeDictionary(requestBody);
+            if (data == null) return null;
+
+            LocalAnthropicRequest request = new LocalAnthropicRequest();
+            request.Model = GetString(data, "model");
+            request.MaxTokens = GetInt(data, "max_tokens");
+            request.Stream = GetBool(data, "stream");
+            request.System = GetString(data, "system");
+            request.Temperature = GetDouble(data, "temperature");
+            request.TopP = GetDouble(data, "top_p");
+            request.TopK = GetInt(data, "top_k");
+            request.StopSequences = GetStringList(data, "stop_sequences");
+            request.Messages = ParseAnthropicMessages(GetList(data, "messages"));
+            request.Tools = ParseAnthropicTools(GetList(data, "tools"));
+            request.ToolChoice = ParseAnthropicToolChoice(GetDictionary(data, "tool_choice"));
+            request.Thinking = ParseAnthropicThinking(GetDictionary(data, "thinking"));
+            request.OutputConfig = ParseAnthropicOutputConfig(GetDictionary(data, "output_config"));
+            return request;
+        }
+
         public static LocalEmbeddingRequest? DeserializeEmbeddingRequest(string requestBody)
         {
             Dictionary<string, object>? data = DeserializeDictionary(requestBody);
@@ -153,6 +175,108 @@ namespace Test.Shared
             function.Parameters = GetDictionary(item, "parameters");
             function.ArgumentsJson = GetArgumentsJson(item);
             return function;
+        }
+
+        private static List<LocalAnthropicMessage>? ParseAnthropicMessages(List<Dictionary<string, object>>? items)
+        {
+            if (items == null) return null;
+
+            List<LocalAnthropicMessage> result = new List<LocalAnthropicMessage>();
+            foreach (Dictionary<string, object> item in items)
+            {
+                LocalAnthropicMessage message = new LocalAnthropicMessage();
+                message.Role = GetString(item, "role");
+
+                // Anthropic message content is either a plain string or a list of content blocks;
+                // inspect the serialized shape rather than assuming one or the other.
+                if (item.ContainsKey("content") && item["content"] != null)
+                {
+                    string contentJson = _Serializer.SerializeJson(item["content"], false);
+                    if (contentJson.TrimStart().StartsWith("[", StringComparison.Ordinal))
+                    {
+                        List<Dictionary<string, object>>? blocks = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(contentJson);
+                        message.Blocks = blocks != null ? ParseAnthropicContentBlocks(blocks) : new List<LocalAnthropicContentBlock>();
+                    }
+                    else
+                    {
+                        message.Text = GetString(item, "content");
+                    }
+                }
+
+                result.Add(message);
+            }
+
+            return result;
+        }
+
+        private static List<LocalAnthropicContentBlock> ParseAnthropicContentBlocks(List<Dictionary<string, object>> items)
+        {
+            List<LocalAnthropicContentBlock> result = new List<LocalAnthropicContentBlock>();
+            foreach (Dictionary<string, object> item in items)
+            {
+                LocalAnthropicContentBlock block = new LocalAnthropicContentBlock();
+                block.Type = GetString(item, "type");
+                block.Text = GetString(item, "text");
+                block.Id = GetString(item, "id");
+                block.Name = GetString(item, "name");
+                block.ToolUseId = GetString(item, "tool_use_id");
+                block.Content = GetString(item, "content");
+
+                if (item.ContainsKey("input") && item["input"] != null)
+                {
+                    block.InputJson = _Serializer.SerializeJson(item["input"], false);
+                }
+
+                result.Add(block);
+            }
+
+            return result;
+        }
+
+        private static List<LocalAnthropicTool>? ParseAnthropicTools(List<Dictionary<string, object>>? items)
+        {
+            if (items == null) return null;
+
+            List<LocalAnthropicTool> result = new List<LocalAnthropicTool>();
+            foreach (Dictionary<string, object> item in items)
+            {
+                LocalAnthropicTool tool = new LocalAnthropicTool();
+                tool.Name = GetString(item, "name");
+                tool.Description = GetString(item, "description");
+                tool.InputSchema = GetDictionary(item, "input_schema");
+                result.Add(tool);
+            }
+
+            return result;
+        }
+
+        private static LocalAnthropicToolChoice? ParseAnthropicToolChoice(Dictionary<string, object>? item)
+        {
+            if (item == null) return null;
+
+            LocalAnthropicToolChoice toolChoice = new LocalAnthropicToolChoice();
+            toolChoice.Type = GetString(item, "type");
+            toolChoice.Name = GetString(item, "name");
+            return toolChoice;
+        }
+
+        private static LocalAnthropicThinking? ParseAnthropicThinking(Dictionary<string, object>? item)
+        {
+            if (item == null) return null;
+
+            LocalAnthropicThinking thinking = new LocalAnthropicThinking();
+            thinking.Type = GetString(item, "type");
+            thinking.Display = GetString(item, "display");
+            return thinking;
+        }
+
+        private static LocalAnthropicOutputConfig? ParseAnthropicOutputConfig(Dictionary<string, object>? item)
+        {
+            if (item == null) return null;
+
+            LocalAnthropicOutputConfig outputConfig = new LocalAnthropicOutputConfig();
+            outputConfig.Effort = GetString(item, "effort");
+            return outputConfig;
         }
 
         private static List<LocalGeminiContent>? ParseGeminiContents(List<Dictionary<string, object>>? items)

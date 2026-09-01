@@ -579,8 +579,131 @@ namespace Test.Shared
                     return;
                 }
 
+                if (path == "/v1/messages")
+                {
+                    LocalAnthropicRequest? request = LocalRequestParser.DeserializeAnthropicRequest(requestBody);
+                    if (request == null)
+                    {
+                        await WriteJsonAsync(context, 400, "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"invalid request\"}}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (AnthropicHasText(request, "reasonempty"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-reasonempty-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"sig\"},{\"type\":\"text\",\"text\":\"pong\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (AnthropicHasText(request, "refuse please"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-refusal-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"stop_reason\":\"refusal\",\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && AnthropicHasText(request, "reasoncapture") && HasAnthropicTools(request))
+                    {
+                        await WriteStreamingAnthropicToolChatReasoningAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && AnthropicHasText(request, "reasoncapture"))
+                    {
+                        await WriteStreamingAnthropicChatReasoningAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (AnthropicHasText(request, "reasoncapture") && HasAnthropicTools(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-reason-tool-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"Let me think.\",\"signature\":\"sig\"},{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\"}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":11,\"output_tokens\":7}}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (AnthropicHasText(request, "reasoncapture"))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-reason-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"Let me think.\",\"signature\":\"sig\"},{\"type\":\"text\",\"text\":\"pong\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (request.Stream == true && HasAnthropicTools(request) && AnthropicHasText(request, "hang tool stream"))
+                    {
+                        await WriteStreamingAnthropicToolChatHangAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasAnthropicTools(request))
+                    {
+                        await WriteStreamingAnthropicToolChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && HasAnthropicToolResult(request))
+                    {
+                        await WriteStreamingAnthropicToolFinalAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true && AnthropicHasText(request, "hang stream"))
+                    {
+                        await WriteStreamingAnthropicChatHangAsync(context).ConfigureAwait(false);
+                    }
+                    else if (request.Stream == true)
+                    {
+                        await WriteStreamingAnthropicChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (HasAnthropicTools(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-tool-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":11,\"output_tokens\":7}}").ConfigureAwait(false);
+                    }
+                    else if (HasAnthropicToolResult(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-final-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"text\",\"text\":\"Seattle is 72 F and clear.\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":20,\"output_tokens\":5}}").ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"id\":\"anthropic-chat-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"text\",\"text\":\"pong\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}").ConfigureAwait(false);
+                    }
+                    return;
+                }
+
                 if (path == "/v1/models")
                 {
+                    // The Anthropic client sends the anthropic-version header; the OpenAI-compatible
+                    // client does not. Serve the matching shape for each.
+                    if (IsAnthropicRequest(context))
+                    {
+                        string query = context.Request.Url?.Query ?? string.Empty;
+                        if (query.Contains("after_id=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"data\":[{\"type\":\"model\",\"id\":\"test-model-2\",\"display_name\":\"Test Model Two\",\"created_at\":\"2026-02-19T00:00:00Z\"}],\"has_more\":false,\"first_id\":\"test-model-2\",\"last_id\":\"test-model-2\"}").ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"data\":[{\"type\":\"model\",\"id\":\"test-model\",\"display_name\":\"Test Model\",\"created_at\":\"2026-02-19T00:00:00Z\"}],\"has_more\":true,\"first_id\":\"test-model\",\"last_id\":\"test-model\"}").ConfigureAwait(false);
+                        }
+                        return;
+                    }
+
                     await WriteJsonAsync(
                         context,
                         200,
@@ -590,6 +713,24 @@ namespace Test.Shared
 
                 if (path.StartsWith("/v1/models/", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (IsAnthropicRequest(context))
+                    {
+                        if (path.Contains("missing", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                404,
+                                "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model not found\"}}").ConfigureAwait(false);
+                            return;
+                        }
+
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"type\":\"model\",\"id\":\"test-model\",\"display_name\":\"Test Model\",\"created_at\":\"2026-02-19T00:00:00Z\"}").ConfigureAwait(false);
+                        return;
+                    }
+
                     await WriteJsonAsync(
                         context,
                         200,
@@ -645,6 +786,183 @@ namespace Test.Shared
                 && request.Contents.Any(content => content.Parts != null
                     && content.Parts.Any(part => part.Text != null
                         && part.Text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0));
+        }
+
+        private static bool IsAnthropicRequest(HttpListenerContext context)
+        {
+            return !string.IsNullOrEmpty(context.Request.Headers["anthropic-version"]);
+        }
+
+        private static bool HasAnthropicTools(LocalAnthropicRequest request)
+        {
+            return request.Tools != null
+                && request.Tools.Any(tool => !string.IsNullOrWhiteSpace(tool.Name));
+        }
+
+        private static bool HasAnthropicToolResult(LocalAnthropicRequest request)
+        {
+            return request.Messages != null
+                && request.Messages.Any(message => message.Blocks != null
+                    && message.Blocks.Any(block => string.Equals(block.Type, "tool_result", StringComparison.OrdinalIgnoreCase)));
+        }
+
+        private static bool AnthropicHasText(LocalAnthropicRequest request, string value)
+        {
+            if (request.Messages == null) return false;
+
+            foreach (LocalAnthropicMessage message in request.Messages)
+            {
+                if (message.Text != null && message.Text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+
+                if (message.Blocks != null
+                    && message.Blocks.Any(block =>
+                        (block.Text != null && block.Text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)
+                        || (block.Content != null && block.Content.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private async Task WriteStreamingAnthropicChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-chat-stream-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"world\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingAnthropicChatHangAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-hang-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello\"}}\n\n").ConfigureAwait(false);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), _Cancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task WriteStreamingAnthropicToolChatAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-tool-stream-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Checking \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"weather. \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\\\"Sea\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ttle\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu-weather-2\",\"name\":\"get_weather\",\"input\":{}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\\\"Portland\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":2}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":7}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_stop\"}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingAnthropicToolFinalAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-final-stream-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":20,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Seattle is \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"72 F and clear.\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_stop\"}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingAnthropicToolChatHangAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-tool-hang-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu-hang-1\",\"name\":\"get_weather\",\"input\":{}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\"}}\n\n").ConfigureAwait(false);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), _Cancellation.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task WriteStreamingAnthropicChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-reason-stream\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Let me \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"think.\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"pong\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":2}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_stop\"}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
+        }
+
+        private async Task WriteStreamingAnthropicToolChatReasoningAsync(HttpListenerContext context)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "text/event-stream";
+            context.Response.SendChunked = true;
+
+            await WriteChunkAsync(context, "data: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-reason-tool-stream\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":11,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Planning \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"the call.\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Checking. \"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\":\\\"Seattle\\\"}\"}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"content_block_stop\",\"index\":2}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":7}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"type\":\"message_stop\"}\n\n").ConfigureAwait(false);
+
+            context.Response.Close();
         }
 
         private async Task WriteStreamingOpenAiChatAsync(HttpListenerContext context)
