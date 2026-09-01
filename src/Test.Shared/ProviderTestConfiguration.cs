@@ -26,7 +26,12 @@ namespace Test.Shared
         public const string DefaultAnthropicEndpoint = "https://api.anthropic.com";
 
         /// <summary>
-        /// Provider type for live tests. Valid values are openai, ollama, gemini, and anthropic.
+        /// Default VoyageAI endpoint used when VoyageAI live tests are configured without an endpoint.
+        /// </summary>
+        public const string DefaultVoyageAiEndpoint = "https://api.voyageai.com";
+
+        /// <summary>
+        /// Provider type for live tests. Valid values are openai, ollama, gemini, anthropic, and voyageai.
         /// </summary>
         public string ProviderType { get; set; } = string.Empty;
 
@@ -127,11 +132,21 @@ namespace Test.Shared
                 || !string.IsNullOrWhiteSpace(anthropicEndpoint)
                 || !string.IsNullOrWhiteSpace(anthropicModel);
 
+            string? voyageKey = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_API_KEY");
+            string? voyageEndpoint = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_ENDPOINT");
+            string? voyageModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_MODEL");
+            string? voyageEmbeddingModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_EMBEDDING_MODEL");
+            bool hasVoyageAi = !string.IsNullOrWhiteSpace(voyageKey)
+                || !string.IsNullOrWhiteSpace(voyageEndpoint)
+                || !string.IsNullOrWhiteSpace(voyageModel)
+                || !string.IsNullOrWhiteSpace(voyageEmbeddingModel);
+
             int providerCount = 0;
             if (hasOpenAi) providerCount++;
             if (hasOllama) providerCount++;
             if (hasGemini) providerCount++;
             if (hasAnthropic) providerCount++;
+            if (hasVoyageAi) providerCount++;
 
             if (providerCount == 0)
                 return null;
@@ -154,6 +169,11 @@ namespace Test.Shared
                 ProviderTestConfiguration anthropic = CreateWithDefaults("anthropic", anthropicEndpoint, anthropicKey, anthropicModel, null);
                 anthropic.AnthropicWorkspaceId = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_ANTHROPIC_WORKSPACE_ID");
                 return anthropic;
+            }
+
+            if (hasVoyageAi)
+            {
+                return CreateWithDefaults("voyageai", voyageEndpoint, voyageKey, voyageModel, voyageEmbeddingModel);
             }
 
             return CreateWithDefaults("gemini", geminiEndpoint, geminiKey, geminiModel, geminiEmbeddingModel);
@@ -232,6 +252,7 @@ namespace Test.Shared
                 case "openai": return DefaultOpenAiEndpoint;
                 case "gemini": return DefaultGeminiEndpoint;
                 case "anthropic": return DefaultAnthropicEndpoint;
+                case "voyageai": return DefaultVoyageAiEndpoint;
                 default: throw new ArgumentException("Unknown provider type: " + providerType, nameof(providerType));
             }
         }
@@ -250,6 +271,7 @@ namespace Test.Shared
                 case "openai": return "text-embedding-3-small";
                 case "gemini": return "text-embedding-004";
                 case "anthropic": return string.Empty;
+                case "voyageai": return "voyage-3.5";
                 default: throw new ArgumentException("Unknown provider type: " + providerType, nameof(providerType));
             }
         }
@@ -260,8 +282,8 @@ namespace Test.Shared
                 throw new ArgumentException("Provider type is required.", nameof(providerType));
 
             string normalizedProvider = providerType.Trim().ToLowerInvariant();
-            if (normalizedProvider != "ollama" && normalizedProvider != "openai" && normalizedProvider != "gemini" && normalizedProvider != "anthropic")
-                throw new ArgumentException("Provider type must be ollama, openai, gemini, or anthropic.", nameof(providerType));
+            if (normalizedProvider != "ollama" && normalizedProvider != "openai" && normalizedProvider != "gemini" && normalizedProvider != "anthropic" && normalizedProvider != "voyageai")
+                throw new ArgumentException("Provider type must be ollama, openai, gemini, anthropic, or voyageai.", nameof(providerType));
 
             return normalizedProvider;
         }

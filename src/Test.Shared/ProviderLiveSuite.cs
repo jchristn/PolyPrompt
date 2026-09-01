@@ -28,16 +28,16 @@ namespace Test.Shared
                 "Live provider behavior",
                 new List<TestCaseDescriptor>
                 {
-                    Case("required_models", "Required models are available", token => RunRequiredModelsAsync(configuration, token)),
+                    Case("required_models", "Required models are available", token => RunRequiredModelsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI does not provide a model listing API."),
                     Case("properties", "Client and option properties behave correctly", token => RunPropertyTestsAsync(configuration, token)),
-                    Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token)),
-                    Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token)),
-                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token)),
-                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token)),
+                    Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
+                    Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
+                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
+                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
                     Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
                     Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
-                    Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration), skipReason: "OpenAI does not support the legacy completions API."),
-                    Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration), skipReason: "OpenAI does not support the legacy completions API."),
+                    Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration) || IsVoyageAi(configuration), skipReason: IsVoyageAi(configuration) ? "VoyageAI is an embeddings-only provider." : "OpenAI does not support the legacy completions API."),
+                    Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration) || IsVoyageAi(configuration), skipReason: IsVoyageAi(configuration) ? "VoyageAI is an embeddings-only provider." : "OpenAI does not support the legacy completions API."),
                     Case("call_details", "CallDetails records upstream calls", token => RunCallDetailsTestsAsync(configuration, token)),
                     Case("list_models", "ListModelsAsync returns models", token => RunListModelsTestsAsync(configuration, token)),
                     Case("model_exists", "ModelExistsAsync handles existing and missing models", token => RunModelExistsTestsAsync(configuration, token)),
@@ -518,7 +518,15 @@ namespace Test.Shared
             using CompletionClientBase client = CreateClient(configuration);
             client.ClearCallDetails();
 
-            await client.ChatAsync("Ping", token: token).ConfigureAwait(false);
+            if (IsVoyageAi(configuration))
+            {
+                // VoyageAI has no chat API; record an embedding call instead.
+                await client.EmbedAsync("Ping", CreateEmbeddingModelOptions(configuration), token).ConfigureAwait(false);
+            }
+            else
+            {
+                await client.ChatAsync("Ping", token: token).ConfigureAwait(false);
+            }
 
             List<CompletionCallDetail> details = client.CallDetails;
             SharedAssert.Equal(1, details.Count, "CallDetails should contain the chat request.");
@@ -539,6 +547,15 @@ namespace Test.Shared
         private static async Task RunListModelsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using CompletionClientBase client = CreateClient(configuration);
+
+            if (IsVoyageAi(configuration))
+            {
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => { client.ListModelsAsync(token); return Task.CompletedTask; },
+                    "VoyageAI ListModelsAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
+
             List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
 
             SharedAssert.True(models.Count > 0, "ListModelsAsync should yield at least one model.");
@@ -549,6 +566,14 @@ namespace Test.Shared
         private static async Task RunModelExistsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using CompletionClientBase client = CreateClient(configuration);
+
+            if (IsVoyageAi(configuration))
+            {
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.ModelExistsAsync(client.Model, token),
+                    "VoyageAI ModelExistsAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
 
             bool inferenceExists = await client.ModelExistsAsync(client.Model, token).ConfigureAwait(false);
             SharedAssert.True(inferenceExists, "Inference model should exist.");
@@ -566,6 +591,14 @@ namespace Test.Shared
         private static async Task RunGetModelInformationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using CompletionClientBase client = CreateClient(configuration);
+
+            if (IsVoyageAi(configuration))
+            {
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.GetModelInformationAsync(client.Model, token),
+                    "VoyageAI GetModelInformationAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
 
             ModelInformation? info = await client.GetModelInformationAsync(client.Model, token).ConfigureAwait(false);
             SharedAssert.NotNull(info, "Inference model information should be found.");
@@ -642,6 +675,31 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             using CompletionClientBase client = CreateClient(configuration);
+
+            if (IsVoyageAi(configuration))
+            {
+                // VoyageAI has no chat or generation API; the unsupported exception wins over cancellation.
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.ChatAsync("This should be unsupported", token: token),
+                    "VoyageAI ChatAsync should be unsupported.").ConfigureAwait(false);
+
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.GenerateAsync("This should be unsupported", token: token),
+                    "VoyageAI GenerateAsync should be unsupported.").ConfigureAwait(false);
+
+                using CancellationTokenSource voyageEmbedCancelled = new CancellationTokenSource();
+                voyageEmbedCancelled.Cancel();
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                    () => client.EmbedAsync("This should be cancelled", token: voyageEmbedCancelled.Token),
+                    "VoyageAI EmbedAsync single input should respect a pre-cancelled token.").ConfigureAwait(false);
+
+                using CancellationTokenSource voyageBatchCancelled = new CancellationTokenSource();
+                voyageBatchCancelled.Cancel();
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                    () => client.EmbedAsync(new List<string> { "a", "b" }, token: voyageBatchCancelled.Token),
+                    "VoyageAI EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
+                return;
+            }
 
             using CancellationTokenSource chatCancelled = new CancellationTokenSource();
             chatCancelled.Cancel();
@@ -758,6 +816,7 @@ namespace Test.Shared
                 "openai" => new OpenAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 "gemini" => new GeminiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 "anthropic" => new AnthropicClient(endpoint, apiKey) { TimeoutMs = 120000, WorkspaceId = anthropicWorkspaceId },
+                "voyageai" => new VoyageAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 _ => throw new ArgumentException("Unknown provider: " + providerType, nameof(providerType)),
             };
 
@@ -861,6 +920,13 @@ namespace Test.Shared
                     {
                         Model = configuration.EmbeddingModel,
                         TaskType = "RETRIEVAL_DOCUMENT",
+                    };
+
+                case "voyageai":
+                    return new VoyageAiEmbeddingOptions
+                    {
+                        Model = configuration.EmbeddingModel,
+                        InputType = "document",
                     };
 
                 default:
@@ -981,6 +1047,11 @@ namespace Test.Shared
         private static bool IsAnthropic(ProviderTestConfiguration configuration)
         {
             return string.Equals(configuration.ProviderType, "anthropic", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsVoyageAi(ProviderTestConfiguration configuration)
+        {
+            return string.Equals(configuration.ProviderType, "voyageai", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

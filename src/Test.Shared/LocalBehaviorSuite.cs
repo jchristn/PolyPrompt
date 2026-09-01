@@ -36,6 +36,10 @@ namespace Test.Shared
             "POLYPROMPT_TEST_ANTHROPIC_ENDPOINT",
             "POLYPROMPT_TEST_ANTHROPIC_MODEL",
             "POLYPROMPT_TEST_ANTHROPIC_WORKSPACE_ID",
+            "POLYPROMPT_TEST_VOYAGEAI_API_KEY",
+            "POLYPROMPT_TEST_VOYAGEAI_ENDPOINT",
+            "POLYPROMPT_TEST_VOYAGEAI_MODEL",
+            "POLYPROMPT_TEST_VOYAGEAI_EMBEDDING_MODEL",
         };
 
         /// <summary>
@@ -136,6 +140,12 @@ namespace Test.Shared
                     Case("anthropic_http_error_handling", "Anthropic HTTP errors are surfaced", RunAnthropicHttpErrorHandlingAsync),
                     Case("anthropic_refusal_stop_reason", "Anthropic refusal stop reason is surfaced without failing", RunAnthropicRefusalStopReasonAsync),
                     Case("anthropic_streaming_body_timeout", "Anthropic streaming timeout covers the response body", RunAnthropicStreamingBodyTimeoutAsync),
+                    Case("voyageai_embedding_translation", "VoyageAI embedding request translation and parsing", RunVoyageAiEmbeddingTranslationAsync),
+                    Case("voyageai_options_clamping", "VoyageAI embedding options clamp and normalize", RunVoyageAiOptionsClampingAsync),
+                    Case("voyageai_validate_connectivity", "VoyageAI connectivity validation probes the embeddings endpoint", RunVoyageAiValidateConnectivityAsync),
+                    Case("voyageai_unsupported_operations", "VoyageAI completion-shaped operations throw", RunVoyageAiUnsupportedOperationsAsync),
+                    Case("voyageai_http_error_handling", "VoyageAI HTTP errors are surfaced", RunVoyageAiHttpErrorHandlingAsync),
+                    Case("voyageai_cancellation", "VoyageAI operations respect pre-cancelled tokens", RunVoyageAiCancellationAsync),
                 });
         }
 
@@ -303,6 +313,12 @@ namespace Test.Shared
             SharedAssert.Equal("claude-test", anthropic.InferenceModel, "Anthropic inference model should be retained.");
             SharedAssert.Equal(string.Empty, anthropic.EmbeddingModel, "Anthropic should have no default embedding model.");
 
+            ProviderTestConfiguration voyage = ProviderTestConfiguration.CreateWithDefaults("VoyageAI", apiKey: "voyage-key");
+            SharedAssert.Equal("voyageai", voyage.ProviderType, "VoyageAI provider type should normalize.");
+            SharedAssert.Equal(ProviderTestConfiguration.DefaultVoyageAiEndpoint, voyage.Endpoint, "VoyageAI should use its default endpoint when none is supplied.");
+            SharedAssert.Equal("voyage-key", voyage.ApiKey, "VoyageAI API key should be retained.");
+            SharedAssert.Equal("voyage-3.5", voyage.EmbeddingModel, "VoyageAI should use its default embedding model.");
+
             ProviderTestConfiguration ollama = ProviderTestConfiguration.CreateWithDefaults("ollama", endpoint: "http://localhost:11434", inferenceModel: "gemma3:4b", embeddingModel: "all-minilm");
             SharedAssert.Equal("ollama", ollama.ProviderType, "Ollama provider type should be retained.");
             SharedAssert.Equal("http://localhost:11434", ollama.Endpoint, "Ollama endpoint should be retained.");
@@ -351,6 +367,16 @@ namespace Test.Shared
                 SharedAssert.Equal(ProviderTestConfiguration.DefaultAnthropicEndpoint, anthropicEnvironment.Endpoint, "Anthropic environment configuration should default endpoint.");
                 SharedAssert.Equal("anthropic-key", anthropicEnvironment.ApiKey, "Anthropic environment API key should be retained.");
                 SharedAssert.Equal("claude-live", anthropicEnvironment.InferenceModel, "Anthropic environment model should be retained.");
+
+                ClearProviderEnvironment();
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_API_KEY", "voyage-key");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_VOYAGEAI_EMBEDDING_MODEL", "voyage-3.5-lite");
+                ProviderTestConfiguration? voyageFromEnvironment = ProviderTestConfiguration.FromEnvironment();
+                ProviderTestConfiguration voyageEnvironment = voyageFromEnvironment ?? throw new TestFailureException("VoyageAI environment configuration should be created.");
+                SharedAssert.Equal("voyageai", voyageEnvironment.ProviderType, "VoyageAI environment provider should be selected.");
+                SharedAssert.Equal(ProviderTestConfiguration.DefaultVoyageAiEndpoint, voyageEnvironment.Endpoint, "VoyageAI environment configuration should default endpoint.");
+                SharedAssert.Equal("voyage-key", voyageEnvironment.ApiKey, "VoyageAI environment API key should be retained.");
+                SharedAssert.Equal("voyage-3.5-lite", voyageEnvironment.EmbeddingModel, "VoyageAI environment embedding model should be retained.");
 
                 ClearProviderEnvironment();
                 Environment.SetEnvironmentVariable("POLYPROMPT_TEST_OPENAI_API_KEY", "openai-key");
@@ -2737,6 +2763,204 @@ namespace Test.Shared
             SharedAssert.True(toolStreamTimedOut, "Anthropic streaming tool chat body enumeration should time out.");
             SharedAssert.True(toolDeltas > 0, "Anthropic streaming tool chat body should yield an initial tool-call delta before timing out.");
             SharedAssert.True(toolStreaming.ToolCalls.Count == 1, "Anthropic streaming tool chat should accumulate partial tool call metadata before timing out.");
+        }
+
+        private static async Task RunVoyageAiEmbeddingTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VoyageAiClient client = CreateVoyageAiClient(server);
+
+            VoyageAiEmbeddingOptions options = new VoyageAiEmbeddingOptions();
+            options.Model = "voyage-3-large";
+            options.InputType = "document";
+            options.Truncation = false;
+            options.OutputDimension = 512;
+            options.OutputDtype = "int8";
+
+            EmbeddingResponse batch = await client.EmbedAsync(
+                new List<string> { "first", "second" },
+                options,
+                token).ConfigureAwait(false);
+
+            SharedAssert.True(batch.Success, "VoyageAI batch embedding should succeed.");
+            SharedAssert.Equal(2, batch.Embeddings.Count, "VoyageAI batch embedding should parse both vectors.");
+            SharedAssert.Equal(0, batch.Embeddings[0].Index, "VoyageAI first embedding index should parse.");
+            SharedAssert.Equal(1, batch.Embeddings[1].Index, "VoyageAI second embedding index should parse.");
+            SharedAssert.Equal(3, batch.Embeddings[0].Embedding.Length, "VoyageAI embedding vector length should parse.");
+            SharedAssert.Equal(4, batch.Embeddings[1].Embedding[0], "VoyageAI embedding vector values should parse.");
+
+            EmbeddingResponse single = await client.EmbedAsync("only one", token: token).ConfigureAwait(false);
+            SharedAssert.True(single.Success, "VoyageAI single embedding should succeed.");
+            SharedAssert.True(single.Embeddings.Count >= 1, "VoyageAI single embedding should parse at least one vector.");
+
+            SharedAssert.Equal("/v1/embeddings", server.RequestPaths[0], "VoyageAI embeddings should POST to /v1/embeddings.");
+
+            LocalEmbeddingRequest recordedBatch = LocalRequestParser.DeserializeEmbeddingRequest(server.RequestBodies[0]) ?? new LocalEmbeddingRequest();
+            SharedAssert.Equal("voyage-3-large", recordedBatch.Model, "VoyageAI request should use the option model.");
+            SharedAssert.True(recordedBatch.Input != null && recordedBatch.Input.Count == 2, "VoyageAI batch request should send both inputs.");
+            SharedAssert.Equal("document", recordedBatch.InputType, "VoyageAI request should map input_type.");
+            SharedAssert.True(recordedBatch.Truncation == false, "VoyageAI request should map truncation.");
+            SharedAssert.Equal(512, recordedBatch.OutputDimension, "VoyageAI request should map output_dimension.");
+            SharedAssert.Equal("int8", recordedBatch.OutputDtype, "VoyageAI request should map output_dtype.");
+
+            LocalEmbeddingRequest recordedSingle = LocalRequestParser.DeserializeEmbeddingRequest(server.RequestBodies[1]) ?? new LocalEmbeddingRequest();
+            SharedAssert.Equal("voyage-test", recordedSingle.Model, "VoyageAI single request should fall back to the client model.");
+            SharedAssert.True(recordedSingle.Input != null && recordedSingle.Input.Count == 1, "VoyageAI single request should still send input as an array.");
+            SharedAssert.True(recordedSingle.InputType == null, "VoyageAI single request should omit input_type when unset.");
+
+            List<CompletionCallDetail> details = client.CallDetails;
+            SharedAssert.True(details.Count >= 1, "VoyageAI embeddings should record call details.");
+            SharedAssert.True(details[0].RequestHeaders.ContainsKey("Authorization"), "VoyageAI requests should carry a bearer Authorization header.");
+        }
+
+        private static async Task RunVoyageAiOptionsClampingAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            VoyageAiEmbeddingOptions options = new VoyageAiEmbeddingOptions();
+
+            options.InputType = " QUERY ";
+            SharedAssert.Equal("query", options.InputType, "VoyageAI input type should normalize case and whitespace.");
+            options.InputType = "banana";
+            SharedAssert.True(options.InputType == null, "Unrecognized VoyageAI input type should revert to null.");
+            options.InputType = null;
+            SharedAssert.True(options.InputType == null, "VoyageAI input type should accept null.");
+
+            options.OutputDimension = 1024;
+            SharedAssert.Equal(1024, options.OutputDimension, "VoyageAI output dimension should accept documented values.");
+            options.OutputDimension = 300;
+            SharedAssert.True(options.OutputDimension == null, "An undocumented VoyageAI output dimension should revert to null.");
+            options.OutputDimension = null;
+            SharedAssert.True(options.OutputDimension == null, "VoyageAI output dimension should accept null.");
+
+            options.OutputDtype = "UBINARY";
+            SharedAssert.Equal("ubinary", options.OutputDtype, "VoyageAI output dtype should normalize case.");
+            options.OutputDtype = "float64";
+            SharedAssert.True(options.OutputDtype == null, "Unrecognized VoyageAI output dtype should revert to null.");
+
+            options.Truncation = true;
+            SharedAssert.True(options.Truncation == true, "VoyageAI truncation should round-trip.");
+            options.Truncation = null;
+            SharedAssert.True(options.Truncation == null, "VoyageAI truncation should be nullable.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunVoyageAiValidateConnectivityAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VoyageAiClient client = CreateVoyageAiClient(server);
+
+            bool ok = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
+            SharedAssert.True(ok, "VoyageAI connectivity validation should succeed against the local server.");
+            SharedAssert.Equal("/v1/embeddings", server.RequestPaths[0], "VoyageAI connectivity validation should probe the embeddings endpoint.");
+
+            using VoyageAiClient badClient = new VoyageAiClient(server.Endpoint + "/missing", "test-key");
+            badClient.Model = "voyage-test";
+            badClient.TimeoutMs = 1000;
+            bool badResult = await badClient.ValidateConnectivityAsync(token).ConfigureAwait(false);
+            SharedAssert.False(badResult, "VoyageAI connectivity validation should fail against an unreachable path.");
+        }
+
+        private static async Task RunVoyageAiUnsupportedOperationsAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VoyageAiClient client = CreateVoyageAiClient(server);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.ChatAsync("hello", token: token),
+                "VoyageAI ChatAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.ChatStreamingAsync("hello", token: token),
+                "VoyageAI ChatStreamingAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.ToolChatAsync(CreateWeatherToolRequest(), token),
+                "VoyageAI ToolChatAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token),
+                "VoyageAI ToolChatStreamingAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.GenerateAsync("hello", token: token),
+                "VoyageAI GenerateAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.GenerateStreamingAsync("hello", token: token),
+                "VoyageAI GenerateStreamingAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => { client.ListModelsAsync(token); return Task.CompletedTask; },
+                "VoyageAI ListModelsAsync should throw at call time.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.ModelExistsAsync("voyage-3.5", token),
+                "VoyageAI ModelExistsAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.GetModelInformationAsync("voyage-3.5", token),
+                "VoyageAI GetModelInformationAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.PullModelAsync("voyage-3.5", token: token),
+                "VoyageAI PullModelAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.DeleteModelAsync("voyage-3.5", token),
+                "VoyageAI DeleteModelAsync should be unsupported.").ConfigureAwait(false);
+
+            SharedAssert.Equal(0, server.RequestPaths.Count, "VoyageAI unsupported operations should never reach the wire.");
+        }
+
+        private static async Task RunVoyageAiHttpErrorHandlingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VoyageAiClient client = new VoyageAiClient(server.Endpoint + "/missing", "test-key");
+            client.Model = "voyage-test";
+            client.TimeoutMs = 1000;
+
+            EmbeddingResponse response = await client.EmbedAsync("fail", token: token).ConfigureAwait(false);
+            SharedAssert.False(response.Success, "VoyageAI embedding HTTP errors should produce unsuccessful responses.");
+            SharedAssert.Equal(404, response.StatusCode, "VoyageAI embedding HTTP errors should preserve the status code.");
+            SharedAssert.NotEmpty(response.Error, "VoyageAI embedding HTTP errors should surface an error message.");
+        }
+
+        private static async Task RunVoyageAiCancellationAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VoyageAiClient client = CreateVoyageAiClient(server);
+
+            using CancellationTokenSource embedCancelled = new CancellationTokenSource();
+            embedCancelled.Cancel();
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                () => client.EmbedAsync("cancelled", token: embedCancelled.Token),
+                "VoyageAI EmbedAsync single input should respect a pre-cancelled token.").ConfigureAwait(false);
+
+            using CancellationTokenSource batchCancelled = new CancellationTokenSource();
+            batchCancelled.Cancel();
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                () => client.EmbedAsync(new List<string> { "a", "b" }, token: batchCancelled.Token),
+                "VoyageAI EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
+
+            using CancellationTokenSource validateCancelled = new CancellationTokenSource();
+            validateCancelled.Cancel();
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                () => client.ValidateConnectivityAsync(validateCancelled.Token),
+                "VoyageAI ValidateConnectivityAsync should propagate cancellation.").ConfigureAwait(false);
+        }
+
+        private static VoyageAiClient CreateVoyageAiClient(LocalOpenAiTestServer server)
+        {
+            VoyageAiClient client = new VoyageAiClient(server.Endpoint, "test-key");
+            client.Model = "voyage-test";
+            client.TimeoutMs = 1000;
+            return client;
         }
 
         private static AnthropicClient CreateAnthropicClient(LocalOpenAiTestServer server)

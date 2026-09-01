@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.4.0 (2026-08-31)
+
+### Added
+
+- Added VoyageAI (https://docs.voyageai.com) as a fifth provider through `VoyageAiClient`, an **embeddings-only** provider targeting `POST /v1/embeddings` with bearer authentication and a default model of `voyage-3.5`. Single embeddings delegate to the batch path, and both parse the OpenAI-shaped `data[]` response into indexed float vectors. Everything completion-shaped is intentionally unsupported and throws `NotSupportedException` without touching the network: chat, streaming chat, tool chat, streaming tool chat, generation, streaming generation, model listing, model existence, model information, pull, and delete. `ModelExistsAsync` is explicitly overridden to throw rather than inheriting the base implementation, which would have silently returned false.
+- Added `VoyageAiEmbeddingOptions` with `InputType` (`query`/`document`, normalized, unrecognized reverts to null), `Truncation` (nullable bool), `OutputDimension` (clamped to the documented 256/512/1024/2048 set), and `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`, normalized).
+- Added a VoyageAI-specific `ValidateConnectivityAsync` override that probes with a minimal one-word embeddings request, since VoyageAI has no model listing endpoint for the base probe to use.
+- Added the `VoyageAIConsole` interactive test harness to the solution with an embeddings-focused menu (single/batch embed with input-type and output-dimension prompts, connectivity validation, settings).
+- Added local Touchstone coverage: request translation (model, array-form `input`, `input_type`, `truncation`, `output_dimension`, `output_dtype`, bearer header, `/v1/embeddings` path), response parsing for single and batch, option normalization/clamping, and the connectivity probe. Negative cases prove all eleven unsupported operations throw `NotSupportedException` with nothing reaching the wire, HTTP errors surface without throwing, connectivity validation returns false on unreachable endpoints, and pre-cancelled tokens propagate `OperationCanceledException` from embeds and connectivity validation.
+- Added VoyageAI live-provider support to `Test.Automated` (`--voyageai-key`, `--voyageai-endpoint`, `--voyageai-model`, `--voyageai-embedding-model`) and the `POLYPROMPT_TEST_VOYAGEAI_*` environment variables. Chat, tool-chat, generation, and required-models live cases skip with reasons for VoyageAI; model-management live cases assert the unsupported behavior; call-details and cancellation cases branch to the embeddings surface.
+
+### Changed
+
+- Updated README documentation, including a per-provider capability matrix now covering all five providers, the VoyageAI quick start, options and defaults tables, project structure, and test instructions; package version is now 2.4.0.
+
 ## v2.3.0 (2026-08-31)
 
 ### Added

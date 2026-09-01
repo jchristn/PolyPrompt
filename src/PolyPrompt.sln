@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Nunit", "Test.Nunit\Te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnthropicConsole", "AnthropicConsole\AnthropicConsole.csproj", "{0782CEE1-7867-4E0F-B08A-7C79FF310921}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VoyageAIConsole", "VoyageAIConsole\VoyageAIConsole.csproj", "{8F30E397-46EF-4019-A92B-5AE62DF37977}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{0782CEE1-7867-4E0F-B08A-7C79FF310921}.Release|x64.Build.0 = Release|Any CPU
 		{0782CEE1-7867-4E0F-B08A-7C79FF310921}.Release|x86.ActiveCfg = Release|Any CPU
 		{0782CEE1-7867-4E0F-B08A-7C79FF310921}.Release|x86.Build.0 = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|x64.Build.0 = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Debug|x86.Build.0 = Debug|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|x64.ActiveCfg = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|x64.Build.0 = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|x86.ActiveCfg = Release|Any CPU
+		{8F30E397-46EF-4019-A92B-5AE62DF37977}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
