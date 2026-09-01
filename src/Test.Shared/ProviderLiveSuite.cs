@@ -34,8 +34,8 @@ namespace Test.Shared
                     Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token)),
                     Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token)),
                     Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token)),
-                    Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token)),
-                    Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token)),
+                    Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
+                    Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
                     Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration), skipReason: "OpenAI does not support the legacy completions API."),
                     Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration), skipReason: "OpenAI does not support the legacy completions API."),
                     Case("call_details", "CallDetails records upstream calls", token => RunCallDetailsTestsAsync(configuration, token)),
@@ -88,7 +88,11 @@ namespace Test.Shared
 
             SharedAssert.True(availableModels.Count > 0, "Provider should list at least one model.");
             SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, client.Model)), "Inference model '" + client.Model + "' should exist.");
-            SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, configuration.EmbeddingModel)), "Embedding model '" + configuration.EmbeddingModel + "' should exist.");
+
+            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
+            {
+                SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, configuration.EmbeddingModel)), "Embedding model '" + configuration.EmbeddingModel + "' should exist.");
+            }
         }
 
         private static async Task RunPropertyTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
@@ -236,8 +240,12 @@ namespace Test.Shared
             SharedAssert.NotEmpty(optionsResponse.Text, "Chat with options should return text.");
 
             ChatCompletionOptions baseOptions = new ChatCompletionOptions();
-            baseOptions.Temperature = 0.5;
-            baseOptions.TopP = 0.9;
+            if (!IsAnthropic(configuration))
+            {
+                // Current Claude models reject sampling parameters; skip them for Anthropic.
+                baseOptions.Temperature = 0.5;
+                baseOptions.TopP = 0.9;
+            }
             baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 64);
             baseOptions.SystemPrompt = "Respond in exactly one word.";
             ChatResponse baseOptionsResponse = await client.ChatAsync("What color is the sky?", baseOptions, token).ConfigureAwait(false);
@@ -297,7 +305,7 @@ namespace Test.Shared
         private static async Task RunToolChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using CompletionClientBase client = CreateClient(configuration);
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
             if (!response.Success && IsToolCapabilityError(response.Error))
@@ -330,7 +338,7 @@ namespace Test.Shared
         private static async Task RunToolChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using CompletionClientBase client = CreateClient(configuration);
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
             if (!stream.Success && IsToolCapabilityError(stream.Error))
@@ -456,8 +464,12 @@ namespace Test.Shared
             SharedAssert.NotEmpty(optionResponse.Text, "Generation with options should return text.");
 
             GenerationOptions baseOptions = new GenerationOptions();
-            baseOptions.Temperature = 0.3;
-            baseOptions.TopP = 0.9;
+            if (!IsAnthropic(configuration))
+            {
+                // Current Claude models reject sampling parameters; skip them for Anthropic.
+                baseOptions.Temperature = 0.3;
+                baseOptions.TopP = 0.9;
+            }
             baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256);
             GenerationResponse baseResponse = await client.GenerateAsync("The meaning of life is", baseOptions, token).ConfigureAwait(false);
             SharedAssert.True(baseResponse.Success, "Generation with base options should succeed.");
@@ -541,8 +553,11 @@ namespace Test.Shared
             bool inferenceExists = await client.ModelExistsAsync(client.Model, token).ConfigureAwait(false);
             SharedAssert.True(inferenceExists, "Inference model should exist.");
 
-            bool embeddingExists = await client.ModelExistsAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
-            SharedAssert.True(embeddingExists, "Embedding model should exist.");
+            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
+            {
+                bool embeddingExists = await client.ModelExistsAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
+                SharedAssert.True(embeddingExists, "Embedding model should exist.");
+            }
 
             bool bogusExists = await client.ModelExistsAsync(BogusModel, token).ConfigureAwait(false);
             SharedAssert.False(bogusExists, "A nonexistent model should return false.");
@@ -556,8 +571,11 @@ namespace Test.Shared
             SharedAssert.NotNull(info, "Inference model information should be found.");
             SharedAssert.True(info != null && !string.IsNullOrEmpty(info.Name), "Inference model information should have a name.");
 
-            ModelInformation? embeddingInfo = await client.GetModelInformationAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
-            SharedAssert.NotNull(embeddingInfo, "Embedding model information should be found.");
+            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
+            {
+                ModelInformation? embeddingInfo = await client.GetModelInformationAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
+                SharedAssert.NotNull(embeddingInfo, "Embedding model information should be found.");
+            }
 
             ModelInformation? bogusInfo = await client.GetModelInformationAsync(BogusModel, token).ConfigureAwait(false);
             SharedAssert.True(bogusInfo == null, "A nonexistent model should return null model information.");
@@ -637,6 +655,19 @@ namespace Test.Shared
                 () => client.GenerateAsync("This should be cancelled", token: generateCancelled.Token),
                 "GenerateAsync should respect a pre-cancelled token.").ConfigureAwait(false);
 
+            if (IsAnthropic(configuration))
+            {
+                // Anthropic has no embeddings API; the unsupported exception wins over cancellation.
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.EmbedAsync("This should be unsupported", token: token),
+                    "Anthropic EmbedAsync single input should be unsupported.").ConfigureAwait(false);
+
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.EmbedAsync(new List<string> { "a", "b" }, token: token),
+                    "Anthropic EmbedAsync batch input should be unsupported.").ConfigureAwait(false);
+                return;
+            }
+
             using CancellationTokenSource embedCancelled = new CancellationTokenSource();
             embedCancelled.Cancel();
             await SharedAssert.ThrowsAsync<OperationCanceledException>(
@@ -650,7 +681,7 @@ namespace Test.Shared
                 "EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
         }
 
-        private static ToolChatRequest CreateWeatherToolRequest()
+        private static ToolChatRequest CreateWeatherToolRequest(ProviderTestConfiguration configuration)
         {
             ToolChatRequest request = new ToolChatRequest();
             request.Messages.Add(ChatMessage.System("Use tools when they are helpful. Keep final answers concise."));
@@ -660,8 +691,11 @@ namespace Test.Shared
                 "Get current weather for a city.",
                 WeatherParameters()));
             request.ToolChoice = "auto";
-            request.MaxTokens = 128;
-            request.Temperature = 0.0;
+            request.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+
+            // Current Claude models reject sampling parameters; skip them for Anthropic.
+            if (!IsAnthropic(configuration)) request.Temperature = 0.0;
+
             return request;
         }
 
@@ -713,16 +747,17 @@ namespace Test.Shared
 
         private static CompletionClientBase CreateClient(ProviderTestConfiguration configuration)
         {
-            return CreateClient(configuration.ProviderType, configuration.Endpoint, configuration.ApiKey, configuration.InferenceModel);
+            return CreateClient(configuration.ProviderType, configuration.Endpoint, configuration.ApiKey, configuration.InferenceModel, configuration.AnthropicWorkspaceId);
         }
 
-        private static CompletionClientBase CreateClient(string providerType, string endpoint, string? apiKey, string? inferenceModel)
+        private static CompletionClientBase CreateClient(string providerType, string endpoint, string? apiKey, string? inferenceModel, string? anthropicWorkspaceId = null)
         {
             CompletionClientBase client = providerType switch
             {
                 "ollama" => new OllamaClient(endpoint, apiKey) { TimeoutMs = 120000 },
                 "openai" => new OpenAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 "gemini" => new GeminiClient(endpoint, apiKey) { TimeoutMs = 60000 },
+                "anthropic" => new AnthropicClient(endpoint, apiKey) { TimeoutMs = 120000, WorkspaceId = anthropicWorkspaceId },
                 _ => throw new ArgumentException("Unknown provider: " + providerType, nameof(providerType)),
             };
 
@@ -784,6 +819,13 @@ namespace Test.Shared
                         TopP = 0.9,
                         MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                         TopK = 40,
+                    };
+
+                case "anthropic":
+                    // Current Claude models reject sampling parameters; only max tokens is safe.
+                    return new AnthropicChatCompletionOptions
+                    {
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                     };
 
                 default:
@@ -860,6 +902,13 @@ namespace Test.Shared
                         TopK = 40,
                     };
 
+                case "anthropic":
+                    // Current Claude models reject sampling parameters; only max tokens is safe.
+                    return new AnthropicGenerationOptions
+                    {
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
+                    };
+
                 default:
                     return new GenerationOptions();
             }
@@ -868,7 +917,8 @@ namespace Test.Shared
         private static int ResolveLiveMaxTokens(string providerType, int defaultMaxTokens)
         {
             if (string.Equals(providerType, "ollama", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerType, "openai", StringComparison.OrdinalIgnoreCase))
+                || string.Equals(providerType, "openai", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(providerType, "anthropic", StringComparison.OrdinalIgnoreCase))
                 return 1024;
 
             return defaultMaxTokens;
@@ -926,6 +976,11 @@ namespace Test.Shared
         private static bool IsOllama(ProviderTestConfiguration configuration)
         {
             return string.Equals(configuration.ProviderType, "ollama", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsAnthropic(ProviderTestConfiguration configuration)
+        {
+            return string.Equals(configuration.ProviderType, "anthropic", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

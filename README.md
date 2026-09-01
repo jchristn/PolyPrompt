@@ -6,11 +6,11 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, and **Google Gemini** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Google Gemini**, and **Anthropic Claude** APIs. Write your LLM integration code once and swap providers without changing your application logic.
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning three different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers.
+PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning four different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers.
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
 - **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
@@ -26,9 +26,9 @@ PolyPrompt provides a single, consistent API surface for interacting with multip
 
 PolyPrompt is a good fit when you need to:
 
-- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, or Google Gemini) without rewriting integration code
+- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, Google Gemini, or Anthropic Claude) without rewriting integration code
 - **Add tool-backed workflows** - Let models request application functions while your code stays in charge of tool execution
-- **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, and Gemini to evaluate quality, latency, and cost
+- **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, Gemini, and Anthropic to evaluate quality, latency, and cost
 - **Prototype rapidly** - Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
 - **Build RAG pipelines** - Generate embeddings for document chunks using any provider's embedding models, then query with semantic search
 - **Create AI-powered CLI tools** - The simple API makes it easy to add LLM capabilities to command-line applications
@@ -52,7 +52,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.0.1**.
+Current documented package version: **2.3.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -106,6 +106,27 @@ client.Model = "gemini-2.5-flash";
 
 ChatResponse response = await client.ChatAsync("What is the capital of France?");
 Console.WriteLine(response.Text);
+```
+
+### Anthropic
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using AnthropicClient client = new AnthropicClient(
+    "https://api.anthropic.com",
+    "sk-ant-your-api-key");
+client.Model = "claude-opus-4-8";
+
+ChatResponse response = await client.ChatAsync("What is the capital of France?");
+Console.WriteLine(response.Text);
+```
+
+Anthropic authenticates with the `x-api-key` and `anthropic-version` headers rather than bearer authorization; both are set automatically. The version value is configurable via `client.AnthropicVersion` (default `2023-06-01`). Identity-linked API keys additionally require a workspace:
+
+```csharp
+client.WorkspaceId = "wrkspc_your-workspace-id"; // sends the anthropic-workspace-id header
 ```
 
 ## Detailed Examples
@@ -221,7 +242,7 @@ Console.WriteLine(final.Text);
 
 ### Streaming Tool Calling
 
-`ToolChatStreamingAsync` streams assistant text and tool-call deltas while accumulating final `Text` and `ToolCalls` on the response as you enumerate `Chunks`. OpenAI-compatible, Ollama, and Gemini clients support it.
+`ToolChatStreamingAsync` streams assistant text and tool-call deltas while accumulating final `Text` and `ToolCalls` on the response as you enumerate `Chunks`. OpenAI-compatible, Ollama, Gemini, and Anthropic clients support it.
 
 ```csharp
 ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
@@ -251,6 +272,7 @@ Provider protocol shapes differ:
 - **OpenAI-compatible** uses `/v1/chat/completions` SSE chunks and parses `delta.tool_calls` argument fragments.
 - **Ollama** uses `/api/chat` newline-delimited JSON chunks and parses streamed `message.tool_calls`.
 - **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same `GenerateContentRequest` body shape as `ToolChatAsync`: `contents`, optional `systemInstruction`, `tools.functionDeclarations`, and `toolConfig`. It parses streamed `GenerateContentResponse` chunks from `candidates[].content.parts[]`, including `text`, complete `functionCall` objects, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
+- **Anthropic** uses `/v1/messages` with `"stream": true` and parses the event-typed SSE stream: `message_start` (id, model, input tokens), `content_block_start` for `text`, `thinking`, and `tool_use` blocks, `content_block_delta` carrying `text_delta`, `thinking_delta`, and `input_json_delta` fragments, and `message_delta` (stop reason, output tokens). Tool declarations use `tools[].input_schema`, and tool results are sent back as user-role `tool_result` content blocks; consecutive tool results merge into a single user turn so parallel tool calls resolve together.
 
 ### Reasoning Effort
 
@@ -268,19 +290,21 @@ request.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { Gemin
 
 Each level's default projection per provider (every value is individually overridable, and each override setter clamps/validates its input):
 
-| `ReasoningEffortLevel` | OpenAI `reasoning_effort` | Gemini `thinkingConfig.thinkingBudget` | Ollama `think` |
-|---|---|---|---|
-| `Minimal` | `"minimal"` | `0` (off) | `false` |
-| `Low` | `"low"` | `1024` | `"low"` |
-| `Medium` | `"medium"` | `8192` | `"medium"` |
-| `High` | `"high"` | `-1` (dynamic) | `"high"` |
-| _unset_ | *(omitted)* | *(omitted)* | *(omitted)* |
+| `ReasoningEffortLevel` | OpenAI `reasoning_effort` | Gemini `thinkingConfig.thinkingBudget` | Ollama `think` | Anthropic `output_config.effort` + `thinking` |
+|---|---|---|---|---|
+| `Minimal` | `"minimal"` | `0` (off) | `false` | `"low"`, no thinking field |
+| `Low` | `"low"` | `1024` | `"low"` | `"low"` + adaptive thinking |
+| `Medium` | `"medium"` | `8192` | `"medium"` | `"medium"` + adaptive thinking |
+| `High` | `"high"` | `-1` (dynamic) | `"high"` | `"high"` + adaptive thinking |
+| _unset_ | *(omitted)* | *(omitted)* | *(omitted)* | *(omitted)* |
 
-Overrides live on the value object: `OpenAiValue` (clamped to `minimal`/`low`/`medium`/`high`), `GeminiThinkingBudget` (clamped to `-1..32768`), and `OllamaThink` (clamped to `low`/`medium`/`high`/`true`/`false`). An unrecognized string override reverts to null and falls back to the level default. Ollama support is model-dependent (for example `gpt-oss`); providers with no reasoning concept simply ignore an omitted field.
+For Anthropic, `Low` and above send `thinking: {"type": "adaptive", "display": "summarized"}` alongside the effort so current Claude models think adaptively and return readable thinking summaries; `Minimal` omits the thinking field entirely (an explicit disable is rejected by some current Claude models, while omission is accepted everywhere).
+
+Overrides live on the value object: `OpenAiValue` (clamped to `minimal`/`low`/`medium`/`high`), `GeminiThinkingBudget` (clamped to `-1..32768`), `OllamaThink` (clamped to `low`/`medium`/`high`/`true`/`false`), and `AnthropicEffort` (clamped to `low`/`medium`/`high`/`xhigh`/`max` — `xhigh` and `max` have no level preset and are reachable only through the override). An unrecognized string override reverts to null and falls back to the level default. Ollama support is model-dependent (for example `gpt-oss`); providers with no reasoning concept simply ignore an omitted field.
 
 ### Reasoning / Thinking Output
 
-Where effort controls how hard a model thinks, this returns the thinking itself. A reasoning model emits its deliberation on a separate channel — OpenAI `reasoning_content`, Ollama `message.thinking`, Gemini `thought` parts — and PolyPrompt surfaces it distinct from the answer text. Streamed chunks carry a `ReasoningText` delta; responses carry an accumulated `Reasoning`. Both are null when the model produced no reasoning, so responses without it are unchanged.
+Where effort controls how hard a model thinks, this returns the thinking itself. A reasoning model emits its deliberation on a separate channel — OpenAI `reasoning_content`, Ollama `message.thinking`, Gemini `thought` parts, Anthropic `thinking` content blocks — and PolyPrompt surfaces it distinct from the answer text. Streamed chunks carry a `ReasoningText` delta; responses carry an accumulated `Reasoning`. Both are null when the model produced no reasoning, so responses without it are unchanged.
 
 ```csharp
 ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
@@ -299,6 +323,7 @@ await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 | OpenAI-compatible | `reasoning_content` (fallback `reasoning`) |
 | Ollama | `message.thinking` |
 | Gemini | `content.parts[]` with `thought: true` |
+| Anthropic | `thinking` content blocks and streamed `thinking_delta` events |
 
 ### Streaming Chat
 
@@ -617,6 +642,8 @@ CompletionClientBase CreateClient(string provider, string endpoint, string? apiK
             return new OpenAiClient(endpoint, apiKey);
         case "gemini":
             return new GeminiClient(endpoint, apiKey);
+        case "anthropic":
+            return new AnthropicClient(endpoint, apiKey);
         default:
             throw new ArgumentException("Unknown provider: " + provider);
     }
@@ -639,12 +666,12 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 
 ### Constructors
 
-Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
+Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `endpoint` | `string` | provider default | API endpoint URL |
-| `apiKey` | `string?` | `null` | API key; when non-empty an `Authorization: Bearer` header is added |
+| `apiKey` | `string?` | `null` | API key; when non-empty an `Authorization: Bearer` header is added (Anthropic instead sends `x-api-key` plus `anthropic-version`, and Gemini passes the key as a query parameter) |
 | `logging` | `LoggingModule?` | `null` | Logging module; a new instance is created when omitted |
 | `httpClient` | `HttpClient?` | `null` | Transport to use. When supplied, the caller owns and disposes it (see [Custom HttpClient](#custom-httpclient-custom-transport-tls-or-proxy)); when omitted, the client creates and owns its own |
 
@@ -663,6 +690,8 @@ Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`) has a cons
 | `SystemPrompt` | `string?` | `null` | System prompt for chat completions |
 | `CallDetails` | `List<CompletionCallDetail>` | empty | Detached snapshot of recorded HTTP call details |
 | `MaxCallDetails` | `int` | `1000` | Maximum retained call details; set to 0 to disable recording |
+
+`AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000).
 
 ### Client Methods
 
@@ -709,12 +738,15 @@ Each provider exposes option classes that extend the base options with provider-
 | **Ollama** | `OllamaChatCompletionOptions` | `OllamaEmbeddingOptions` | `OllamaGenerationOptions` |
 | **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` |
 | **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` |
+| **Anthropic** | `AnthropicChatCompletionOptions` | — (embeddings unsupported) | `AnthropicGenerationOptions` |
 
 **Ollama-specific parameters:** `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`
 
 **OpenAI-specific parameters:** `FrequencyPenalty`, `PresencePenalty`, `Seed`, `Dimensions`, `EncodingFormat`, `Echo`, `Suffix`, `Logprobs`
 
 **Gemini-specific parameters:** `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `TaskType`, `Title`
+
+**Anthropic-specific parameters:** `TopK`, `StopSequences`. Note that current Claude models (Opus 4.7 and later) reject sampling parameters (`temperature`, `top_p`, `top_k`) with a 400; leave them unset for those models.
 
 ### Default Models
 
@@ -723,27 +755,28 @@ Each provider exposes option classes that extend the base options with provider-
 | Ollama | `gemma3:4b` | `all-minilm` |
 | OpenAI | `gpt-4o-mini` | `text-embedding-3-small` |
 | Gemini | `gemini-2.5-flash` | `gemini-embedding-001` |
+| Anthropic | `claude-opus-4-8` | — (no embeddings API) |
 
 ### Provider Feature Support
 
-| Feature | Ollama | OpenAI | Gemini |
-|---------|--------|--------|--------|
-| Chat (non-streaming) | Yes | Yes | Yes |
-| Chat (streaming) | Yes | Yes | Yes |
-| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes |
-| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes |
-| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget |
-| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts |
-| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes |
-| Text Generation (streaming) | Yes | Legacy completions API only | Yes |
-| Embeddings (single) | Yes | Yes | Yes |
-| Embeddings (batch) | Yes | Yes | Yes |
-| List Models | Yes | Yes | Yes |
-| Model Exists | Yes | Yes | Yes |
-| Get Model Info | Yes | Yes | Yes |
-| Pull Model | Yes | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` |
-| Delete Model | Yes | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` |
-| Validate Connectivity | Yes | Yes | Yes |
+| Feature | Ollama | OpenAI | Gemini | Anthropic |
+|---------|--------|--------|--------|-----------|
+| Chat (non-streaming) | Yes | Yes | Yes | Yes |
+| Chat (streaming) | Yes | Yes | Yes | Yes |
+| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes |
+| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes |
+| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget | Via adaptive `thinking` + `output_config.effort` |
+| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts | Via `thinking` blocks |
+| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API |
+| Text Generation (streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API |
+| Embeddings (single) | Yes | Yes | Yes | No - `EmbedAsync` throws `NotSupportedException` |
+| Embeddings (batch) | Yes | Yes | Yes | No - `EmbedAsync` throws `NotSupportedException` |
+| List Models | Yes | Yes | Yes | Yes, with pagination |
+| Model Exists | Yes | Yes | Yes | Yes |
+| Get Model Info | Yes | Yes | Yes | Yes |
+| Pull Model | Yes | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` | No - `PullModelAsync` throws `NotSupportedException` |
+| Delete Model | Yes | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` | No - `DeleteModelAsync` throws `NotSupportedException` |
+| Validate Connectivity | Yes | Yes | Yes | Yes |
 
 Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape.
 
@@ -761,6 +794,7 @@ PolyPrompt/
 |   |-- OllamaConsole/           # Interactive Ollama test harness, including tc/toolchat
 |   |-- OpenAIConsole/           # Interactive OpenAI test harness, including tc/toolchat
 |   |-- GeminiConsole/           # Interactive Gemini test harness, including tc/toolchat
+|   |-- AnthropicConsole/        # Interactive Anthropic test harness, including tc/toolchat
 |   |-- Test.Shared/             # Shared Touchstone test descriptors
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Xunit/              # xUnit adapter over Test.Shared
@@ -786,10 +820,16 @@ dotnet run --project src/Test.Automated --framework net8.0 -- selftest
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 
-# Live provider tests through the Touchstone console runner. OpenAI and Gemini default to their public API endpoints.
+# Live provider tests through the Touchstone console runner. OpenAI, Gemini, and Anthropic default to their public API endpoints.
 dotnet run --project src/Test.Automated -- --openai-key sk-your-key --openai-model gpt-4o-mini
 dotnet run --project src/Test.Automated -- --ollama-endpoint http://localhost:11434 --ollama-model gpt-oss:20b --ollama-embedding-model all-minilm
 dotnet run --project src/Test.Automated -- --gemini-key your-key --gemini-model gemini-2.5-flash
+dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --anthropic-model claude-opus-4-8
+
+# Identity-linked Anthropic API keys also require a workspace ID.
+dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --anthropic-workspace wrkspc_your-id
+
+# Anthropic has no embeddings API; the live embedding cases are skipped for it.
 
 # Ollama can also be validated through its OpenAI-compatible /v1 API.
 dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11434/v1 --openai-model gpt-oss:20b --openai-embedding-model all-minilm
@@ -797,7 +837,7 @@ dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11
 # Live tool-chat cases verify successful tool use when the configured model supports tools,
 # and verify the provider's unsupported-model error when it does not.
 
-# Generic named form and positional form are also supported
+# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic)
 dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b --embedding-model all-minilm
 dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
 
@@ -810,6 +850,7 @@ dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 
 # Provider-specific environment variables can be used instead of POLYPROMPT_TEST_PROVIDER
+# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*)
 set POLYPROMPT_TEST_OPENAI_API_KEY=sk-your-key
 set POLYPROMPT_TEST_OPENAI_MODEL=gpt-4o-mini
 dotnet test src/Test.Xunit/Test.Xunit.csproj

@@ -55,6 +55,7 @@ namespace PolyPrompt.Models
         private string? _OpenAiValue = null;
         private int? _GeminiThinkingBudget = null;
         private string? _OllamaThink = null;
+        private string? _AnthropicEffort = null;
 
         // Accepted override tokens. A value outside its set is rejected (reverts to null) so the projection
         // falls back to the Level-derived default — the same "silently clamp to a valid value" idiom the
@@ -64,6 +65,9 @@ namespace PolyPrompt.Models
 
         private static readonly HashSet<string> _OllamaValues =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "low", "medium", "high", "true", "false" };
+
+        private static readonly HashSet<string> _AnthropicValues =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "low", "medium", "high", "xhigh", "max" };
 
         private const int GeminiThinkingBudgetFloor = -1;      // -1 = dynamic budget, 0 = off
         private const int GeminiThinkingBudgetCeiling = 32768; // generous upper bound across 2.5 models
@@ -115,6 +119,18 @@ namespace PolyPrompt.Models
         {
             get { return _OllamaThink; }
             set { _OllamaThink = NormalizeToken(value, _OllamaValues); }
+        }
+
+        /// <summary>
+        /// Anthropic output_config.effort override. Null derives from <see cref="Level"/>. Set values are
+        /// normalized (trimmed, lower-cased) and clamped to the accepted set
+        /// ("low"/"medium"/"high"/"xhigh"/"max"); an unrecognized value reverts to null. "xhigh" and "max"
+        /// have no level preset and are reachable only through this override.
+        /// </summary>
+        public string? AnthropicEffort
+        {
+            get { return _AnthropicEffort; }
+            set { _AnthropicEffort = NormalizeToken(value, _AnthropicValues); }
         }
 
         #endregion
@@ -174,6 +190,43 @@ namespace PolyPrompt.Models
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
                 case ReasoningEffortLevel.High:    return "high";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>Returns the Anthropic output_config.effort wire value (override if set, else derived from Level).</summary>
+        /// <returns>One of "low"/"medium"/"high", or the configured override ("xhigh"/"max" included).</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public string ToAnthropicEffort()
+        {
+            if (_AnthropicEffort != null) return _AnthropicEffort;
+
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.Minimal: return "low";
+                case ReasoningEffortLevel.Low:     return "low";
+                case ReasoningEffortLevel.Medium:  return "medium";
+                case ReasoningEffortLevel.High:    return "high";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>
+        /// Whether the Anthropic projection sends an adaptive thinking field alongside the effort.
+        /// <see cref="ReasoningEffortLevel.Minimal"/> omits the thinking field entirely (an explicit disable
+        /// is rejected by some current Claude models while omission is accepted everywhere); every other
+        /// level sends adaptive thinking with a summarized display so reasoning capture returns text.
+        /// </summary>
+        /// <returns>True when the projection includes a thinking field, false for Minimal.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public bool SendsAnthropicThinking()
+        {
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.Minimal: return false;
+                case ReasoningEffortLevel.Low:
+                case ReasoningEffortLevel.Medium:
+                case ReasoningEffortLevel.High:    return true;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }

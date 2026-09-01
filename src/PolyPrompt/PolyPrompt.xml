@@ -4,6 +4,87 @@
         <name>PolyPrompt</name>
     </assembly>
     <members>
+        <member name="T:PolyPrompt.Clients.AnthropicClient">
+            <summary>
+            Client for the Anthropic (Claude) Messages API supporting chat completions, tool calling, and text
+            generation. Anthropic has no embeddings API and no legacy completions endpoint; embeddings throw
+            <see cref="T:System.NotSupportedException"/> and text generation is mapped onto the Messages API as a
+            single-user-turn request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.AnthropicClient.AnthropicVersion">
+            <summary>
+            Value sent in the anthropic-version request header. Default: 2023-06-01. Must be non-empty;
+            changing it updates the header on subsequent requests.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.AnthropicClient.WorkspaceId">
+            <summary>
+            Workspace identifier sent in the anthropic-workspace-id request header. Default: null (no header
+            is sent). Identity-linked Anthropic API keys reject requests without it; standard workspace API
+            keys do not require it. Set to null to remove the header.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.AnthropicClient.ModelsPageLimit">
+            <summary>
+            Page size requested from the models list endpoint. Clamped to 1..1,000 (the API maximum).
+            Default: 1,000. ListModelsAsync follows pagination until the provider reports no more pages, so
+            this affects request count, not result completeness.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new AnthropicClient.
+            </summary>
+            <param name="endpoint">Anthropic API endpoint URL. Default: https://api.anthropic.com.</param>
+            <param name="apiKey">Anthropic API key (required). Sent as the x-api-key header; Anthropic does not use bearer authorization. Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Anthropic does not provide an embeddings API.
+            </summary>
+            <param name="input">The text to embed.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; Anthropic has no embeddings endpoint.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Anthropic does not provide an embeddings API.
+            </summary>
+            <param name="inputs">The list of texts to embed.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown; Anthropic has no embeddings endpoint.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
             <summary>
             Abstract base class for chat completion, embedding, and generation API clients.
@@ -1345,6 +1426,14 @@
             an unrecognized value reverts to null. "true"/"false" are emitted as JSON booleans.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ReasoningEffort.AnthropicEffort">
+            <summary>
+            Anthropic output_config.effort override. Null derives from <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>. Set values are
+            normalized (trimmed, lower-cased) and clamped to the accepted set
+            ("low"/"medium"/"high"/"xhigh"/"max"); an unrecognized value reverts to null. "xhigh" and "max"
+            have no level preset and are reachable only through this override.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToOpenAiWireValue">
             <summary>Returns the OpenAI reasoning_effort wire value (override if set, else derived from Level).</summary>
             <returns>One of "minimal"/"low"/"medium"/"high", or the configured override.</returns>
@@ -1358,6 +1447,21 @@
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToOllamaThink">
             <summary>Returns the Ollama think value as a bool or string (override if set, else derived from Level).</summary>
             <returns>A boolean (true/false) or a level string ("low"/"medium"/"high").</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ReasoningEffort.ToAnthropicEffort">
+            <summary>Returns the Anthropic output_config.effort wire value (override if set, else derived from Level).</summary>
+            <returns>One of "low"/"medium"/"high", or the configured override ("xhigh"/"max" included).</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ReasoningEffort.SendsAnthropicThinking">
+            <summary>
+            Whether the Anthropic projection sends an adaptive thinking field alongside the effort.
+            <see cref="F:PolyPrompt.Models.ReasoningEffortLevel.Minimal"/> omits the thinking field entirely (an explicit disable
+            is rejected by some current Claude models while omission is accepted everywhere); every other
+            level sends adaptive thinking with a summarized display so reasoning capture returns text.
+            </summary>
+            <returns>True when the projection includes a thinking field, false for Minimal.</returns>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
         </member>
         <member name="M:PolyPrompt.Models.ReasoningEffort.NormalizeToken(System.String,System.Collections.Generic.HashSet{System.String})">
@@ -1750,6 +1854,44 @@
             <param name="parameters">JSON Schema parameter object.</param>
             <returns>A function tool definition.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
+        </member>
+        <member name="T:PolyPrompt.Options.AnthropicChatCompletionOptions">
+            <summary>
+            Anthropic-specific options for chat completion requests.
+            These map to fields on the Anthropic Messages API request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.AnthropicChatCompletionOptions.TopK">
+            <summary>
+            Top-K sampling (top_k). Clamped to 1..1,000. Null uses the model default. Note that current
+            Claude models (Opus 4.7 and later) reject sampling parameters; use this only with models that
+            accept it.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.AnthropicChatCompletionOptions.StopSequences">
+            <summary>
+            Custom stop sequences (stop_sequences). The model stops generating when any sequence is
+            produced. Null or empty sends no stop sequences.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.AnthropicGenerationOptions">
+            <summary>
+            Anthropic-specific options for text generation requests. Anthropic has no legacy completions
+            endpoint, so generation rides the Messages API; these map to fields on that request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.AnthropicGenerationOptions.TopK">
+            <summary>
+            Top-K sampling (top_k). Clamped to 1..1,000. Null uses the model default. Note that current
+            Claude models (Opus 4.7 and later) reject sampling parameters; use this only with models that
+            accept it.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.AnthropicGenerationOptions.StopSequences">
+            <summary>
+            Custom stop sequences (stop_sequences). The model stops generating when any sequence is
+            produced. Null or empty sends no stop sequences.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Options.GeminiChatCompletionOptions">
             <summary>

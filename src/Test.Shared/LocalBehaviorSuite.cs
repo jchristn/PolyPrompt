@@ -32,6 +32,10 @@ namespace Test.Shared
             "POLYPROMPT_TEST_GEMINI_ENDPOINT",
             "POLYPROMPT_TEST_GEMINI_MODEL",
             "POLYPROMPT_TEST_GEMINI_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_ANTHROPIC_API_KEY",
+            "POLYPROMPT_TEST_ANTHROPIC_ENDPOINT",
+            "POLYPROMPT_TEST_ANTHROPIC_MODEL",
+            "POLYPROMPT_TEST_ANTHROPIC_WORKSPACE_ID",
         };
 
         /// <summary>
@@ -112,6 +116,26 @@ namespace Test.Shared
                     Case("tool_chat_streaming_body_timeout", "Streaming tool chat timeout covers the response body", RunToolChatStreamingBodyTimeoutAsync),
                     Case("post_and_record_disposes_response", "PostAndRecordAsync disposes non-streaming responses", RunPostAndRecordDisposesResponseAsync),
                     Case("injected_http_client", "Injected HttpClient is used and not disposed by the client", RunInjectedHttpClientAsync),
+                    Case("anthropic_chat_request_translation", "Anthropic chat request translation and headers", RunAnthropicChatRequestTranslationAsync),
+                    Case("anthropic_chat_streaming", "Anthropic streaming chat flow", RunAnthropicChatStreamingAsync),
+                    Case("anthropic_generation", "Anthropic generation maps onto the Messages API", RunAnthropicGenerationAsync),
+                    Case("anthropic_tool_chat", "Anthropic tool chat flow", RunAnthropicToolChatAsync),
+                    Case("anthropic_tool_chat_streaming", "Anthropic streaming tool chat flow", RunAnthropicToolChatStreamingAsync),
+                    Case("anthropic_tool_choice_translation", "Anthropic tool choice directives are translated", RunAnthropicToolChoiceTranslationAsync),
+                    Case("anthropic_request_model_override", "Anthropic per-request model override is sent", RunAnthropicRequestModelOverrideAsync),
+                    Case("anthropic_models", "Anthropic model listing, pagination, and lookup", RunAnthropicModelsAsync),
+                    Case("reasoning_effort_anthropic_toolchat", "Reasoning effort maps to Anthropic thinking and effort", RunReasoningEffortAnthropicToolChatAsync),
+                    Case("reasoning_effort_anthropic_toolchat_streaming", "Reasoning effort maps to Anthropic thinking and effort (streaming)", RunReasoningEffortAnthropicToolChatStreamingAsync),
+                    Case("reasoning_effort_anthropic_override", "Anthropic effort override wins and clamps", RunReasoningEffortAnthropicOverrideAsync),
+                    Case("reasoning_anthropic_chat", "Anthropic non-streaming chat surfaces thinking", RunReasoningAnthropicChatAsync),
+                    Case("reasoning_anthropic_chat_streaming", "Anthropic streaming chat surfaces thinking", RunReasoningAnthropicChatStreamingAsync),
+                    Case("reasoning_anthropic_toolchat", "Anthropic non-streaming tool chat surfaces thinking", RunReasoningAnthropicToolChatAsync),
+                    Case("reasoning_anthropic_toolchat_streaming", "Anthropic streaming tool chat surfaces thinking without resending it", RunReasoningAnthropicToolChatStreamingAsync),
+                    Case("anthropic_reasoning_empty_is_null", "Anthropic empty thinking normalizes to null", RunAnthropicReasoningEmptyIsNullAsync),
+                    Case("anthropic_embedding_not_supported", "Anthropic embeddings throw NotSupportedException", RunAnthropicEmbeddingNotSupportedAsync),
+                    Case("anthropic_http_error_handling", "Anthropic HTTP errors are surfaced", RunAnthropicHttpErrorHandlingAsync),
+                    Case("anthropic_refusal_stop_reason", "Anthropic refusal stop reason is surfaced without failing", RunAnthropicRefusalStopReasonAsync),
+                    Case("anthropic_streaming_body_timeout", "Anthropic streaming timeout covers the response body", RunAnthropicStreamingBodyTimeoutAsync),
                 });
         }
 
@@ -272,6 +296,13 @@ namespace Test.Shared
             SharedAssert.Equal(ProviderTestConfiguration.DefaultGeminiEndpoint, gemini.Endpoint, "Gemini should use its default endpoint when none is supplied.");
             SharedAssert.Equal("text-embedding-004", gemini.EmbeddingModel, "Gemini should use its default embedding model.");
 
+            ProviderTestConfiguration anthropic = ProviderTestConfiguration.CreateWithDefaults("anthropic", apiKey: "anthropic-key", inferenceModel: "claude-test");
+            SharedAssert.Equal("anthropic", anthropic.ProviderType, "Anthropic provider type should normalize.");
+            SharedAssert.Equal(ProviderTestConfiguration.DefaultAnthropicEndpoint, anthropic.Endpoint, "Anthropic should use its default endpoint when none is supplied.");
+            SharedAssert.Equal("anthropic-key", anthropic.ApiKey, "Anthropic API key should be retained.");
+            SharedAssert.Equal("claude-test", anthropic.InferenceModel, "Anthropic inference model should be retained.");
+            SharedAssert.Equal(string.Empty, anthropic.EmbeddingModel, "Anthropic should have no default embedding model.");
+
             ProviderTestConfiguration ollama = ProviderTestConfiguration.CreateWithDefaults("ollama", endpoint: "http://localhost:11434", inferenceModel: "gemma3:4b", embeddingModel: "all-minilm");
             SharedAssert.Equal("ollama", ollama.ProviderType, "Ollama provider type should be retained.");
             SharedAssert.Equal("http://localhost:11434", ollama.Endpoint, "Ollama endpoint should be retained.");
@@ -310,6 +341,16 @@ namespace Test.Shared
                 SharedAssert.Equal(ProviderTestConfiguration.DefaultGeminiEndpoint, genericEnvironment.Endpoint, "Generic Gemini environment configuration should default endpoint.");
                 SharedAssert.Equal("gemini-key", genericEnvironment.ApiKey, "Generic environment API key should be retained.");
                 SharedAssert.Equal("gemini-live", genericEnvironment.InferenceModel, "Generic environment model should be retained.");
+
+                ClearProviderEnvironment();
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_ANTHROPIC_API_KEY", "anthropic-key");
+                Environment.SetEnvironmentVariable("POLYPROMPT_TEST_ANTHROPIC_MODEL", "claude-live");
+                ProviderTestConfiguration? anthropicFromEnvironment = ProviderTestConfiguration.FromEnvironment();
+                ProviderTestConfiguration anthropicEnvironment = anthropicFromEnvironment ?? throw new TestFailureException("Anthropic environment configuration should be created.");
+                SharedAssert.Equal("anthropic", anthropicEnvironment.ProviderType, "Anthropic environment provider should be selected.");
+                SharedAssert.Equal(ProviderTestConfiguration.DefaultAnthropicEndpoint, anthropicEnvironment.Endpoint, "Anthropic environment configuration should default endpoint.");
+                SharedAssert.Equal("anthropic-key", anthropicEnvironment.ApiKey, "Anthropic environment API key should be retained.");
+                SharedAssert.Equal("claude-live", anthropicEnvironment.InferenceModel, "Anthropic environment model should be retained.");
 
                 ClearProviderEnvironment();
                 Environment.SetEnvironmentVariable("POLYPROMPT_TEST_OPENAI_API_KEY", "openai-key");
@@ -363,6 +404,18 @@ namespace Test.Shared
             SharedAssert.Equal(8, geminiChat.CandidateCount, "Gemini candidate count should clamp.");
             SharedAssert.Equal(2.0, geminiChat.PresencePenalty, "Gemini presence penalty should clamp.");
             SharedAssert.Equal(-2.0, geminiChat.FrequencyPenalty, "Gemini frequency penalty should clamp.");
+
+            AnthropicChatCompletionOptions anthropicChat = new AnthropicChatCompletionOptions();
+            anthropicChat.TopK = -10;
+            SharedAssert.Equal(1, anthropicChat.TopK, "Anthropic chat top-k should clamp to minimum.");
+            anthropicChat.TopK = 5000;
+            SharedAssert.Equal(1000, anthropicChat.TopK, "Anthropic chat top-k should clamp to maximum.");
+            anthropicChat.TopK = null;
+            SharedAssert.True(anthropicChat.TopK == null, "Anthropic chat top-k should be nullable.");
+
+            AnthropicGenerationOptions anthropicGeneration = new AnthropicGenerationOptions();
+            anthropicGeneration.TopK = 0;
+            SharedAssert.Equal(1, anthropicGeneration.TopK, "Anthropic generation top-k should clamp to minimum.");
         }
 
         private static async Task RunProviderChatRequestTranslationAsync(CancellationToken token)
@@ -1296,6 +1349,16 @@ namespace Test.Shared
             SharedAssert.Equal("medium", (string)new ReasoningEffort(ReasoningEffortLevel.Medium).ToOllamaThink(), "Medium maps to Ollama think 'medium'.");
             SharedAssert.Equal("high", (string)new ReasoningEffort(ReasoningEffortLevel.High).ToOllamaThink(), "High maps to Ollama think 'high'.");
 
+            SharedAssert.Equal("low", new ReasoningEffort(ReasoningEffortLevel.Minimal).ToAnthropicEffort(), "Minimal maps to Anthropic effort 'low'.");
+            SharedAssert.Equal("low", new ReasoningEffort(ReasoningEffortLevel.Low).ToAnthropicEffort(), "Low maps to Anthropic effort 'low'.");
+            SharedAssert.Equal("medium", new ReasoningEffort(ReasoningEffortLevel.Medium).ToAnthropicEffort(), "Medium maps to Anthropic effort 'medium'.");
+            SharedAssert.Equal("high", new ReasoningEffort(ReasoningEffortLevel.High).ToAnthropicEffort(), "High maps to Anthropic effort 'high'.");
+
+            SharedAssert.False(new ReasoningEffort(ReasoningEffortLevel.Minimal).SendsAnthropicThinking(), "Minimal omits the Anthropic thinking field.");
+            SharedAssert.True(new ReasoningEffort(ReasoningEffortLevel.Low).SendsAnthropicThinking(), "Low sends Anthropic adaptive thinking.");
+            SharedAssert.True(new ReasoningEffort(ReasoningEffortLevel.Medium).SendsAnthropicThinking(), "Medium sends Anthropic adaptive thinking.");
+            SharedAssert.True(new ReasoningEffort(ReasoningEffortLevel.High).SendsAnthropicThinking(), "High sends Anthropic adaptive thinking.");
+
             await Task.CompletedTask.ConfigureAwait(false);
         }
 
@@ -1311,7 +1374,7 @@ namespace Test.Shared
             ReasoningEffort implicitEffort = ReasoningEffortLevel.Low;
             SharedAssert.Equal(ReasoningEffortLevel.Low, implicitEffort.Level, "Implicit conversion should carry the level.");
             SharedAssert.True(
-                implicitEffort.OpenAiValue == null && implicitEffort.GeminiThinkingBudget == null && implicitEffort.OllamaThink == null,
+                implicitEffort.OpenAiValue == null && implicitEffort.GeminiThinkingBudget == null && implicitEffort.OllamaThink == null && implicitEffort.AnthropicEffort == null,
                 "Implicit conversion should leave all overrides unset.");
 
             await Task.CompletedTask.ConfigureAwait(false);
@@ -1427,6 +1490,14 @@ namespace Test.Shared
             await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
                 () => { effort.ToOllamaThink(); return Task.CompletedTask; },
                 "An undefined level should throw from ToOllamaThink.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => { effort.ToAnthropicEffort(); return Task.CompletedTask; },
+                "An undefined level should throw from ToAnthropicEffort.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => { effort.SendsAnthropicThinking(); return Task.CompletedTask; },
+                "An undefined level should throw from SendsAnthropicThinking.").ConfigureAwait(false);
         }
 
         private static async Task RunReasoningOpenAiChatAsync(CancellationToken token)
@@ -1923,6 +1994,16 @@ namespace Test.Shared
             await SharedAssert.ThrowsAsync<NotSupportedException>(
                 () => geminiClient.DeleteModelAsync("test-model", token),
                 "Gemini DeleteModelAsync should be unsupported.").ConfigureAwait(false);
+
+            using AnthropicClient anthropicClient = new AnthropicClient(server.Endpoint, "test-key");
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => anthropicClient.PullModelAsync("test-model", token: token),
+                "Anthropic PullModelAsync should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => anthropicClient.DeleteModelAsync("test-model", token),
+                "Anthropic DeleteModelAsync should be unsupported.").ConfigureAwait(false);
         }
 
         private static async Task RunHttpErrorHandlingAsync(CancellationToken token)
@@ -2076,6 +2157,603 @@ namespace Test.Shared
             }
 
             SharedAssert.True(responseDisposed, "PostAndRecordAsync should dispose the retained response object.");
+        }
+
+        private static async Task RunAnthropicChatRequestTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            AnthropicChatCompletionOptions options = new AnthropicChatCompletionOptions();
+            options.MaxTokens = 222;
+            options.Temperature = 0.25;
+            options.TopP = 0.75;
+            options.SystemPrompt = "system instructions";
+            options.TopK = 40;
+            options.StopSequences = new List<string> { "END" };
+
+            ChatResponse response = await client.ChatAsync("hello anthropic", options, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic chat should succeed.");
+            SharedAssert.Equal("pong", response.Text, "Anthropic chat should parse text.");
+
+            SharedAssert.Equal("/v1/messages", server.RequestPaths[0], "Anthropic chat should POST to /v1/messages.");
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("test-model", recorded.Model, "Anthropic chat should send the client model.");
+            SharedAssert.Equal(222, recorded.MaxTokens, "Anthropic chat should always send max_tokens.");
+            SharedAssert.Equal("system instructions", recorded.System, "Anthropic chat should lift the system prompt to the top-level system field.");
+            SharedAssert.True(recorded.Temperature.HasValue && Math.Abs(recorded.Temperature.Value - 0.25) < 0.001, "Anthropic chat should map temperature.");
+            SharedAssert.True(recorded.TopP.HasValue && Math.Abs(recorded.TopP.Value - 0.75) < 0.001, "Anthropic chat should map top_p.");
+            SharedAssert.Equal(40, recorded.TopK, "Anthropic chat should map top_k.");
+            SharedAssert.True(recorded.StopSequences != null && recorded.StopSequences.Contains("END"), "Anthropic chat should map stop_sequences.");
+            SharedAssert.True(recorded.Messages != null && recorded.Messages.Count == 1, "Anthropic chat should send one user message.");
+            SharedAssert.Equal("user", recorded.Messages![0].Role, "Anthropic chat message role should be user.");
+            SharedAssert.Equal("hello anthropic", recorded.Messages[0].Text, "Anthropic chat message content should be the prompt.");
+            SharedAssert.True(recorded.Stream != true, "Anthropic non-streaming chat should not set stream.");
+
+            List<CompletionCallDetail> details = client.CallDetails;
+            SharedAssert.True(details.Count >= 1, "Anthropic chat should record call details.");
+            SharedAssert.True(details[0].RequestHeaders.ContainsKey("x-api-key"), "Anthropic requests should carry the x-api-key header.");
+            SharedAssert.True(details[0].RequestHeaders.ContainsKey("anthropic-version"), "Anthropic requests should carry the anthropic-version header.");
+            SharedAssert.Equal("2023-06-01", details[0].RequestHeaders["anthropic-version"], "Anthropic requests should default the anthropic-version value.");
+            SharedAssert.False(details[0].RequestHeaders.ContainsKey("Authorization"), "Anthropic requests should not carry a bearer Authorization header.");
+            SharedAssert.False(details[0].RequestHeaders.ContainsKey("anthropic-workspace-id"), "Anthropic requests should omit the workspace header by default.");
+
+            client.WorkspaceId = "wrkspc_test";
+            ChatResponse workspaceResponse = await client.ChatAsync("hello again", token: token).ConfigureAwait(false);
+            SharedAssert.True(workspaceResponse.Success, "Anthropic chat with a workspace id should succeed.");
+            List<CompletionCallDetail> workspaceDetails = client.CallDetails;
+            SharedAssert.Equal("wrkspc_test", workspaceDetails[workspaceDetails.Count - 1].RequestHeaders["anthropic-workspace-id"], "Setting WorkspaceId should add the anthropic-workspace-id header.");
+
+            client.WorkspaceId = null;
+            ChatResponse clearedResponse = await client.ChatAsync("hello once more", token: token).ConfigureAwait(false);
+            SharedAssert.True(clearedResponse.Success, "Anthropic chat after clearing the workspace id should succeed.");
+            List<CompletionCallDetail> clearedDetails = client.CallDetails;
+            SharedAssert.False(clearedDetails[clearedDetails.Count - 1].RequestHeaders.ContainsKey("anthropic-workspace-id"), "Clearing WorkspaceId should remove the anthropic-workspace-id header.");
+        }
+
+        private static async Task RunAnthropicChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineChatText(chunks);
+
+            SharedAssert.True(stream.Success, "Anthropic streaming chat should start.");
+            SharedAssert.Equal(200, stream.StatusCode, "Anthropic streaming chat should return HTTP 200.");
+            SharedAssert.Equal("hello world", text, "Anthropic streaming chat should assemble text.");
+            SharedAssert.Equal("end_turn", stream.FinishReason, "Anthropic streaming chat should expose the stop reason.");
+            SharedAssert.Equal("anthropic-chat-stream-local", stream.ResponseId, "Anthropic streaming chat should expose the message id.");
+            SharedAssert.NotNull(stream.Usage, "Anthropic streaming chat should expose usage.");
+            SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Anthropic streaming chat should parse output tokens.");
+            SharedAssert.Equal(3, stream.Usage!.PromptTokens, "Anthropic streaming chat should carry input tokens from message_start.");
+            SharedAssert.Equal(5, stream.Usage!.TotalTokens, "Anthropic streaming chat should total token usage.");
+            SharedAssert.True(stream.ChunkCount >= 2, "Anthropic streaming chat should count text chunks.");
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.True(recorded.Stream == true, "Anthropic streaming chat request should set stream true.");
+        }
+
+        private static async Task RunAnthropicGenerationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            AnthropicGenerationOptions options = new AnthropicGenerationOptions();
+            options.Model = "generation-model";
+            options.MaxTokens = 17;
+
+            GenerationResponse generation = await client.GenerateAsync("generate me", options, token).ConfigureAwait(false);
+            SharedAssert.True(generation.Success, "Anthropic generation should succeed.");
+            SharedAssert.Equal("pong", generation.Text, "Anthropic generation should parse text from the Messages API.");
+
+            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
+            List<GenerationStreamingChunk> chunks = await ConsumeGenerationStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineGenerationText(chunks);
+
+            SharedAssert.True(stream.Success, "Anthropic streaming generation should start.");
+            SharedAssert.Equal("hello world", text, "Anthropic streaming generation should assemble text.");
+            SharedAssert.True(stream.ChunkCount >= 2, "Anthropic streaming generation should count text chunks.");
+
+            SharedAssert.Equal("/v1/messages", server.RequestPaths[0], "Anthropic generation should ride the Messages API.");
+            SharedAssert.Equal("/v1/messages", server.RequestPaths[1], "Anthropic streaming generation should ride the Messages API.");
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("generation-model", recorded.Model, "Anthropic generation should use the option model.");
+            SharedAssert.Equal(17, recorded.MaxTokens, "Anthropic generation should map max tokens.");
+            SharedAssert.True(recorded.System == null, "Anthropic generation should not send a system field.");
+            SharedAssert.True(recorded.Messages != null && recorded.Messages.Count == 1 && recorded.Messages[0].Text == "generate me", "Anthropic generation should send the prompt as a single user message.");
+        }
+
+        private static async Task RunAnthropicToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(first.Success, "Anthropic ToolChatAsync should succeed.");
+            SharedAssert.Equal("tool_use", first.FinishReason, "Anthropic tool response should expose the stop reason.");
+            SharedAssert.Equal("anthropic-tool-local", first.ResponseId, "Anthropic tool response should expose the message id.");
+            SharedAssert.Equal(1, first.ToolCalls.Count, "Anthropic response should contain one tool call.");
+            SharedAssert.Equal("toolu-weather-1", first.ToolCalls[0].Id, "Anthropic response should preserve the tool_use id.");
+            SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Anthropic response should parse the tool name.");
+            Dictionary<string, string> anthropicArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
+            SharedAssert.Equal("Seattle", anthropicArguments["city"], "Anthropic response should parse tool_use input as arguments.");
+
+            request.Messages.Add(first.ToAssistantMessage());
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+            request.Messages.Add(ChatMessage.ToolResult(first.ToolCalls[0].Id, first.ToolCalls[0].Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
+
+            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(final.Success, "Anthropic final ToolChatAsync should succeed.");
+            SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Anthropic final response should parse text.");
+            SharedAssert.Equal("end_turn", final.FinishReason, "Anthropic final response should expose the stop reason.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalAnthropicRequest initialRequest = DeserializeRecordedAnthropicRequest(bodies[0]);
+            LocalAnthropicRequest followupRequest = DeserializeRecordedAnthropicRequest(bodies[1]);
+
+            SharedAssert.True(initialRequest.Tools != null && initialRequest.Tools.Count == 1, "Anthropic request should include one tool.");
+            SharedAssert.Equal("get_weather", initialRequest.Tools![0].Name, "Anthropic tool declaration should carry the name.");
+            SharedAssert.True(initialRequest.Tools[0].InputSchema != null && initialRequest.Tools[0].InputSchema!.ContainsKey("properties"), "Anthropic tool declaration should carry input_schema.");
+            SharedAssert.True(initialRequest.ToolChoice != null && initialRequest.ToolChoice.Type == "auto", "Anthropic auto tool choice should map to {type:auto}.");
+            SharedAssert.NotEmpty(initialRequest.System, "Anthropic request should lift system messages into the system field.");
+
+            SharedAssert.True(followupRequest.Tools == null || followupRequest.Tools.Count == 0, "Anthropic follow-up should omit tools when ToolChoice is none.");
+            SharedAssert.True(followupRequest.ToolChoice == null, "Anthropic follow-up should omit tool_choice when tools are omitted.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+                        && message.Blocks != null
+                        && message.Blocks.Any(block => block.Type == "tool_use"
+                            && block.Id == "toolu-weather-1"
+                            && block.InputJson != null
+                            && block.InputJson.Contains("Seattle", StringComparison.Ordinal))),
+                "Anthropic follow-up should include the assistant tool_use history.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase)
+                        && message.Blocks != null
+                        && message.Blocks.Any(block => block.Type == "tool_result" && block.ToolUseId == "toolu-weather-1")),
+                "Anthropic follow-up should include the user tool_result block.");
+        }
+
+        private static async Task RunAnthropicToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+
+            SharedAssert.True(first.Success, "Anthropic ToolChatStreamingAsync should start.");
+            SharedAssert.Equal(200, first.StatusCode, "Anthropic streaming tool chat should return HTTP 200.");
+
+            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+
+            SharedAssert.True(firstChunks.Count > 0, "Anthropic streaming tool chat should receive chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Anthropic streaming tool chat should emit text chunks.");
+            SharedAssert.True(firstChunks.Any(chunk => chunk.ToolCallDeltas.Count > 0), "Anthropic streaming tool chat should emit tool-call deltas.");
+            SharedAssert.Equal("Checking weather. ", first.Text, "Anthropic streaming tool chat should accumulate text.");
+            SharedAssert.Equal("tool_use", first.FinishReason, "Anthropic streaming tool chat should expose the stop reason.");
+            SharedAssert.Equal("anthropic-tool-stream-local", first.ResponseId, "Anthropic streaming tool chat should expose the message id.");
+            SharedAssert.Equal(2, first.ToolCalls.Count, "Anthropic streaming tool chat should accumulate multiple tool calls.");
+            SharedAssert.True(first.ToolCallDeltaCount >= 5, "Anthropic streaming tool chat should count tool-call deltas.");
+            SharedAssert.True(first.ChunkCount >= 5, "Anthropic streaming tool chat should count content chunks.");
+            SharedAssert.NotNull(first.Usage, "Anthropic streaming tool chat should expose usage.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Anthropic streaming tool chat should parse output tokens.");
+
+            SharedAssert.Equal("toolu-weather-1", first.ToolCalls[0].Id, "Anthropic streaming tool chat should preserve the first tool_use id.");
+            SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Anthropic streaming tool chat should parse the first tool name.");
+            Dictionary<string, string> firstArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
+            SharedAssert.Equal("Seattle", firstArguments["city"], "Anthropic streaming tool chat should accumulate split input_json_delta fragments.");
+
+            SharedAssert.Equal("toolu-weather-2", first.ToolCalls[1].Id, "Anthropic streaming tool chat should preserve the second tool_use id.");
+            Dictionary<string, string> secondArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[1].ArgumentsJson);
+            SharedAssert.Equal("Portland", secondArguments["city"], "Anthropic streaming tool chat should parse the second tool call arguments.");
+
+            request.Messages.Add(first.ToAssistantMessage());
+            request.Tools.Clear();
+            request.ToolChoice = "none";
+            foreach (ToolCall call in first.ToolCalls)
+            {
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
+            }
+
+            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+
+            SharedAssert.True(final.Success, "Anthropic final ToolChatStreamingAsync should start.");
+            SharedAssert.True(finalChunks.Count > 0, "Anthropic final streaming tool chat should receive chunks.");
+            SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Anthropic final streaming response should accumulate text.");
+            SharedAssert.Equal(0, final.ToolCalls.Count, "Anthropic final streaming response should not accumulate tool calls.");
+            SharedAssert.Equal("end_turn", final.FinishReason, "Anthropic final streaming response should expose the stop reason.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalAnthropicRequest initialRequest = DeserializeRecordedAnthropicRequest(bodies[0]);
+            LocalAnthropicRequest followupRequest = DeserializeRecordedAnthropicRequest(bodies[1]);
+
+            SharedAssert.True(initialRequest.Stream == true, "Anthropic streaming tool request should set stream true.");
+            SharedAssert.True(initialRequest.Tools != null && initialRequest.Tools.Count == 1, "Anthropic streaming tool request should include one tool.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => message.Blocks != null
+                        && message.Blocks.Count(block => block.Type == "tool_use") == 2),
+                "Anthropic streaming follow-up should include both assistant tool_use blocks.");
+            SharedAssert.True(
+                followupRequest.Messages != null
+                    && followupRequest.Messages.Any(message => message.Blocks != null
+                        && message.Blocks.Count(block => block.Type == "tool_result") == 2),
+                "Anthropic streaming follow-up should merge both tool_result blocks into one user turn.");
+            SharedAssert.True(followupRequest.Stream == true, "Anthropic streaming follow-up should send stream true.");
+        }
+
+        private static async Task RunAnthropicToolChoiceTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest required = CreateWeatherToolRequest();
+            required.ToolChoice = "required";
+            ToolChatResponse requiredResponse = await client.ToolChatAsync(required, token).ConfigureAwait(false);
+            SharedAssert.True(requiredResponse.Success, "Anthropic required tool-choice request should succeed.");
+
+            ToolChatRequest none = CreateWeatherToolRequest();
+            none.ToolChoice = "none";
+            ToolChatResponse noneResponse = await client.ToolChatAsync(none, token).ConfigureAwait(false);
+            SharedAssert.True(noneResponse.Success, "Anthropic none tool-choice request should succeed.");
+
+            ToolChatRequest specific = CreateWeatherToolRequest();
+            specific.ToolChoice = "get_weather";
+            ToolChatResponse specificResponse = await client.ToolChatAsync(specific, token).ConfigureAwait(false);
+            SharedAssert.True(specificResponse.Success, "Anthropic specific tool-choice request should succeed.");
+
+            List<string> bodies = server.RequestBodies;
+            LocalAnthropicRequest requiredRecorded = DeserializeRecordedAnthropicRequest(bodies[0]);
+            LocalAnthropicRequest noneRecorded = DeserializeRecordedAnthropicRequest(bodies[1]);
+            LocalAnthropicRequest specificRecorded = DeserializeRecordedAnthropicRequest(bodies[2]);
+
+            SharedAssert.True(requiredRecorded.ToolChoice != null && requiredRecorded.ToolChoice.Type == "any", "Anthropic required tool choice should map to {type:any}.");
+            SharedAssert.True(noneRecorded.Tools == null || !noneRecorded.Tools.Any(), "Anthropic none tool choice should omit tools.");
+            SharedAssert.True(noneRecorded.ToolChoice == null, "Anthropic none tool choice should omit tool_choice.");
+            SharedAssert.True(specificRecorded.ToolChoice != null && specificRecorded.ToolChoice.Type == "tool" && specificRecorded.ToolChoice.Name == "get_weather", "Anthropic named tool choice should map to {type:tool,name}.");
+        }
+
+        private static async Task RunAnthropicRequestModelOverrideAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.Model = "override-model";
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic tool chat model override should succeed.");
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.Equal("override-model", recorded.Model, "Anthropic tool chat should send the request model override.");
+        }
+
+        private static async Task RunAnthropicModelsAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
+            SharedAssert.Equal(2, models.Count, "Anthropic ListModelsAsync should follow pagination across pages.");
+            SharedAssert.Equal("test-model", models[0].Name, "Anthropic first page model id should parse.");
+            SharedAssert.Equal("Test Model", models[0].DisplayName, "Anthropic model display name should parse.");
+            DateTime? firstCreated = models[0].CreatedUtc;
+            SharedAssert.True(firstCreated.HasValue && firstCreated.Value.Year == 2026, "Anthropic model created_at should parse.");
+            SharedAssert.Equal("test-model-2", models[1].Name, "Anthropic second page model id should parse.");
+
+            SharedAssert.Equal(2, server.RequestPaths.Count(path => path == "/v1/models"), "Anthropic pagination should issue a second list request.");
+
+            SharedAssert.True(await client.ModelExistsAsync("test-model-2", token).ConfigureAwait(false), "Anthropic ModelExistsAsync should find a second-page model.");
+            SharedAssert.False(await client.ModelExistsAsync("nonexistent-model-xyz", token).ConfigureAwait(false), "Anthropic ModelExistsAsync should return false for a missing model.");
+
+            ModelInformation? info = await client.GetModelInformationAsync("test-model", token).ConfigureAwait(false);
+            SharedAssert.NotNull(info, "Anthropic GetModelInformationAsync should parse model info.");
+            SharedAssert.Equal("Test Model", info!.DisplayName, "Anthropic model info display name should parse.");
+
+            ModelInformation? missing = await client.GetModelInformationAsync("missing-model", token).ConfigureAwait(false);
+            SharedAssert.True(missing == null, "Anthropic GetModelInformationAsync should return null for a missing model.");
+
+            using CancellationTokenSource preCancelled = new CancellationTokenSource();
+            preCancelled.Cancel();
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                () => client.ValidateConnectivityAsync(preCancelled.Token),
+                "Anthropic ValidateConnectivityAsync should propagate cancellation.").ConfigureAwait(false);
+        }
+
+        private static async Task RunReasoningEffortAnthropicToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ReasoningEffortLevel[] levels =
+            {
+                ReasoningEffortLevel.Minimal,
+                ReasoningEffortLevel.Low,
+                ReasoningEffortLevel.Medium,
+                ReasoningEffortLevel.High
+            };
+            string[] wire = { "low", "low", "medium", "high" };
+            bool[] sendsThinking = { false, true, true, true };
+
+            for (int i = 0; i < levels.Length; i++)
+            {
+                ToolChatRequest request = CreateWeatherToolRequest();
+                request.ReasoningEffort = levels[i];
+                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                SharedAssert.True(response.Success, "Anthropic tool chat with reasoning effort should succeed.");
+            }
+
+            List<string> bodies = server.RequestBodies;
+            for (int i = 0; i < levels.Length; i++)
+            {
+                LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(bodies[i]);
+                SharedAssert.True(recorded.OutputConfig != null && recorded.OutputConfig.Effort == wire[i], "Anthropic tool chat should send output_config.effort for each level.");
+
+                if (sendsThinking[i])
+                {
+                    SharedAssert.True(recorded.Thinking != null && recorded.Thinking.Type == "adaptive", "Anthropic tool chat should send adaptive thinking above Minimal.");
+                    SharedAssert.Equal("summarized", recorded.Thinking!.Display, "Anthropic adaptive thinking should request a summarized display.");
+                }
+                else
+                {
+                    SharedAssert.True(recorded.Thinking == null, "Anthropic Minimal effort should omit the thinking field.");
+                }
+            }
+        }
+
+        private static async Task RunReasoningEffortAnthropicToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = ReasoningEffort.High;
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.True(recorded.OutputConfig != null && recorded.OutputConfig.Effort == "high", "Anthropic streaming tool chat should send output_config.effort.");
+            SharedAssert.True(recorded.Thinking != null && recorded.Thinking.Type == "adaptive", "Anthropic streaming tool chat should send adaptive thinking.");
+            SharedAssert.True(recorded.Stream == true, "Anthropic streaming tool chat should still set stream true.");
+        }
+
+        private static async Task RunReasoningEffortAnthropicOverrideAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Low) { AnthropicEffort = " XHIGH " };
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic tool chat with an effort override should succeed.");
+
+            LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
+            SharedAssert.True(recorded.OutputConfig != null && recorded.OutputConfig.Effort == "xhigh", "Anthropic effort override should win over the level default.");
+            SharedAssert.True(recorded.Thinking != null && recorded.Thinking.Type == "adaptive", "Anthropic effort override should still send adaptive thinking above Minimal.");
+
+            ReasoningEffort effort = new ReasoningEffort(ReasoningEffortLevel.Medium);
+            effort.AnthropicEffort = "MAX";
+            SharedAssert.Equal("max", effort.AnthropicEffort, "Anthropic effort override should normalize case.");
+            effort.AnthropicEffort = "banana";
+            SharedAssert.True(effort.AnthropicEffort == null, "Unrecognized Anthropic effort override should revert to null.");
+            SharedAssert.Equal("medium", effort.ToAnthropicEffort(), "A reverted Anthropic override should fall back to the level default.");
+        }
+
+        private static async Task RunReasoningAnthropicChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic reasoning chat should succeed.");
+            SharedAssert.Equal("pong", response.Text, "Anthropic reasoning chat should return the answer text.");
+            SharedAssert.Equal("Let me think.", response.Reasoning, "Anthropic reasoning chat should surface the thinking block.");
+        }
+
+        private static async Task RunReasoningAnthropicChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "Anthropic reasoning streaming chat should start.");
+            SharedAssert.Equal("pong", CombineChatText(chunks), "Anthropic reasoning streaming chat should assemble the answer.");
+            SharedAssert.Equal("Let me think.", stream.Reasoning, "Anthropic reasoning streaming chat should accumulate thinking deltas.");
+            SharedAssert.True(chunks.Any(c => !string.IsNullOrEmpty(c.ReasoningText)), "Anthropic thinking deltas should be present on chunks.");
+            SharedAssert.False(CombineChatText(chunks).Contains("Let me", StringComparison.Ordinal), "Anthropic thinking must not leak into text.");
+        }
+
+        private static async Task RunReasoningAnthropicToolChatAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic non-streaming reasoning tool chat should succeed.");
+            SharedAssert.Equal("Let me think.", response.Reasoning, "Anthropic non-streaming tool chat should surface the thinking block.");
+            SharedAssert.True(response.ToolCalls.Count == 1, "Anthropic non-streaming reasoning tool chat should surface the tool call.");
+        }
+
+        private static async Task RunReasoningAnthropicToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+
+            SharedAssert.True(stream.Success, "Anthropic streaming reasoning tool chat should start.");
+            SharedAssert.Equal("Planning the call.", stream.Reasoning, "Anthropic streaming tool chat should accumulate thinking.");
+            SharedAssert.Equal("Checking. ", stream.Text, "Anthropic streaming tool chat should accumulate answer text separately.");
+            SharedAssert.True(stream.ToolCalls.Count == 1, "Anthropic streaming reasoning tool chat should accumulate the tool call.");
+            SharedAssert.True(chunks.Any(c => !string.IsNullOrEmpty(c.ReasoningText)), "Anthropic thinking deltas should be present on chunks.");
+
+            ChatMessage assistant = stream.ToAssistantMessage();
+            SharedAssert.False((assistant.Content ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "Anthropic thinking must not be carried into the follow-up message content.");
+            foreach (ToolCall call in assistant.ToolCalls)
+            {
+                SharedAssert.False((call.ArgumentsJson ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "Anthropic thinking must not appear in tool call arguments.");
+            }
+        }
+
+        private static async Task RunAnthropicReasoningEmptyIsNullAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ChatResponse response = await client.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Anthropic empty-thinking response should succeed.");
+            SharedAssert.Equal("pong", response.Text, "Anthropic empty-thinking response should still return text.");
+            SharedAssert.True(response.Reasoning == null, "Anthropic empty thinking should normalize to null.");
+
+            ChatResponse plain = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(plain.Reasoning == null, "Anthropic chat without thinking should leave Reasoning null.");
+        }
+
+        private static async Task RunAnthropicEmbeddingNotSupportedAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.EmbedAsync("single input", token: token),
+                "Anthropic single embedding should be unsupported.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.EmbedAsync(new List<string> { "a", "b" }, token: token),
+                "Anthropic batch embedding should be unsupported.").ConfigureAwait(false);
+
+            SharedAssert.Equal(0, server.RequestPaths.Count, "Anthropic unsupported embeddings should never reach the wire.");
+        }
+
+        private static async Task RunAnthropicHttpErrorHandlingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = new AnthropicClient(server.Endpoint + "/missing", "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+
+            ChatResponse chat = await client.ChatAsync("fail", token: token).ConfigureAwait(false);
+            SharedAssert.False(chat.Success, "Anthropic chat HTTP errors should produce unsuccessful responses.");
+            SharedAssert.True(chat.StatusCode == 404, "Anthropic chat HTTP errors should preserve the status code.");
+            SharedAssert.NotEmpty(chat.Error, "Anthropic chat HTTP errors should surface an error message.");
+
+            ChatStreamingResponse chatStream = await client.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
+            GenerationStreamingResponse generationStream = await client.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
+            ToolChatStreamingResponse toolStream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+
+            SharedAssert.False(chatStream.Success, "Anthropic streaming chat should surface HTTP startup errors.");
+            SharedAssert.False(generationStream.Success, "Anthropic streaming generation should surface HTTP startup errors.");
+            SharedAssert.False(toolStream.Success, "Anthropic streaming tool chat should surface HTTP startup errors.");
+            SharedAssert.Equal(404, chatStream.StatusCode, "Anthropic streaming chat should preserve HTTP status.");
+            SharedAssert.Equal(404, generationStream.StatusCode, "Anthropic streaming generation should preserve HTTP status.");
+            SharedAssert.Equal(404, toolStream.StatusCode, "Anthropic streaming tool chat should preserve HTTP status.");
+        }
+
+        private static async Task RunAnthropicRefusalStopReasonAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+
+            ToolChatRequest request = new ToolChatRequest();
+            request.Messages.Add(ChatMessage.User("refuse please"));
+
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "An Anthropic refusal is a successful HTTP response and must not fail.");
+            SharedAssert.Equal("refusal", response.FinishReason, "An Anthropic refusal should surface the refusal stop reason.");
+            SharedAssert.True(string.IsNullOrEmpty(response.Text), "An Anthropic refusal with empty content should leave Text empty.");
+            SharedAssert.Equal(0, response.ToolCalls.Count, "An Anthropic refusal should carry no tool calls.");
+
+            ChatResponse chat = await client.ChatAsync("refuse please", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "An Anthropic refusal chat response must not fail.");
+            SharedAssert.True(chat.Text == null, "An Anthropic refusal chat response should leave Text null.");
+        }
+
+        private static async Task RunAnthropicStreamingBodyTimeoutAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AnthropicClient client = CreateAnthropicClient(server);
+            client.TimeoutMs = 100;
+
+            ChatStreamingResponse streaming = await client.ChatStreamingAsync("hang stream", token: token).ConfigureAwait(false);
+            SharedAssert.True(streaming.Success, "Anthropic hang-stream request should start.");
+
+            bool streamTimedOut = false;
+            int textChunks = 0;
+
+            try
+            {
+                await foreach (ChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
+                {
+                    if (!string.IsNullOrEmpty(chunk.Text)) textChunks++;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                streamTimedOut = true;
+            }
+
+            SharedAssert.True(streamTimedOut, "Anthropic streaming body enumeration should time out.");
+            SharedAssert.True(textChunks > 0, "Anthropic streaming body should yield the initial chunk before timing out.");
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.Messages.Clear();
+            request.Messages.Add(ChatMessage.User("hang tool stream"));
+
+            ToolChatStreamingResponse toolStreaming = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(toolStreaming.Success, "Anthropic hang tool stream request should start.");
+
+            bool toolStreamTimedOut = false;
+            int toolDeltas = 0;
+
+            try
+            {
+                await foreach (ToolChatStreamingChunk chunk in toolStreaming.Chunks.ConfigureAwait(false))
+                {
+                    toolDeltas += chunk.ToolCallDeltas.Count;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                toolStreamTimedOut = true;
+            }
+
+            SharedAssert.True(toolStreamTimedOut, "Anthropic streaming tool chat body enumeration should time out.");
+            SharedAssert.True(toolDeltas > 0, "Anthropic streaming tool chat body should yield an initial tool-call delta before timing out.");
+            SharedAssert.True(toolStreaming.ToolCalls.Count == 1, "Anthropic streaming tool chat should accumulate partial tool call metadata before timing out.");
+        }
+
+        private static AnthropicClient CreateAnthropicClient(LocalOpenAiTestServer server)
+        {
+            AnthropicClient client = new AnthropicClient(server.Endpoint, "test-key");
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+            return client;
+        }
+
+        private static LocalAnthropicRequest DeserializeRecordedAnthropicRequest(string requestBody)
+        {
+            LocalAnthropicRequest? request = LocalRequestParser.DeserializeAnthropicRequest(requestBody);
+            if (request == null)
+                throw new TestFailureException("Recorded request body could not be deserialized as LocalAnthropicRequest.");
+
+            return request;
         }
 
         private static Dictionary<string, string?> CaptureProviderEnvironment()
