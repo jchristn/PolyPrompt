@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.1 (2026-09-01)
+
+### Changed
+
+- Package version bumped to 2.4.1.
+
 ## v2.4.0 (2026-08-31)
 
 ### Added

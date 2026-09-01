@@ -52,7 +52,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.4.0**.
+Current documented package version: **2.4.1**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
