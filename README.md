@@ -6,11 +6,22 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Google Gemini**, **Anthropic Claude**, and **VoyageAI** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, and **VoyageAI** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+
+| Provider | Client | Auth | Chat / Tools / Streaming | Reasoning | Embeddings |
+|---|---|---|---|---|---|
+| Ollama | `OllamaClient` | none / bearer | ✅ | ✅ | ✅ |
+| OpenAI (+ compatible) | `OpenAiClient` | bearer | ✅ | ✅ | ✅ |
+| Azure OpenAI | `AzureOpenAiClient` | `api-key` or Azure AD | ✅ | ✅ | ✅ |
+| Google Gemini (AI Studio) | `GeminiClient` | API key | ✅ | ✅ | ✅ |
+| Google Vertex AI | `VertexAiClient` | OAuth (ADC / service account) | ✅ | ✅ | ✅ (`:predict`) |
+| Anthropic Claude | `AnthropicClient` | `x-api-key` | ✅ | ✅ | ❌ |
+| AWS Bedrock | `BedrockClient` | SigV4 | ✅ (Converse) | ✅ | ✅ (Titan / Cohere) |
+| VoyageAI | `VoyageAiClient` | bearer | ❌ | ❌ | ✅ |
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning five different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability — VoyageAI is embeddings-only, and Anthropic has no embeddings API — so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol.
+PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning eight different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability — VoyageAI is embeddings-only, and Anthropic has no embeddings API — so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library (two package dependencies total).
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
 - **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
@@ -52,7 +63,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.4.1**.
+Current documented package version: **2.5.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -153,6 +164,93 @@ if (response.Success && response.Embeddings.Count > 0)
 ```
 
 VoyageAI is an embeddings-only provider: chat, tool calling, generation, and model management throw `NotSupportedException`, and `ValidateConnectivityAsync` probes with a minimal embeddings request because VoyageAI has no model listing endpoint.
+
+### Azure OpenAI
+
+Azure OpenAI is wire-compatible with OpenAI; the model **is** the deployment name, and requests carry an `api-version`. Authenticate with an `api-key` header or an Azure AD bearer token.
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+// API-key auth. The deployment name is the model.
+using AzureOpenAiClient client = new AzureOpenAiClient(
+    "https://my-resource.openai.azure.com",  // resource endpoint
+    "gpt-4o",                                  // deployment name
+    "your-azure-api-key",
+    apiVersion: "2024-10-21");                 // optional; sensible GA default
+
+ChatResponse response = await client.ChatAsync("Hello from Azure!");
+Console.WriteLine(response.Text);
+
+// Azure AD (Entra ID) auth instead of an api-key:
+// using var aad = new AzureOpenAiClient(endpoint, "gpt-4o", new StaticTokenCredential(token));
+```
+
+Everything else — tools, streaming, `reasoning_effort`, embeddings, usage — is inherited from the OpenAI client unchanged.
+
+### Google Vertex AI
+
+Vertex AI serves Gemini models under a project/region path and authenticates with a short-lived OAuth token (Application Default Credentials or a service account), refreshed automatically per request.
+
+```csharp
+using PolyPrompt.Auth;
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+// Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS key file, or a GCE/Cloud Run metadata token).
+using VertexAiClient client = new VertexAiClient(
+    "my-gcp-project",
+    "us-central1",
+    new AdcCredential());
+client.Model = "gemini-2.5-flash";
+
+ChatResponse response = await client.ChatAsync("Hello from Vertex!");
+Console.WriteLine(response.Text);
+
+// Service-account key JSON instead of ADC:
+// var cred = ServiceAccountCredential.FromJson(File.ReadAllText("sa.json"));
+// using var client = new VertexAiClient("my-gcp-project", "us-central1", cred);
+
+// Embeddings use the :predict endpoint:
+// client.Model = "text-embedding-004";
+// var embed = await client.EmbedAsync("The quick brown fox.");
+```
+
+### AWS Bedrock
+
+Bedrock uses the unified Converse API and signs every request with AWS Signature V4. Provide credentials through a provider (static keys or the standard `AWS_*` environment variables) and a region.
+
+```csharp
+using PolyPrompt.Auth;
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+// Static credentials (or use new EnvironmentAwsCredential() to read AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY).
+using BedrockClient client = new BedrockClient(
+    new StaticAwsCredential("AKIA...", "secret...", "us-east-1"),
+    "us-east-1");
+client.Model = "anthropic.claude-3-5-sonnet-20240620-v1:0";
+
+ChatResponse response = await client.ChatAsync("Hello from Bedrock!");
+Console.WriteLine(response.Text);
+
+// Embeddings (Amazon Titan or Cohere), selected by the model id:
+// var embed = await client.EmbedAsync("The quick brown fox.",
+//     new EmbeddingOptions { Model = "amazon.titan-embed-text-v2:0" });
+```
+
+Chat, tools, streaming (over the AWS binary event-stream), reasoning (Anthropic extended thinking), and embeddings are all supported; see the [feature matrix](#provider-feature-support).
+
+## Authentication
+
+Most providers authenticate with a single static credential passed to the constructor (a bearer key for OpenAI/Ollama/VoyageAI, an `x-api-key` for Anthropic, an API key in the query string for Gemini). Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, all implemented in-library under `PolyPrompt.Auth` with no provider SDK:
+
+- **Azure OpenAI** — an `api-key` header (pass the key string) or an Azure AD bearer token (pass an `ICredentialProvider`, e.g. `new StaticTokenCredential(token)`), refreshed per request.
+- **Vertex AI** — a short-lived OAuth token via `ICredentialProvider`: `AdcCredential` (Application Default Credentials: `GOOGLE_APPLICATION_CREDENTIALS` key file or the GCE/Cloud Run metadata server), `ServiceAccountCredential.FromJson(...)` (RS256 JWT assertion → token exchange), or `StaticTokenCredential` (e.g. `gcloud auth print-access-token`). Tokens are cached and refreshed ahead of expiry.
+- **AWS Bedrock** — AWS Signature Version 4 on every request via `IAwsCredentialProvider`: `StaticAwsCredential(accessKey, secretKey, region, sessionToken?)` or `EnvironmentAwsCredential()` (reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, and `AWS_REGION`/`AWS_DEFAULT_REGION`). Temporary/role credentials with a session token are supported.
+
+The per-request signing/token attachment is handled by the `PrepareRequestAsync` hook on `CompletionClientBase`; the other clients override nothing and keep their static-header auth.
 
 ## Detailed Examples
 
@@ -693,7 +791,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 
 ### Constructors
 
-Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`) has a constructor with the same optional parameters, all with provider-appropriate defaults:
+The single-key clients (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`) share a constructor with the same optional parameters, all with provider-appropriate defaults:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -701,6 +799,16 @@ Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `Anthropic
 | `apiKey` | `string?` | `null` | API key; when non-empty an `Authorization: Bearer` header is added (Anthropic instead sends `x-api-key` plus `anthropic-version`, and Gemini passes the key as a query parameter) |
 | `logging` | `LoggingModule?` | `null` | Logging module; a new instance is created when omitted |
 | `httpClient` | `HttpClient?` | `null` | Transport to use. When supplied, the caller owns and disposes it (see [Custom HttpClient](#custom-httpclient-custom-transport-tls-or-proxy)); when omitted, the client creates and owns its own |
+
+The three cloud providers added in 2.5.0 take provider-shaped constructors because their credentials and routing differ:
+
+| Client | Signature | Notes |
+|--------|-----------|-------|
+| `AzureOpenAiClient` | `(endpoint, deployment, apiKey, apiVersion?, logging?, httpClient?)` or `(endpoint, deployment, ICredentialProvider, apiVersion?, …)` | `deployment` becomes `Model`; `api-key` header or Azure AD bearer; settable `ApiVersion` (default `2024-10-21`) |
+| `VertexAiClient` | `(project, region, ICredentialProvider, endpoint?, logging?, httpClient?)` | OAuth bearer via `AdcCredential` / `ServiceAccountCredential` / `StaticTokenCredential`; endpoint defaults to `https://{region}-aiplatform.googleapis.com` |
+| `BedrockClient` | `(IAwsCredentialProvider, region, logging?, httpClient?, endpoint?)` | SigV4-signed; `StaticAwsCredential` / `EnvironmentAwsCredential`; endpoint defaults to `https://bedrock-runtime.{region}.amazonaws.com` |
+
+Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`EnvironmentAwsCredential` (AWS), and `StaticTokenCredential`/`ServiceAccountCredential`/`AdcCredential` (OAuth bearer). Bearer tokens are cached and refreshed automatically ahead of expiry.
 
 ### Client Properties
 
@@ -718,7 +826,7 @@ Each provider client (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `Anthropic
 | `CallDetails` | `List<CompletionCallDetail>` | empty | Detached snapshot of recorded HTTP call details |
 | `MaxCallDetails` | `int` | `1000` | Maximum retained call details; set to 0 to disable recording |
 
-`AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000).
+`AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000). `AzureOpenAiClient` adds `ApiVersion` (the `api-version` query value, default `2024-10-21`).
 
 ### Client Methods
 
@@ -764,17 +872,22 @@ Each provider exposes option classes that extend the base options with provider-
 |----------|-------------|-------------------|-------------------|
 | **Ollama** | `OllamaChatCompletionOptions` | `OllamaEmbeddingOptions` | `OllamaGenerationOptions` |
 | **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` |
+| **Azure OpenAI** | `AzureOpenAiChatCompletionOptions` | `AzureOpenAiEmbeddingOptions` | (OpenAI generation options) |
 | **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` |
+| **Vertex AI** | (Gemini chat options) | `VertexAiEmbeddingOptions` | (Gemini generation options) |
 | **Anthropic** | `AnthropicChatCompletionOptions` | — (embeddings unsupported) | `AnthropicGenerationOptions` |
+| **Bedrock** | (base chat options) | `BedrockEmbeddingOptions` | (base generation options) |
 | **VoyageAI** | — (chat unsupported) | `VoyageAiEmbeddingOptions` | — (generation unsupported) |
 
 **Ollama-specific parameters:** `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`
 
-**OpenAI-specific parameters:** `FrequencyPenalty`, `PresencePenalty`, `Seed`, `Dimensions`, `EncodingFormat`, `Echo`, `Suffix`, `Logprobs`
+**OpenAI / Azure OpenAI-specific parameters:** `FrequencyPenalty`, `PresencePenalty`, `Seed`, `Dimensions`, `EncodingFormat`, `Echo`, `Suffix`, `Logprobs` (Azure inherits the OpenAI options unchanged)
 
-**Gemini-specific parameters:** `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `TaskType`, `Title`
+**Gemini / Vertex AI-specific parameters:** `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `TaskType`, `Title`. `VertexAiEmbeddingOptions` adds `OutputDimensionality` and `AutoTruncate` for the `:predict` endpoint.
 
 **Anthropic-specific parameters:** `TopK`, `StopSequences`. Note that current Claude models (Opus 4.7 and later) reject sampling parameters (`temperature`, `top_p`, `top_k`) with a 400; leave them unset for those models.
+
+**Bedrock-specific parameters:** `BedrockEmbeddingOptions` exposes `InputType` (Cohere), `Dimensions` and `Normalize` (Amazon Titan v2). Reasoning maps to Converse extended thinking via `ReasoningEffort.BedrockThinkingBudget` / `ToBedrockThinkingBudget()`.
 
 **VoyageAI-specific parameters:** `InputType` (`query`/`document` retrieval-role hint), `Truncation`, `OutputDimension` (256/512/1024/2048 on Matryoshka-capable models), `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`)
 
@@ -784,32 +897,28 @@ Each provider exposes option classes that extend the base options with provider-
 |----------|------------------------|--------------------------|
 | Ollama | `gemma3:4b` | `all-minilm` |
 | OpenAI | `gpt-4o-mini` | `text-embedding-3-small` |
+| Azure OpenAI | (deployment name; no default) | (deployment name) |
 | Gemini | `gemini-2.5-flash` | `gemini-embedding-001` |
+| Vertex AI | `gemini-2.5-flash` | `text-embedding-004` |
 | Anthropic | `claude-opus-4-8` | — (no embeddings API) |
+| Bedrock | `anthropic.claude-3-5-sonnet-20240620-v1:0` | `amazon.titan-embed-text-v2:0` |
 | VoyageAI | — (embeddings only) | `voyage-3.5` |
 
 ### Provider Feature Support
 
-| Feature | Ollama | OpenAI | Gemini | Anthropic | VoyageAI |
-|---------|--------|--------|--------|-----------|----------|
-| Chat (non-streaming) | Yes | Yes | Yes | Yes | No |
-| Chat (streaming) | Yes | Yes | Yes | Yes | No |
-| Tool Chat (non-streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes | No |
-| Tool Chat (streaming) | Yes, when the selected model supports tools | Yes | Yes | Yes | No |
-| Reasoning Effort | Model-dependent, via `think` | Native `reasoning_effort` | Via `thinkingConfig` budget | Via adaptive `thinking` + `output_config.effort` | No |
-| Reasoning Capture | Via `message.thinking` | Via `reasoning_content` | Via `thought` parts | Via `thinking` blocks | No |
-| Text Generation (non-streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API | No |
-| Text Generation (streaming) | Yes | Legacy completions API only | Yes | Yes, via the Messages API | No |
-| Embeddings (single) | Yes | Yes | Yes | No | Yes |
-| Embeddings (batch) | Yes | Yes | Yes | No | Yes |
-| List Models | Yes | Yes | Yes | Yes, with pagination | No |
-| Model Exists | Yes | Yes | Yes | Yes | No |
-| Get Model Info | Yes | Yes | Yes | Yes | No |
-| Pull Model | Yes | No | No | No | No |
-| Delete Model | Yes | No | No | No | No |
-| Validate Connectivity | Yes | Yes | Yes | Yes | Yes, via a minimal embeddings request |
+| Feature | Ollama | OpenAI | Azure OpenAI | Gemini | Vertex AI | Anthropic | Bedrock | VoyageAI |
+|---------|--------|--------|--------------|--------|-----------|-----------|---------|----------|
+| Chat (streaming + non-streaming) | Yes | Yes | Yes | Yes | Yes | Yes | Yes (Converse) | No |
+| Tool Chat (streaming + non-streaming) | Model-dependent | Yes | Yes | Yes | Yes | Yes | Yes | No |
+| Reasoning Effort | Via `think` | `reasoning_effort` | `reasoning_effort` | `thinkingConfig` budget | `thinkingConfig` budget | Adaptive `thinking` + effort | Converse thinking budget | No |
+| Reasoning Capture | `message.thinking` | `reasoning_content` | `reasoning_content` | `thought` parts | `thought` parts | `thinking` blocks | `reasoningContent` | No |
+| Text Generation | Yes | Legacy completions | Legacy completions | Yes | Yes | Via Messages API | Via Converse | No |
+| Embeddings (single + batch) | Yes | Yes | Yes | Yes | Yes (`:predict`) | No | Yes (Titan / Cohere) | Yes |
+| List / Exists / Get Model | Yes | Yes | Yes | Yes | No | Yes (paginated) | Yes (control-plane) | No |
+| Pull / Delete Model | Yes | No | No | No | No | No | No | No |
+| Validate Connectivity | Yes | Yes | Yes | Yes | Yes (via `:predict`) | Yes | Yes | Yes (via embeddings) |
 
-Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability — `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, and everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI.
+Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability — `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, model management on Vertex AI, and everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI.
 
 Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape. One VoyageAI-specific note: `ListModelsAsync` throws at call time (VoyageAI has no model listing endpoint), and `ValidateConnectivityAsync` therefore probes with a minimal one-word embeddings request instead.
 

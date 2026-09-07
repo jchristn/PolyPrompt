@@ -56,6 +56,7 @@ namespace PolyPrompt.Models
         private int? _GeminiThinkingBudget = null;
         private string? _OllamaThink = null;
         private string? _AnthropicEffort = null;
+        private int? _BedrockThinkingBudget = null;
 
         // Accepted override tokens. A value outside its set is rejected (reverts to null) so the projection
         // falls back to the Level-derived default — the same "silently clamp to a valid value" idiom the
@@ -71,6 +72,9 @@ namespace PolyPrompt.Models
 
         private const int GeminiThinkingBudgetFloor = -1;      // -1 = dynamic budget, 0 = off
         private const int GeminiThinkingBudgetCeiling = 32768; // generous upper bound across 2.5 models
+
+        private const int BedrockThinkingBudgetFloor = 0;      // 0 = thinking off
+        private const int BedrockThinkingBudgetCeiling = 65536; // generous upper bound for Converse thinking
 
         #endregion
 
@@ -131,6 +135,22 @@ namespace PolyPrompt.Models
         {
             get { return _AnthropicEffort; }
             set { _AnthropicEffort = NormalizeToken(value, _AnthropicValues); }
+        }
+
+        /// <summary>
+        /// AWS Bedrock Converse thinking-token budget override (<c>additionalModelRequestFields.thinking.budget_tokens</c>
+        /// for Anthropic models). Null derives from <see cref="Level"/>. 0 disables thinking, positive is an
+        /// explicit token budget. Clamped to 0..65536.
+        /// </summary>
+        public int? BedrockThinkingBudget
+        {
+            get { return _BedrockThinkingBudget; }
+            set
+            {
+                _BedrockThinkingBudget = value.HasValue
+                    ? Math.Clamp(value.Value, BedrockThinkingBudgetFloor, BedrockThinkingBudgetCeiling)
+                    : null;
+            }
         }
 
         #endregion
@@ -207,6 +227,27 @@ namespace PolyPrompt.Models
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
                 case ReasoningEffortLevel.High:    return "high";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the Bedrock Converse thinking-token budget (override if set, else derived from
+        /// <see cref="Level"/>). 0 means thinking is off; the Bedrock client omits the thinking field when
+        /// this is 0.
+        /// </summary>
+        /// <returns>0 (off) or a positive token budget.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public int ToBedrockThinkingBudget()
+        {
+            if (_BedrockThinkingBudget.HasValue) return _BedrockThinkingBudget.Value;
+
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.Minimal: return 0;      // thinking off
+                case ReasoningEffortLevel.Low:     return 1024;   // Anthropic's minimum enabled budget
+                case ReasoningEffortLevel.Medium:  return 4096;
+                case ReasoningEffortLevel.High:    return 16384;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }

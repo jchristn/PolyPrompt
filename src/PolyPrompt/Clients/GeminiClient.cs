@@ -58,9 +58,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + Model + ":generateContent"
-                + "?key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(Model, streaming: false);
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as GeminiChatCompletionOptions);
 
@@ -114,9 +112,7 @@ namespace PolyPrompt.Clients
         {
             ResolveOptions(options, out int maxTokens, out double? temperature, out double? topP, out string? systemPrompt);
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + Model + ":streamGenerateContent"
-                + "?alt=sse&key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(Model, streaming: true);
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as GeminiChatCompletionOptions);
 
@@ -176,9 +172,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + model + ":generateContent"
-                + "?key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(model, streaming: false);
 
             Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP, reasoningEffort);
 
@@ -230,9 +224,7 @@ namespace PolyPrompt.Clients
         {
             ResolveToolChatRequest(request, out string model, out int maxTokens, out double? temperature, out double? topP, out ReasoningEffort? reasoningEffort);
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + model + ":streamGenerateContent"
-                + "?alt=sse&key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(model, streaming: true);
 
             Dictionary<string, object> requestBody = BuildToolChatRequestBody(request, maxTokens, temperature, topP, reasoningEffort);
 
@@ -501,9 +493,7 @@ namespace PolyPrompt.Clients
 
             Stopwatch sw = Stopwatch.StartNew();
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + model + ":generateContent"
-                + "?key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(model, streaming: false);
 
             Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, maxTokens, temperature, topP, options as GeminiGenerationOptions);
 
@@ -556,9 +546,7 @@ namespace PolyPrompt.Clients
         {
             ResolveGenerationOptions(options, out string model, out int maxTokens, out double? temperature, out double? topP);
 
-            string url = _Endpoint.TrimEnd('/')
-                + "/v1beta/models/" + model + ":streamGenerateContent"
-                + "?alt=sse&key=" + _ApiKey;
+            string url = BuildGenerateContentUrl(model, streaming: true);
 
             Dictionary<string, object> requestBody = BuildGenerateRequestBody(prompt, maxTokens, temperature, topP, options as GeminiGenerationOptions);
 
@@ -610,7 +598,7 @@ namespace PolyPrompt.Clients
         public override async IAsyncEnumerable<ModelInformation> ListModelsAsync(
             [EnumeratorCancellation] CancellationToken token = default)
         {
-            string url = _Endpoint.TrimEnd('/') + "/v1beta/models?key=" + _ApiKey;
+            string url = BuildListModelsUrl();
 
             _Logging.Debug(_Header + "GET " + _Endpoint.TrimEnd('/') + "/v1beta/models");
 
@@ -677,8 +665,7 @@ namespace PolyPrompt.Clients
             if (string.IsNullOrWhiteSpace(model))
                 throw new ArgumentNullException(nameof(model));
 
-            string modelPath = model.StartsWith("models/") ? model : "models/" + model;
-            string url = _Endpoint.TrimEnd('/') + "/v1beta/" + modelPath + "?key=" + _ApiKey;
+            string url = BuildGetModelUrl(model);
             _Logging.Debug(_Header + "GET " + url);
 
             try
@@ -725,6 +712,43 @@ namespace PolyPrompt.Clients
                 _Logging.Warn(_Header + "get model failed: " + ex.Message);
                 return null;
             }
+        }
+
+        #endregion
+
+        #region Protected-Methods
+
+        /// <summary>
+        /// Builds the URL for a Gemini <c>generateContent</c> / <c>streamGenerateContent</c> call, including
+        /// AI-Studio API-key auth in the query string. Virtual so Vertex AI (which serves the same content
+        /// schema at a project/region/publisher path and authenticates with a bearer token rather than a
+        /// <c>?key=</c> query parameter) can override only the URL shape while inheriting all body building
+        /// and response/stream parsing unchanged.
+        /// </summary>
+        /// <param name="model">The model id to target.</param>
+        /// <param name="streaming">True for the SSE streaming endpoint.</param>
+        /// <returns>The absolute request URL.</returns>
+        protected virtual string BuildGenerateContentUrl(string model, bool streaming)
+        {
+            string method = streaming ? ":streamGenerateContent" : ":generateContent";
+            string query = streaming ? "?alt=sse&key=" + _ApiKey : "?key=" + _ApiKey;
+            return _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + method + query;
+        }
+
+        /// <summary>Builds the URL that lists available models. Virtual for Vertex AI reuse.</summary>
+        /// <returns>The absolute request URL.</returns>
+        protected virtual string BuildListModelsUrl()
+        {
+            return _Endpoint.TrimEnd('/') + "/v1beta/models?key=" + _ApiKey;
+        }
+
+        /// <summary>Builds the URL that describes a single model. Virtual for Vertex AI reuse.</summary>
+        /// <param name="model">The model id (with or without a <c>models/</c> prefix).</param>
+        /// <returns>The absolute request URL.</returns>
+        protected virtual string BuildGetModelUrl(string model)
+        {
+            string modelPath = model.StartsWith("models/") ? model : "models/" + model;
+            return _Endpoint.TrimEnd('/') + "/v1beta/" + modelPath + "?key=" + _ApiKey;
         }
 
         #endregion

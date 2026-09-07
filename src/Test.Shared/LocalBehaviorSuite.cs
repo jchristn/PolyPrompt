@@ -1,10 +1,13 @@
 namespace Test.Shared
 {
     using System.Diagnostics;
+    using System.IO;
     using System.Text;
+    using PolyPrompt.Auth;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
+    using PolyPrompt.Wire;
     using Touchstone.Core;
 
     /// <summary>
@@ -146,6 +149,43 @@ namespace Test.Shared
                     Case("voyageai_unsupported_operations", "VoyageAI completion-shaped operations throw", RunVoyageAiUnsupportedOperationsAsync),
                     Case("voyageai_http_error_handling", "VoyageAI HTTP errors are surfaced", RunVoyageAiHttpErrorHandlingAsync),
                     Case("voyageai_cancellation", "VoyageAI operations respect pre-cancelled tokens", RunVoyageAiCancellationAsync),
+
+                    // Azure OpenAI
+                    Case("azure_chat_translation", "Azure OpenAI chat routes by deployment with api-version", RunAzureChatTranslationAsync),
+                    Case("azure_embeddings_translation", "Azure OpenAI embeddings route by deployment", RunAzureEmbeddingsTranslationAsync),
+                    Case("azure_tool_chat_streaming", "Azure OpenAI streaming tool chat flow", RunAzureToolChatStreamingAsync),
+                    Case("azure_apiversion_and_auth_header", "Azure OpenAI api-version and api-key header are sent", RunAzureApiVersionAndAuthHeaderAsync),
+                    Case("azure_reasoning_effort_passthrough", "Azure OpenAI passes reasoning_effort through", RunAzureReasoningEffortPassthroughAsync),
+                    Case("azure_aad_bearer_auth", "Azure OpenAI AAD credential attaches a bearer token", RunAzureAadBearerAuthAsync),
+                    Case("azure_missing_credentials_error", "Azure OpenAI missing credentials surface an error", RunAzureMissingCredentialsErrorAsync),
+
+                    // Google Vertex AI
+                    Case("vertex_generatecontent_translation", "Vertex AI chat routes by project/region publisher path", RunVertexGenerateContentTranslationAsync),
+                    Case("vertex_predict_embeddings", "Vertex AI embeddings use the :predict endpoint", RunVertexPredictEmbeddingsAsync),
+                    Case("vertex_tool_chat_streaming", "Vertex AI streaming tool chat flow", RunVertexToolChatStreamingAsync),
+                    Case("vertex_oauth_bearer_attached", "Vertex AI attaches an OAuth bearer token per request", RunVertexOAuthBearerAttachedAsync),
+                    Case("vertex_reasoning_thinkingbudget", "Vertex AI maps reasoning to thinkingConfig", RunVertexReasoningThinkingBudgetAsync),
+                    Case("vertex_model_management_unsupported", "Vertex AI model management throws NotSupportedException", RunVertexModelManagementUnsupportedAsync),
+
+                    // AWS Bedrock
+                    Case("bedrock_converse_translation", "Bedrock chat maps onto the Converse API", RunBedrockConverseTranslationAsync),
+                    Case("bedrock_sigv4_signature_shape", "Bedrock requests are SigV4-signed", RunBedrockSigV4SignatureShapeAsync),
+                    Case("bedrock_tooluse_assembly", "Bedrock tool chat assembles toolUse blocks", RunBedrockToolUseAssemblyAsync),
+                    Case("bedrock_converse_stream_eventframes", "Bedrock streaming decodes event-stream frames", RunBedrockConverseStreamEventFramesAsync),
+                    Case("bedrock_tool_chat_streaming", "Bedrock streaming tool chat assembles tool calls", RunBedrockToolChatStreamingAsync),
+                    Case("bedrock_titan_embeddings", "Bedrock Titan embeddings via InvokeModel", RunBedrockTitanEmbeddingsAsync),
+                    Case("bedrock_cohere_embeddings", "Bedrock Cohere embeddings via InvokeModel", RunBedrockCohereEmbeddingsAsync),
+                    Case("bedrock_reasoning_converse", "Bedrock maps reasoning to Converse thinking", RunBedrockReasoningConverseAsync),
+                    Case("bedrock_http_error_handling", "Bedrock HTTP errors are surfaced", RunBedrockHttpErrorHandlingAsync),
+
+                    // Auth primitives
+                    Case("sigv4_canonical_vector", "SigV4 matches the AWS published canonical vector", RunSigV4CanonicalVectorAsync),
+                    Case("sigv4_authorization_shape", "SigV4 produces a well-formed Authorization header", RunSigV4AuthorizationShapeAsync),
+                    Case("sigv4_session_token", "SigV4 signs and sends the session token", RunSigV4SessionTokenAsync),
+                    Case("eventstream_roundtrip", "AWS event-stream frames round-trip through the decoder", RunEventStreamRoundtripAsync),
+                    Case("eventstream_crc_detects_corruption", "AWS event-stream CRC detects a corrupt frame", RunEventStreamCrcDetectsCorruptionAsync),
+                    Case("credential_refresh_per_request", "Bearer credential is resolved per request", RunCredentialRefreshPerRequestAsync),
+                    Case("credential_caching_reuses_token", "Caching credential reuses a token within its lifetime", RunCredentialCachingReusesTokenAsync),
                 });
         }
 
@@ -3011,6 +3051,541 @@ namespace Test.Shared
                 }
 
                 Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+
+        // ================= Azure OpenAI =================
+
+        private static AzureOpenAiClient CreateAzureClient(LocalOpenAiTestServer server)
+        {
+            AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-deployment", "test-key", apiVersion: "2024-10-21");
+            client.TimeoutMs = 1000;
+            return client;
+        }
+
+        private static async Task RunAzureChatTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = CreateAzureClient(server);
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "Azure chat should succeed.");
+            SharedAssert.Equal("pong", chat.Text, "Azure chat should return the local response.");
+
+            string url = client.CallDetails[0].Url ?? string.Empty;
+            SharedAssert.True(url.Contains("/openai/deployments/test-deployment/chat/completions", StringComparison.Ordinal), "Azure chat should route by deployment.");
+            SharedAssert.True(url.Contains("api-version=2024-10-21", StringComparison.Ordinal), "Azure chat should include the api-version query.");
+            SharedAssert.NotNull(FindHeader(client.CallDetails[0], "api-key"), "Azure chat should send the api-key header.");
+            SharedAssert.True(server.RequestPaths[0].Contains("/openai/deployments/test-deployment/chat/completions", StringComparison.Ordinal), "Azure chat should hit the deployment path.");
+        }
+
+        private static async Task RunAzureEmbeddingsTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = CreateAzureClient(server);
+
+            EmbeddingResponse embed = await client.EmbedAsync(new List<string> { "a", "b" }, token: token).ConfigureAwait(false);
+            SharedAssert.True(embed.Success, "Azure embeddings should succeed.");
+            SharedAssert.Equal(2, embed.Embeddings.Count, "Azure embeddings should return both vectors.");
+
+            string url = client.CallDetails[0].Url ?? string.Empty;
+            SharedAssert.True(url.Contains("/openai/deployments/test-deployment/embeddings", StringComparison.Ordinal), "Azure embeddings should route by deployment.");
+            SharedAssert.True(url.Contains("api-version=", StringComparison.Ordinal), "Azure embeddings should include the api-version query.");
+        }
+
+        private static async Task RunAzureToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = CreateAzureClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "Azure streaming tool chat should start.");
+
+            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            int toolDeltaCount = 0;
+            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+
+            SharedAssert.True(toolDeltaCount > 0, "Azure streaming tool chat should emit tool-call deltas.");
+            SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Azure streaming tool chat should accumulate the get_weather call.");
+        }
+
+        private static async Task RunAzureApiVersionAndAuthHeaderAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-deployment", "secret-key", apiVersion: "2099-01-01");
+            client.TimeoutMs = 1000;
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "Azure chat should succeed with a custom api-version.");
+
+            string url = client.CallDetails[0].Url ?? string.Empty;
+            SharedAssert.True(url.Contains("api-version=2099-01-01", StringComparison.Ordinal), "Azure should send the configured api-version.");
+            SharedAssert.Equal("secret-key", FindHeader(client.CallDetails[0], "api-key"), "Azure should send the api-key header value.");
+        }
+
+        private static async Task RunAzureReasoningEffortPassthroughAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = CreateAzureClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = ReasoningEffort.High;
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Azure reasoning tool chat should succeed.");
+
+            SharedAssert.True(server.RequestBodies[0].Contains("\"reasoning_effort\"", StringComparison.Ordinal), "Azure should pass reasoning_effort through to the wire.");
+            SharedAssert.True(server.RequestBodies[0].Contains("high", StringComparison.Ordinal), "Azure should send the resolved reasoning effort value.");
+        }
+
+        private static async Task RunAzureAadBearerAuthAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-deployment", new StaticTokenCredential("aad-token"), apiVersion: "2024-10-21");
+            client.TimeoutMs = 1000;
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "Azure AAD chat should succeed.");
+
+            string? authorization = FindHeader(client.CallDetails[0], "Authorization");
+            SharedAssert.NotNull(authorization, "Azure AAD should attach an Authorization header.");
+            SharedAssert.True(authorization!.StartsWith("Bearer aad-token", StringComparison.Ordinal), "Azure AAD should attach the bearer token.");
+            SharedAssert.True(FindHeader(client.CallDetails[0], "api-key") == null, "Azure AAD should not send an api-key header.");
+        }
+
+        private static async Task RunAzureMissingCredentialsErrorAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-deployment", apiKey: string.Empty, apiVersion: "2024-10-21");
+            client.TimeoutMs = 1000;
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.False(chat.Success, "Azure chat without credentials should fail.");
+            SharedAssert.Equal(401, chat.StatusCode ?? 0, "Azure chat without credentials should surface HTTP 401.");
+            SharedAssert.NotEmpty(chat.Error, "Azure chat without credentials should surface an error message.");
+        }
+
+        // ================= Google Vertex AI =================
+
+        private static VertexAiClient CreateVertexClient(LocalOpenAiTestServer server, ICredentialProvider? credential = null)
+        {
+            VertexAiClient client = new VertexAiClient(
+                "test-project", "us-central1", credential ?? new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
+            client.Model = "test-model";
+            client.TimeoutMs = 1000;
+            return client;
+        }
+
+        private static async Task RunVertexGenerateContentTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "Vertex chat should succeed.");
+            SharedAssert.Equal("pong", chat.Text, "Vertex chat should return the local response.");
+
+            SharedAssert.True(server.RequestPaths[0].Contains("/v1/projects/test-project/locations/us-central1/publishers/google/models/test-model:generateContent", StringComparison.Ordinal), "Vertex chat should route by project/region publisher path.");
+            string? authorization = FindHeader(client.CallDetails[0], "Authorization");
+            SharedAssert.NotNull(authorization, "Vertex chat should attach an Authorization header.");
+            SharedAssert.True(authorization!.StartsWith("Bearer vertex-token", StringComparison.Ordinal), "Vertex chat should attach the bearer token.");
+        }
+
+        private static async Task RunVertexPredictEmbeddingsAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+            client.Model = "text-embedding-004";
+
+            EmbeddingResponse embed = await client.EmbedAsync(new List<string> { "a", "b" }, token: token).ConfigureAwait(false);
+            SharedAssert.True(embed.Success, "Vertex embeddings should succeed.");
+            SharedAssert.Equal(2, embed.Embeddings.Count, "Vertex embeddings should return both vectors.");
+
+            SharedAssert.True(server.RequestPaths[0].EndsWith(":predict", StringComparison.Ordinal), "Vertex embeddings should hit the :predict endpoint.");
+            SharedAssert.True(server.RequestBodies[0].Contains("\"instances\"", StringComparison.Ordinal), "Vertex embeddings should send an instances body.");
+        }
+
+        private static async Task RunVertexToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "Vertex streaming tool chat should start.");
+
+            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            int toolDeltaCount = 0;
+            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+
+            SharedAssert.True(toolDeltaCount > 0, "Vertex streaming tool chat should emit tool-call deltas.");
+            SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Vertex streaming tool chat should accumulate the get_weather call.");
+            SharedAssert.True(server.RequestPaths[0].Contains(":streamGenerateContent", StringComparison.Ordinal), "Vertex streaming should hit :streamGenerateContent.");
+        }
+
+        private static async Task RunVertexOAuthBearerAttachedAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+
+            await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            await client.ChatAsync("again", token: token).ConfigureAwait(false);
+
+            foreach (CompletionCallDetail detail in client.CallDetails)
+            {
+                string? authorization = FindHeader(detail, "Authorization");
+                SharedAssert.NotNull(authorization, "Every Vertex request should carry a bearer token.");
+                SharedAssert.True(authorization!.StartsWith("Bearer ", StringComparison.Ordinal), "Vertex authorization should use the bearer scheme.");
+            }
+        }
+
+        private static async Task RunVertexReasoningThinkingBudgetAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+
+            ToolChatRequest request = CreateWeatherToolRequest();
+            request.ReasoningEffort = ReasoningEffort.Medium;
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Vertex reasoning tool chat should succeed.");
+
+            SharedAssert.True(server.RequestBodies[0].Contains("thinkingBudget", StringComparison.Ordinal), "Vertex should map reasoning to thinkingConfig.thinkingBudget.");
+        }
+
+        private static async Task RunVertexModelManagementUnsupportedAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using VertexAiClient client = CreateVertexClient(server);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => GetModelsAsync(client, token),
+                "Vertex ListModelsAsync should throw NotSupportedException.").ConfigureAwait(false);
+
+            await SharedAssert.ThrowsAsync<NotSupportedException>(
+                () => client.GetModelInformationAsync("test-model", token),
+                "Vertex GetModelInformationAsync should throw NotSupportedException.").ConfigureAwait(false);
+        }
+
+        // ================= AWS Bedrock =================
+
+        private static BedrockClient CreateBedrockClient(LocalOpenAiTestServer server, string endpointSuffix = "")
+        {
+            BedrockClient client = new BedrockClient(
+                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
+                "us-east-1",
+                endpoint: server.Endpoint + endpointSuffix);
+            client.TimeoutMs = 1000;
+            return client;
+        }
+
+        private static async Task RunBedrockConverseTranslationAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(chat.Success, "Bedrock chat should succeed.");
+            SharedAssert.Equal("pong", chat.Text, "Bedrock chat should return the Converse response.");
+
+            SharedAssert.True(server.RequestPaths[0].Contains("/model/", StringComparison.Ordinal) && server.RequestPaths[0].EndsWith("/converse", StringComparison.Ordinal), "Bedrock chat should hit the Converse endpoint.");
+            SharedAssert.True(server.RequestBodies[0].Contains("\"messages\"", StringComparison.Ordinal), "Bedrock chat should send Converse messages.");
+            SharedAssert.True(server.RequestBodies[0].Contains("\"inferenceConfig\"", StringComparison.Ordinal), "Bedrock chat should send inferenceConfig.");
+        }
+
+        private static async Task RunBedrockSigV4SignatureShapeAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            CompletionCallDetail detail = client.CallDetails[0];
+
+            string? authorization = FindHeader(detail, "Authorization");
+            SharedAssert.NotNull(authorization, "Bedrock requests should carry an Authorization header.");
+            SharedAssert.True(authorization!.StartsWith("AWS4-HMAC-SHA256 ", StringComparison.Ordinal), "Bedrock should sign with AWS4-HMAC-SHA256.");
+            SharedAssert.True(authorization.Contains("Credential=AKIDTESTEXAMPLE/", StringComparison.Ordinal), "SigV4 Authorization should carry the credential scope.");
+            SharedAssert.True(authorization.Contains("SignedHeaders=", StringComparison.Ordinal), "SigV4 Authorization should list signed headers.");
+            SharedAssert.True(authorization.Contains("Signature=", StringComparison.Ordinal), "SigV4 Authorization should carry a signature.");
+            SharedAssert.NotNull(FindHeader(detail, "x-amz-date"), "SigV4 should send x-amz-date.");
+            SharedAssert.NotNull(FindHeader(detail, "x-amz-content-sha256"), "SigV4 should send x-amz-content-sha256.");
+        }
+
+        private static async Task RunBedrockToolUseAssemblyAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            ToolChatResponse response = await client.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Bedrock tool chat should succeed.");
+            SharedAssert.True(response.ToolCalls.Any(call => call.Name == "get_weather"), "Bedrock tool chat should surface the get_weather toolUse.");
+            SharedAssert.Equal("tool_use", response.FinishReason, "Bedrock tool chat should surface the tool_use stop reason.");
+
+            ToolCall call = response.ToolCalls.First(c => c.Name == "get_weather");
+            SharedAssert.True(call.ArgumentsJson != null && call.ArgumentsJson.Contains("Seattle", StringComparison.Ordinal), "Bedrock toolUse input should carry the arguments.");
+            SharedAssert.True(server.RequestBodies[0].Contains("toolSpec", StringComparison.Ordinal), "Bedrock tool chat should send toolConfig.tools[].toolSpec.");
+        }
+
+        private static async Task RunBedrockConverseStreamEventFramesAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "Bedrock streaming chat should start.");
+
+            List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
+            string text = CombineChatText(chunks);
+
+            SharedAssert.Equal("hello world", text, "Bedrock streaming should decode text from event-stream frames.");
+            SharedAssert.Equal("end_turn", stream.FinishReason, "Bedrock streaming should surface the stop reason.");
+            SharedAssert.NotNull(stream.Usage, "Bedrock streaming should surface usage from the metadata frame.");
+            SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Bedrock streaming should parse output tokens.");
+        }
+
+        private static async Task RunBedrockToolChatStreamingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "Bedrock streaming tool chat should start.");
+
+            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            int toolDeltaCount = 0;
+            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+
+            SharedAssert.True(toolDeltaCount > 0, "Bedrock streaming tool chat should emit tool-call deltas.");
+            SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Bedrock streaming tool chat should assemble the get_weather call.");
+            ToolCall call = stream.ToolCalls.First(c => c.Name == "get_weather");
+            SharedAssert.True(call.ArgumentsJson != null && call.ArgumentsJson.Contains("Seattle", StringComparison.Ordinal), "Bedrock streaming toolUse input should assemble the arguments.");
+            SharedAssert.Equal("tool_use", stream.FinishReason, "Bedrock streaming tool chat should surface the tool_use stop reason.");
+        }
+
+        private static async Task RunBedrockTitanEmbeddingsAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            EmbeddingOptions options = new EmbeddingOptions { Model = "amazon.titan-embed-text-v2:0" };
+            EmbeddingResponse embed = await client.EmbedAsync("hello", options, token).ConfigureAwait(false);
+            SharedAssert.True(embed.Success, "Bedrock Titan embeddings should succeed.");
+            SharedAssert.Equal(1, embed.Embeddings.Count, "Bedrock Titan single embedding should return one vector.");
+            SharedAssert.True(server.RequestPaths[0].Contains("amazon.titan-embed-text-v2:0", StringComparison.Ordinal) && server.RequestPaths[0].EndsWith("/invoke", StringComparison.Ordinal), "Bedrock Titan should invoke the model.");
+            SharedAssert.True(server.RequestBodies[0].Contains("inputText", StringComparison.Ordinal), "Bedrock Titan should send an inputText body.");
+        }
+
+        private static async Task RunBedrockCohereEmbeddingsAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            BedrockEmbeddingOptions options = new BedrockEmbeddingOptions { Model = "cohere.embed-english-v3", InputType = "search_document" };
+            EmbeddingResponse embed = await client.EmbedAsync(new List<string> { "a", "b" }, options, token).ConfigureAwait(false);
+            SharedAssert.True(embed.Success, "Bedrock Cohere embeddings should succeed.");
+            SharedAssert.Equal(2, embed.Embeddings.Count, "Bedrock Cohere batch embedding should return both vectors.");
+            SharedAssert.True(server.RequestBodies[0].Contains("\"texts\"", StringComparison.Ordinal), "Bedrock Cohere should send a texts body.");
+            SharedAssert.True(server.RequestBodies[0].Contains("search_document", StringComparison.Ordinal), "Bedrock Cohere should send the input_type.");
+        }
+
+        private static async Task RunBedrockReasoningConverseAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server);
+
+            ToolChatRequest request = new ToolChatRequest();
+            request.Messages.Add(ChatMessage.User("reasoncapture please decide the weather"));
+            request.Tools.Add(ToolDefinition.Function("get_weather", "Get current weather for a city.", WeatherParameters()));
+            request.ReasoningEffort = ReasoningEffort.Medium;
+
+            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Bedrock reasoning tool chat should succeed.");
+            SharedAssert.NotEmpty(response.Reasoning, "Bedrock should surface reasoningContent as reasoning.");
+            SharedAssert.True(server.RequestBodies[0].Contains("budget_tokens", StringComparison.Ordinal), "Bedrock should map reasoning to additionalModelRequestFields.thinking.budget_tokens.");
+        }
+
+        private static async Task RunBedrockHttpErrorHandlingAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            using BedrockClient client = CreateBedrockClient(server, endpointSuffix: "/wrong");
+
+            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            SharedAssert.False(chat.Success, "Bedrock chat against a bad path should fail.");
+            SharedAssert.Equal(404, chat.StatusCode ?? 0, "Bedrock chat against a bad path should surface HTTP 404.");
+            SharedAssert.NotEmpty(chat.Error, "Bedrock chat error should surface a message.");
+        }
+
+        // ================= Auth primitives =================
+
+        private static async Task RunSigV4CanonicalVectorAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            SortedDictionary<string, string> signed = new SortedDictionary<string, string>(StringComparer.Ordinal)
+            {
+                { "content-type", "application/x-www-form-urlencoded; charset=utf-8" },
+                { "host", "iam.amazonaws.com" },
+                { "x-amz-date", "20150830T123600Z" },
+            };
+
+            string canonical = SigV4Signer.CreateCanonicalRequest(
+                "GET", "/", "Action=ListUsers&Version=2010-05-08", signed, SigV4Signer.EmptyPayloadHash);
+            string hashedCanonical = SigV4Signer.HexSha256(Encoding.UTF8.GetBytes(canonical));
+            SharedAssert.Equal("f536975d06c0309214f805bb90ccff089219ecd68b2577efef23edd43b7e1a59", hashedCanonical, "SigV4 canonical request hash should match the AWS vector.");
+
+            DateTimeOffset signingTime = new DateTimeOffset(2015, 8, 30, 12, 36, 0, TimeSpan.Zero);
+            string stringToSign = SigV4Signer.CreateStringToSign(signingTime, "us-east-1", "iam", canonical);
+            byte[] key = SigV4Signer.DeriveSigningKey("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "20150830", "us-east-1", "iam");
+
+            using System.Security.Cryptography.HMACSHA256 hmac = new System.Security.Cryptography.HMACSHA256(key);
+            byte[] signature = hmac.ComputeHash(Encoding.UTF8.GetBytes(stringToSign));
+            string signatureHex = Convert.ToHexString(signature).ToLowerInvariant();
+            SharedAssert.Equal("5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7", signatureHex, "SigV4 signature should match the AWS vector.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunSigV4AuthorizationShapeAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/converse");
+            byte[] body = Encoding.UTF8.GetBytes("{\"messages\":[]}");
+            AwsCredentials credentials = new AwsCredentials("AKIDEXAMPLE", "secret", "us-east-1");
+
+            SigV4Signer.Sign(request, body, credentials, "bedrock", new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+            string authorization = request.Headers.GetValues("Authorization").First();
+            SharedAssert.True(authorization.StartsWith("AWS4-HMAC-SHA256 ", StringComparison.Ordinal), "Authorization should use AWS4-HMAC-SHA256.");
+            SharedAssert.True(authorization.Contains("Credential=AKIDEXAMPLE/20200101/us-east-1/bedrock/aws4_request", StringComparison.Ordinal), "Authorization should carry the correct credential scope.");
+            SharedAssert.True(authorization.Contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date", StringComparison.Ordinal), "Authorization should list the signed headers.");
+            SharedAssert.True(request.Headers.Contains("x-amz-date"), "Signed request should carry x-amz-date.");
+            SharedAssert.True(request.Headers.Contains("x-amz-content-sha256"), "Signed request should carry x-amz-content-sha256.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunSigV4SessionTokenAsync(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/converse");
+            AwsCredentials credentials = new AwsCredentials("AKIDEXAMPLE", "secret", "us-east-1", "session-token-value");
+
+            SigV4Signer.Sign(request, Encoding.UTF8.GetBytes("{}"), credentials, "bedrock", new DateTimeOffset(2020, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+            SharedAssert.True(request.Headers.Contains("x-amz-security-token"), "Temporary credentials should send x-amz-security-token.");
+            SharedAssert.Equal("session-token-value", request.Headers.GetValues("x-amz-security-token").First(), "Session token header should carry the token.");
+            string authorization = request.Headers.GetValues("Authorization").First();
+            SharedAssert.True(authorization.Contains("x-amz-security-token", StringComparison.Ordinal), "Signed headers should include x-amz-security-token.");
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private static async Task RunEventStreamRoundtripAsync(CancellationToken token)
+        {
+            byte[] frame1 = EventStreamDecoder.EncodeMessage(
+                new Dictionary<string, string> { { ":event-type", "messageStart" } }, Encoding.UTF8.GetBytes("{\"role\":\"assistant\"}"));
+            byte[] frame2 = EventStreamDecoder.EncodeMessage(
+                new Dictionary<string, string> { { ":event-type", "contentBlockDelta" } }, Encoding.UTF8.GetBytes("{\"delta\":{\"text\":\"hello\"}}"));
+            byte[] frame3 = EventStreamDecoder.EncodeMessage(
+                new Dictionary<string, string> { { ":event-type", "messageStop" } }, Encoding.UTF8.GetBytes("{\"stopReason\":\"end_turn\"}"));
+
+            using MemoryStream stream = new MemoryStream();
+            stream.Write(frame1, 0, frame1.Length);
+            stream.Write(frame2, 0, frame2.Length);
+            stream.Write(frame3, 0, frame3.Length);
+            stream.Position = 0;
+
+            List<EventStreamMessage> messages = new List<EventStreamMessage>();
+            await foreach (EventStreamMessage message in EventStreamDecoder.DecodeAsync(stream, token).ConfigureAwait(false))
+            {
+                messages.Add(message);
+            }
+
+            SharedAssert.Equal(3, messages.Count, "Event-stream decode should recover every frame.");
+            SharedAssert.Equal("messageStart", messages[0].EventType, "First frame event type should round-trip.");
+            SharedAssert.Equal("contentBlockDelta", messages[1].EventType, "Second frame event type should round-trip.");
+            SharedAssert.True(messages[1].PayloadString.Contains("hello", StringComparison.Ordinal), "Frame payload should round-trip.");
+        }
+
+        private static async Task RunEventStreamCrcDetectsCorruptionAsync(CancellationToken token)
+        {
+            byte[] frame = EventStreamDecoder.EncodeMessage(
+                new Dictionary<string, string> { { ":event-type", "contentBlockDelta" } }, Encoding.UTF8.GetBytes("{\"delta\":{\"text\":\"hello\"}}"));
+
+            // Corrupt a payload byte; the trailing message CRC should catch it.
+            frame[frame.Length - 6] ^= 0xFF;
+
+            using MemoryStream stream = new MemoryStream(frame);
+            await SharedAssert.ThrowsAsync<InvalidDataException>(
+                async () =>
+                {
+                    await foreach (EventStreamMessage _ in EventStreamDecoder.DecodeAsync(stream, token).ConfigureAwait(false))
+                    {
+                    }
+                },
+                "A corrupt event-stream frame should raise InvalidDataException.").ConfigureAwait(false);
+        }
+
+        private static async Task RunCredentialRefreshPerRequestAsync(CancellationToken token)
+        {
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            CountingTokenCredential credential = new CountingTokenCredential();
+            using VertexAiClient client = CreateVertexClient(server, credential);
+
+            await client.ChatAsync("hello", token: token).ConfigureAwait(false);
+            await client.ChatAsync("again", token: token).ConfigureAwait(false);
+
+            SharedAssert.True(credential.Count >= 2, "A bearer credential should be resolved on each request.");
+            foreach (CompletionCallDetail detail in client.CallDetails)
+            {
+                SharedAssert.NotNull(FindHeader(detail, "Authorization"), "Each request should carry the resolved bearer token.");
+            }
+        }
+
+        private static async Task RunCredentialCachingReusesTokenAsync(CancellationToken token)
+        {
+            CountingCachingCredential credential = new CountingCachingCredential();
+
+            string first = await credential.GetBearerTokenAsync(token).ConfigureAwait(false);
+            string second = await credential.GetBearerTokenAsync(token).ConfigureAwait(false);
+
+            SharedAssert.Equal("cached-token", first, "Caching credential should return the fetched token.");
+            SharedAssert.Equal(first, second, "Caching credential should return the same token within its lifetime.");
+            SharedAssert.Equal(1, credential.FetchCount, "Caching credential should fetch only once within the token lifetime.");
+        }
+
+        private static string? FindHeader(CompletionCallDetail detail, string name)
+        {
+            if (detail.RequestHeaders == null) return null;
+            foreach (KeyValuePair<string, string> header in detail.RequestHeaders)
+            {
+                if (string.Equals(header.Key, name, StringComparison.OrdinalIgnoreCase)) return header.Value;
+            }
+            return null;
+        }
+
+        private sealed class CountingTokenCredential : ICredentialProvider
+        {
+            private int _Count;
+
+            public int Count => Volatile.Read(ref _Count);
+
+            public Task<string> GetBearerTokenAsync(CancellationToken token = default)
+            {
+                int value = Interlocked.Increment(ref _Count);
+                return Task.FromResult("token-" + value);
+            }
+        }
+
+        private sealed class CountingCachingCredential : CachingCredentialProvider
+        {
+            private int _FetchCount;
+
+            public int FetchCount => _FetchCount;
+
+            protected override Task<TokenResult> FetchTokenAsync(CancellationToken token)
+            {
+                _FetchCount++;
+                return Task.FromResult(new TokenResult("cached-token", 3600));
             }
         }
 

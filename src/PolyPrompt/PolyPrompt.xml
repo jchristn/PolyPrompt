@@ -4,6 +4,283 @@
         <name>PolyPrompt</name>
     </assembly>
     <members>
+        <member name="T:PolyPrompt.Auth.AwsCredentials">
+            <summary>
+            Immutable set of AWS credentials plus the region they apply to, resolved once per request by an
+            <see cref="T:PolyPrompt.Auth.IAwsCredentialProvider"/> and consumed by <see cref="T:PolyPrompt.Auth.SigV4Signer"/>. Supports permanent
+            access keys as well as temporary (role/STS) credentials that carry a session token.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.AwsCredentials.AccessKeyId">
+            <summary>AWS access key id (e.g. the value of <c>AWS_ACCESS_KEY_ID</c>).</summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.AwsCredentials.SecretAccessKey">
+            <summary>AWS secret access key (e.g. the value of <c>AWS_SECRET_ACCESS_KEY</c>).</summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.AwsCredentials.SessionToken">
+            <summary>
+            Optional session token for temporary credentials (e.g. the value of <c>AWS_SESSION_TOKEN</c>).
+            When present it is sent as the <c>x-amz-security-token</c> header and folded into the signature.
+            Null for permanent credentials.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.AwsCredentials.Region">
+            <summary>AWS region the credentials target, e.g. <c>us-east-1</c>.</summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.AwsCredentials.#ctor(System.String,System.String,System.String,System.String)">
+            <summary>
+            Initialize a new set of AWS credentials.
+            </summary>
+            <param name="accessKeyId">AWS access key id.</param>
+            <param name="secretAccessKey">AWS secret access key.</param>
+            <param name="region">AWS region, e.g. <c>us-east-1</c>.</param>
+            <param name="sessionToken">Optional session token for temporary credentials.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null or empty.</exception>
+        </member>
+        <member name="T:PolyPrompt.Auth.IAwsCredentialProvider">
+            <summary>
+            Resolves the AWS credentials used to sign a Bedrock request. Resolution happens per request so that
+            rotating/temporary credentials (role or STS) are always picked up fresh.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.IAwsCredentialProvider.Resolve">
+            <summary>
+            Resolve the current AWS credentials.
+            </summary>
+            <returns>The credentials to sign the next request with.</returns>
+        </member>
+        <member name="T:PolyPrompt.Auth.StaticAwsCredential">
+            <summary>
+            An <see cref="T:PolyPrompt.Auth.IAwsCredentialProvider"/> backed by fixed, caller-supplied credentials.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.StaticAwsCredential.#ctor(PolyPrompt.Auth.AwsCredentials)">
+            <summary>
+            Initialize a static credential provider.
+            </summary>
+            <param name="credentials">The credentials to return from every <see cref="M:PolyPrompt.Auth.StaticAwsCredential.Resolve"/> call.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when credentials is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Auth.StaticAwsCredential.#ctor(System.String,System.String,System.String,System.String)">
+            <summary>
+            Convenience constructor building the credentials inline.
+            </summary>
+            <param name="accessKeyId">AWS access key id.</param>
+            <param name="secretAccessKey">AWS secret access key.</param>
+            <param name="region">AWS region, e.g. <c>us-east-1</c>.</param>
+            <param name="sessionToken">Optional session token for temporary credentials.</param>
+        </member>
+        <member name="M:PolyPrompt.Auth.StaticAwsCredential.Resolve">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Auth.EnvironmentAwsCredential">
+            <summary>
+            An <see cref="T:PolyPrompt.Auth.IAwsCredentialProvider"/> that resolves credentials from the standard AWS environment
+            variables (<c>AWS_ACCESS_KEY_ID</c>, <c>AWS_SECRET_ACCESS_KEY</c>, optional <c>AWS_SESSION_TOKEN</c>).
+            The region is taken from an explicit override, else <c>AWS_REGION</c>, else <c>AWS_DEFAULT_REGION</c>.
+            Resolution reads the environment on every call so rotated values are observed.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.EnvironmentAwsCredential.#ctor(System.String)">
+            <summary>
+            Initialize an environment-backed credential provider.
+            </summary>
+            <param name="region">
+            Optional region override. When null the region is read from <c>AWS_REGION</c> or
+            <c>AWS_DEFAULT_REGION</c> at resolution time.
+            </param>
+        </member>
+        <member name="M:PolyPrompt.Auth.EnvironmentAwsCredential.Resolve">
+            <inheritdoc />
+            <exception cref="T:System.InvalidOperationException">
+            Thrown when the required environment variables (access key, secret key, region) are not set.
+            </exception>
+        </member>
+        <member name="T:PolyPrompt.Auth.ICredentialProvider">
+            <summary>
+            Supplies a short-lived OAuth bearer token per request. Used by providers whose credentials expire and
+            must be refreshed (Google Vertex AI via Application Default Credentials or a service-account key; Azure
+            OpenAI via Azure AD). The provider owns caching and refresh; callers simply await a valid token.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.ICredentialProvider.GetBearerTokenAsync(System.Threading.CancellationToken)">
+            <summary>
+            Return a currently-valid bearer token, refreshing transparently if the cached token is missing or
+            close to expiry.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>A valid access token (without the "Bearer " prefix).</returns>
+        </member>
+        <member name="T:PolyPrompt.Auth.StaticTokenCredential">
+            <summary>
+            An <see cref="T:PolyPrompt.Auth.ICredentialProvider"/> that returns a fixed, caller-supplied token. Useful when a token
+            is obtained out-of-band (for example <c>gcloud auth print-access-token</c>) or for tests. The token is
+            never refreshed.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.StaticTokenCredential.#ctor(System.String)">
+            <summary>
+            Initialize a static token credential.
+            </summary>
+            <param name="token">The bearer token to return (without the "Bearer " prefix).</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when token is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Auth.StaticTokenCredential.GetBearerTokenAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Auth.CachingCredentialProvider">
+            <summary>
+            Base class for credential providers that fetch an access token with a finite lifetime and cache it
+            until shortly before expiry. Refresh is serialized so concurrent callers share one token exchange.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.CachingCredentialProvider.GetBearerTokenAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Auth.CachingCredentialProvider.FetchTokenAsync(System.Threading.CancellationToken)">
+            <summary>
+            Fetch a fresh access token from the underlying credential source.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The freshly-minted token and its lifetime.</returns>
+        </member>
+        <member name="T:PolyPrompt.Auth.CachingCredentialProvider.TokenResult">
+            <summary>The result of a token fetch: the access token and its lifetime in seconds.</summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.CachingCredentialProvider.TokenResult.AccessToken">
+            <summary>The access token (without the "Bearer " prefix).</summary>
+        </member>
+        <member name="P:PolyPrompt.Auth.CachingCredentialProvider.TokenResult.ExpiresInSeconds">
+            <summary>The token lifetime in seconds; non-positive values are treated as one hour.</summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.CachingCredentialProvider.TokenResult.#ctor(System.String,System.Int32)">
+            <summary>Initialize a token result.</summary>
+            <param name="accessToken">The access token.</param>
+            <param name="expiresInSeconds">The token lifetime in seconds.</param>
+        </member>
+        <member name="T:PolyPrompt.Auth.ServiceAccountCredential">
+            <summary>
+            An <see cref="T:PolyPrompt.Auth.ICredentialProvider"/> that mints Google Cloud access tokens from a service-account key
+            (the JSON Google issues). It builds and RS256-signs a JWT assertion, exchanges it at the token
+            endpoint for an access token, and caches the result until shortly before expiry. No Google SDK is
+            required — only the framework's RSA and a single HTTP round-trip.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.ServiceAccountCredential.#ctor(System.String,System.String,System.String,System.String,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a service-account credential from its individual fields.
+            </summary>
+            <param name="clientEmail">The service account's <c>client_email</c>.</param>
+            <param name="privateKeyPem">The service account's PEM-encoded <c>private_key</c>.</param>
+            <param name="scope">OAuth scope to request. Default: cloud-platform.</param>
+            <param name="tokenUri">Token exchange endpoint. Default: Google's OAuth token endpoint.</param>
+            <param name="httpClient">Optional HTTP client for the token exchange; when null one is created and owned.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Auth.ServiceAccountCredential.FromJson(System.String,System.String,System.Net.Http.HttpClient)">
+            <summary>
+            Build a service-account credential from the JSON key file contents Google issues.
+            </summary>
+            <param name="serviceAccountJson">The full service-account key JSON.</param>
+            <param name="scope">OAuth scope to request. Default: cloud-platform.</param>
+            <param name="httpClient">Optional HTTP client for the token exchange.</param>
+            <returns>A configured <see cref="T:PolyPrompt.Auth.ServiceAccountCredential"/>.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the JSON is missing required fields.</exception>
+        </member>
+        <member name="M:PolyPrompt.Auth.ServiceAccountCredential.FetchTokenAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Auth.ServiceAccountCredential.Dispose">
+            <summary>Dispose the internally-owned HTTP client, if any.</summary>
+        </member>
+        <member name="T:PolyPrompt.Auth.AdcCredential">
+            <summary>
+            An <see cref="T:PolyPrompt.Auth.ICredentialProvider"/> implementing Google Application Default Credentials resolution:
+            if <c>GOOGLE_APPLICATION_CREDENTIALS</c> points at a service-account key file, tokens are minted from
+            it; otherwise the GCE/Cloud Run metadata server is queried for the attached service account's token.
+            Tokens are cached until shortly before expiry.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.AdcCredential.#ctor(System.Net.Http.HttpClient)">
+            <summary>
+            Initialize an Application Default Credentials provider.
+            </summary>
+            <param name="httpClient">Optional HTTP client for the token exchange / metadata query.</param>
+        </member>
+        <member name="M:PolyPrompt.Auth.AdcCredential.FetchTokenAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Auth.AdcCredential.Dispose">
+            <summary>Dispose the internally-owned HTTP client and any derived service-account credential.</summary>
+        </member>
+        <member name="T:PolyPrompt.Auth.SigV4Signer">
+            <summary>
+            A minimal, dependency-free implementation of AWS Signature Version 4 (header-based signing), used to
+            authenticate Bedrock requests. Signing is per-request: the signature covers the method, canonical
+            path and query, the signed headers, and a SHA-256 hash of the body, stamped with the request time.
+            The low-level building blocks (<see cref="M:PolyPrompt.Auth.SigV4Signer.CreateCanonicalRequest(System.String,System.String,System.String,System.Collections.Generic.SortedDictionary{System.String,System.String},System.String)"/>, <see cref="M:PolyPrompt.Auth.SigV4Signer.CreateStringToSign(System.DateTimeOffset,System.String,System.String,System.String)"/>,
+            <see cref="M:PolyPrompt.Auth.SigV4Signer.DeriveSigningKey(System.String,System.String,System.String,System.String)"/>, <see cref="M:PolyPrompt.Auth.SigV4Signer.HexSha256(System.Byte[])"/>) are public so they can be verified directly
+            against AWS's published canonical test vectors.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Auth.SigV4Signer.Algorithm">
+            <summary>The SigV4 algorithm identifier.</summary>
+        </member>
+        <member name="F:PolyPrompt.Auth.SigV4Signer.EmptyPayloadHash">
+            <summary>SHA-256 hex digest of an empty payload (used for bodyless requests such as GET).</summary>
+        </member>
+        <member name="M:PolyPrompt.Auth.SigV4Signer.Sign(System.Net.Http.HttpRequestMessage,System.Byte[],PolyPrompt.Auth.AwsCredentials,System.String,System.DateTimeOffset)">
+            <summary>
+            Sign an outbound request in place, adding the <c>x-amz-date</c>, <c>x-amz-content-sha256</c>,
+            <c>Authorization</c> (and <c>x-amz-security-token</c> for temporary credentials) headers. The
+            <c>host</c> header is derived from the request URI and folded into the signature.
+            </summary>
+            <param name="request">The request to sign; must have an absolute <see cref="P:System.Net.Http.HttpRequestMessage.RequestUri"/>.</param>
+            <param name="body">The exact request body bytes (empty array for a bodyless request).</param>
+            <param name="credentials">The AWS credentials and region.</param>
+            <param name="service">The AWS service name, e.g. <c>bedrock</c>.</param>
+            <param name="signingTime">The instant to sign for (usually now, in UTC).</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the request has no absolute URI.</exception>
+        </member>
+        <member name="M:PolyPrompt.Auth.SigV4Signer.CreateCanonicalRequest(System.String,System.String,System.String,System.Collections.Generic.SortedDictionary{System.String,System.String},System.String)">
+            <summary>
+            Build the SigV4 canonical request string.
+            </summary>
+            <param name="httpMethod">The HTTP method (e.g. GET, POST).</param>
+            <param name="canonicalUri">The canonicalized (URI-encoded) path.</param>
+            <param name="canonicalQueryString">The canonicalized, sorted query string.</param>
+            <param name="signedHeaders">The headers to sign, keyed by lowercase name, ordered ordinally.</param>
+            <param name="payloadHash">The hex SHA-256 of the payload.</param>
+            <returns>The canonical request string.</returns>
+        </member>
+        <member name="M:PolyPrompt.Auth.SigV4Signer.CreateStringToSign(System.DateTimeOffset,System.String,System.String,System.String)">
+            <summary>
+            Build the SigV4 "string to sign" from a canonical request.
+            </summary>
+            <param name="signingTime">The signing instant.</param>
+            <param name="region">The AWS region.</param>
+            <param name="service">The AWS service name.</param>
+            <param name="canonicalRequest">The canonical request produced by <see cref="M:PolyPrompt.Auth.SigV4Signer.CreateCanonicalRequest(System.String,System.String,System.String,System.Collections.Generic.SortedDictionary{System.String,System.String},System.String)"/>.</param>
+            <returns>The string to sign.</returns>
+        </member>
+        <member name="M:PolyPrompt.Auth.SigV4Signer.DeriveSigningKey(System.String,System.String,System.String,System.String)">
+            <summary>
+            Derive the SigV4 signing key via the HMAC chain over date, region, service, and terminator.
+            </summary>
+            <param name="secretKey">The AWS secret access key.</param>
+            <param name="dateStamp">The <c>yyyyMMdd</c> date stamp.</param>
+            <param name="region">The AWS region.</param>
+            <param name="service">The AWS service name.</param>
+            <returns>The derived signing key bytes.</returns>
+        </member>
+        <member name="M:PolyPrompt.Auth.SigV4Signer.HexSha256(System.Byte[])">
+            <summary>
+            Compute the lowercase hex SHA-256 digest of the given bytes.
+            </summary>
+            <param name="data">The bytes to hash.</param>
+            <returns>The lowercase hex digest.</returns>
+        </member>
         <member name="T:PolyPrompt.Clients.AnthropicClient">
             <summary>
             Client for the Anthropic (Claude) Messages API supporting chat completions, tool calling, and text
@@ -83,6 +360,118 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.AnthropicClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.AzureOpenAiClient">
+            <summary>
+            Client for Azure OpenAI. Azure OpenAI is wire-compatible with OpenAI for request and response bodies,
+            tool-call delta assembly, reasoning (<c>reasoning_effort</c>), streaming SSE, and usage — all of which
+            are inherited unchanged from <see cref="T:PolyPrompt.Clients.OpenAiClient"/>. It differs in three ways, which is all this
+            class overrides:
+            <list type="bullet">
+            <item><description><b>Routing:</b> operations live under
+            <c>/openai/deployments/{deployment}/{op}</c> with a required <c>api-version</c> query parameter, and
+            the model is the <b>deployment name</b> (set via <see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/>).</description></item>
+            <item><description><b>Auth:</b> either an <c>api-key</c> header or an Azure AD bearer token (supplied
+            through an <see cref="T:PolyPrompt.Auth.ICredentialProvider"/> and refreshed per request).</description></item>
+            <item><description><b>Api version:</b> a settable <see cref="P:PolyPrompt.Clients.AzureOpenAiClient.ApiVersion"/> with a current GA default.</description></item>
+            </list>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.AzureOpenAiClient.DefaultApiVersion">
+            <summary>A current generally-available Azure OpenAI API version, used when none is specified.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.AzureOpenAiClient.ApiVersion">
+            <summary>
+            The Azure OpenAI <c>api-version</c> query value sent with every request. These values drift over
+            time, so it is user-settable; defaults to <see cref="F:PolyPrompt.Clients.AzureOpenAiClient.DefaultApiVersion"/>.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.#ctor(System.String,System.String,System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize an Azure OpenAI client authenticated with an <c>api-key</c>.
+            </summary>
+            <param name="endpoint">Azure resource endpoint, e.g. <c>https://my-resource.openai.azure.com</c>.</param>
+            <param name="deployment">Deployment name; becomes <see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/> and routes the URL.</param>
+            <param name="apiKey">Azure OpenAI API key, sent as the <c>api-key</c> header.</param>
+            <param name="apiVersion">API version; defaults to <see cref="F:PolyPrompt.Clients.AzureOpenAiClient.DefaultApiVersion"/>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client (caller-owned when supplied).</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when endpoint or deployment is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.#ctor(System.String,System.String,PolyPrompt.Auth.ICredentialProvider,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize an Azure OpenAI client authenticated with an Azure AD bearer token, refreshed per
+            request through the supplied credential provider.
+            </summary>
+            <param name="endpoint">Azure resource endpoint, e.g. <c>https://my-resource.openai.azure.com</c>.</param>
+            <param name="deployment">Deployment name; becomes <see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/> and routes the URL.</param>
+            <param name="credential">Azure AD credential provider supplying bearer tokens.</param>
+            <param name="apiVersion">API version; defaults to <see cref="F:PolyPrompt.Clients.AzureOpenAiClient.DefaultApiVersion"/>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client (caller-owned when supplied).</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.BuildApiUrl(System.String)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.BedrockClient">
+            <summary>
+            Client for AWS Bedrock. Inference uses the unified <c>Converse</c> / <c>ConverseStream</c> API, which
+            normalizes messages, tools, reasoning, and usage across the model families Bedrock hosts (Anthropic,
+            Amazon, Meta, Cohere, Mistral), so PolyPrompt needs almost no per-family branching. Embeddings use
+            <c>InvokeModel</c> with family-specific bodies (Amazon Titan and Cohere). Every request is authenticated
+            with AWS Signature Version 4 (see <see cref="T:PolyPrompt.Auth.SigV4Signer"/>) via the per-request
+            <see cref="M:PolyPrompt.Clients.CompletionClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> hook. <c>ConverseStream</c> responses are the
+            AWS binary event-stream format, decoded by <see cref="T:PolyPrompt.Wire.EventStreamDecoder"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.#ctor(PolyPrompt.Auth.IAwsCredentialProvider,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient,System.String)">
+            <summary>
+            Initialize a new Bedrock client.
+            </summary>
+            <param name="credentialProvider">Resolves AWS credentials to sign each request.</param>
+            <param name="region">AWS region, e.g. <c>us-east-1</c>. Selects the endpoint host and signing region.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client (caller-owned when supplied).</param>
+            <param name="endpoint">Optional endpoint override; defaults to <c>https://bedrock-runtime.{region}.amazonaws.com</c>.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
@@ -434,6 +823,30 @@
             <param name="token">Cancellation token.</param>
             <returns>The HTTP response message with stream content.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <summary>
+            Hook invoked after an outbound <see cref="T:System.Net.Http.HttpRequestMessage"/> is built and its body serialized,
+            immediately before the request is sent. The default implementation is a no-op, so existing clients
+            (which stamp static auth on <see cref="P:System.Net.Http.HttpClient.DefaultRequestHeaders"/>) are unaffected.
+            Subclasses override this to attach per-request credentials that cannot live in default headers —
+            a freshly-refreshed OAuth bearer token, or an AWS SigV4 signature computed over
+            <paramref name="body"/>. For a GET (or any request without a body) <paramref name="body"/> is an
+            empty array, which for SigV4 hashes to the well-known empty-payload digest.
+            </summary>
+            <param name="request">The request about to be sent. Add or replace headers on it as needed.</param>
+            <param name="body">The exact request body bytes (empty for bodyless requests).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A task that completes once the request has been prepared.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.CaptureRequestHeaders(System.Net.Http.HttpRequestMessage)">
+            <summary>
+            Captures the effective request headers — the client's default headers overlaid with any headers
+            (and content headers) attached to this specific request, so per-request credentials added by
+            <see cref="M:PolyPrompt.Clients.CompletionClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> are reflected in recorded <see cref="T:PolyPrompt.Models.CompletionCallDetail"/>s.
+            </summary>
+            <param name="request">The outbound request.</param>
+            <returns>The merged request headers.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.CaptureResponseHeaders(System.Net.Http.HttpResponseMessage)">
             <summary>
             Captures response and content headers into a retained dictionary.
@@ -568,6 +981,27 @@
         <member name="M:PolyPrompt.Clients.GeminiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.BuildGenerateContentUrl(System.String,System.Boolean)">
+            <summary>
+            Builds the URL for a Gemini <c>generateContent</c> / <c>streamGenerateContent</c> call, including
+            AI-Studio API-key auth in the query string. Virtual so Vertex AI (which serves the same content
+            schema at a project/region/publisher path and authenticates with a bearer token rather than a
+            <c>?key=</c> query parameter) can override only the URL shape while inheriting all body building
+            and response/stream parsing unchanged.
+            </summary>
+            <param name="model">The model id to target.</param>
+            <param name="streaming">True for the SSE streaming endpoint.</param>
+            <returns>The absolute request URL.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.BuildListModelsUrl">
+            <summary>Builds the URL that lists available models. Virtual for Vertex AI reuse.</summary>
+            <returns>The absolute request URL.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.BuildGetModelUrl(System.String)">
+            <summary>Builds the URL that describes a single model. Virtual for Vertex AI reuse.</summary>
+            <param name="model">The model id (with or without a <c>models/</c> prefix).</param>
+            <returns>The absolute request URL.</returns>
+        </member>
         <member name="T:PolyPrompt.Clients.OllamaClient">
             <summary>
             Client for the Ollama API supporting chat completions, embeddings, and text generation.
@@ -665,6 +1099,92 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.BuildApiUrl(System.String)">
+            <summary>
+            Builds the full URL for an OpenAI API operation. Virtual so Azure OpenAI (which routes by
+            deployment name and requires an <c>api-version</c> query parameter) can override the URL shape
+            while inheriting every request/response body, streaming, and tool-call behavior unchanged.
+            </summary>
+            <param name="path">The operation path, e.g. <c>chat/completions</c>, <c>embeddings</c>, <c>models</c>.</param>
+            <returns>The absolute request URL.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.VertexAiClient">
+            <summary>
+            Client for Google Vertex AI (Gemini models). Vertex serves the same Gemini <c>generateContent</c>
+            content schema as <see cref="T:PolyPrompt.Clients.GeminiClient"/>, so all request-body building and response/stream parsing
+            — chat, tool chat, streaming, and reasoning (thinking budget) — are inherited unchanged. Vertex
+            differs in three ways, which is all this class overrides:
+            <list type="bullet">
+            <item><description><b>Routing:</b> a project/region/publisher path
+            (<c>/v1/projects/{project}/locations/{region}/publishers/google/models/{model}:generateContent</c>).</description></item>
+            <item><description><b>Auth:</b> an OAuth bearer token (ADC or a service account) refreshed per request,
+            not an API key.</description></item>
+            <item><description><b>Embeddings:</b> the <c>:predict</c> endpoint with an <c>instances</c> body and
+            <c>predictions[].embeddings.values</c> response, rather than AI-Studio's <c>:embedContent</c>.</description></item>
+            </list>
+            Model management (listing/lookup) is not exposed for Vertex and throws <see cref="T:System.NotSupportedException"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.#ctor(System.String,System.String,PolyPrompt.Auth.ICredentialProvider,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new Vertex AI client.
+            </summary>
+            <param name="project">Google Cloud project id.</param>
+            <param name="region">Vertex region, e.g. <c>us-central1</c>. Also selects the regional endpoint host.</param>
+            <param name="credential">Credential provider supplying OAuth bearer tokens (ADC or service account).</param>
+            <param name="endpoint">Optional endpoint override; defaults to <c>https://{region}-aiplatform.googleapis.com</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client (caller-owned when supplied).</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when a required argument is null or empty.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Vertex AI model management is not exposed by PolyPrompt. Thrown when the method is
+            called, not when the returned sequence is enumerated.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.ModelExistsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Vertex AI model management is not exposed by PolyPrompt.
+            </summary>
+            <param name="model">The model name to search for.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Vertex AI model management is not exposed by PolyPrompt.
+            </summary>
+            <param name="model">The model name to look up.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Validate connectivity by sending a minimal embeddings <c>:predict</c> request, since Vertex model
+            listing is not exposed. The probe uses the default embedding model and a single short word.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True if the provider accepted the request, false otherwise.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.BuildGenerateContentUrl(System.String,System.Boolean)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.VertexAiClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="T:PolyPrompt.Clients.VoyageAiClient">
@@ -1554,6 +2074,13 @@
             have no level preset and are reachable only through this override.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ReasoningEffort.BedrockThinkingBudget">
+            <summary>
+            AWS Bedrock Converse thinking-token budget override (<c>additionalModelRequestFields.thinking.budget_tokens</c>
+            for Anthropic models). Null derives from <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>. 0 disables thinking, positive is an
+            explicit token budget. Clamped to 0..65536.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToOpenAiWireValue">
             <summary>Returns the OpenAI reasoning_effort wire value (override if set, else derived from Level).</summary>
             <returns>One of "minimal"/"low"/"medium"/"high", or the configured override.</returns>
@@ -1572,6 +2099,15 @@
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToAnthropicEffort">
             <summary>Returns the Anthropic output_config.effort wire value (override if set, else derived from Level).</summary>
             <returns>One of "low"/"medium"/"high", or the configured override ("xhigh"/"max" included).</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ReasoningEffort.ToBedrockThinkingBudget">
+            <summary>
+            Returns the Bedrock Converse thinking-token budget (override if set, else derived from
+            <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>). 0 means thinking is off; the Bedrock client omits the thinking field when
+            this is 0.
+            </summary>
+            <returns>0 (off) or a positive token budget.</returns>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
         </member>
         <member name="M:PolyPrompt.Models.ReasoningEffort.SendsAnthropicThinking">
@@ -2013,6 +2549,45 @@
             produced. Null or empty sends no stop sequences.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Options.AzureOpenAiChatCompletionOptions">
+            <summary>
+            Azure OpenAI options for chat completion requests. Azure OpenAI is wire-compatible with OpenAI for the
+            chat body, so this inherits <see cref="T:PolyPrompt.Options.OpenAiChatCompletionOptions"/> (FrequencyPenalty,
+            PresencePenalty, Seed) unchanged and exists as a first-class, discoverable type for Azure callers.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.AzureOpenAiEmbeddingOptions">
+            <summary>
+            Azure OpenAI options for embedding requests. Azure OpenAI is wire-compatible with OpenAI for the
+            embeddings body, so this inherits <see cref="T:PolyPrompt.Options.OpenAiEmbeddingOptions"/> (EncodingFormat, Dimensions)
+            unchanged and exists as a first-class, discoverable type for Azure callers.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.BedrockEmbeddingOptions">
+            <summary>
+            AWS Bedrock options for embedding requests. Bedrock multiplexes several embedding model families
+            behind one API; the fields here map to whichever family the model id selects (Amazon Titan or Cohere).
+            Fields that do not apply to the chosen family are ignored.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.BedrockEmbeddingOptions.InputType">
+            <summary>
+            Cohere input type, e.g. <c>search_document</c>, <c>search_query</c>, <c>classification</c>,
+            <c>clustering</c>. Applies to Cohere embedding models only.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.BedrockEmbeddingOptions.Dimensions">
+            <summary>
+            Output embedding dimension. Applies to Amazon Titan v2 embedding models (which support 256/512/1024).
+            Null uses the model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.BedrockEmbeddingOptions.Normalize">
+            <summary>
+            Whether Titan should L2-normalize the output embedding. Applies to Amazon Titan v2 models. Null
+            omits the field and uses the model default.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Options.GeminiChatCompletionOptions">
             <summary>
             Gemini-specific options for chat completion requests.
@@ -2242,6 +2817,31 @@
             Include log probabilities. Null uses API default.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Options.VertexAiEmbeddingOptions">
+            <summary>
+            Google Vertex AI options for embedding requests. Vertex embeddings use the <c>:predict</c> endpoint,
+            whose instance and parameter shapes differ from AI-Studio Gemini embeddings — hence a dedicated
+            options type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VertexAiEmbeddingOptions.TaskType">
+            <summary>
+            Embedding task type, e.g. <c>RETRIEVAL_DOCUMENT</c>, <c>RETRIEVAL_QUERY</c>,
+            <c>SEMANTIC_SIMILARITY</c>, <c>CLASSIFICATION</c>, <c>CLUSTERING</c>. Null uses the model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VertexAiEmbeddingOptions.Title">
+            <summary>Optional document title, used with the <c>RETRIEVAL_DOCUMENT</c> task type.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VertexAiEmbeddingOptions.OutputDimensionality">
+            <summary>Number of dimensions to truncate the output embedding to. Null uses the model default.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VertexAiEmbeddingOptions.AutoTruncate">
+            <summary>
+            Whether inputs longer than the model's limit are silently truncated (true) or rejected (false).
+            Null omits the field and uses the model default.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Options.VoyageAiEmbeddingOptions">
             <summary>
             VoyageAI-specific options for embedding requests.
@@ -2274,6 +2874,64 @@
             "binary", and "ubinary"; values are normalized (trimmed, lower-cased) and an unrecognized value
             reverts to null. Null omits the field. Quantized outputs are surfaced through the same float
             vector on <see cref="T:PolyPrompt.Models.EmbeddingResult"/>.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Wire.EventStreamDecoder">
+            <summary>
+            Decoder for the AWS <c>application/vnd.amazon.eventstream</c> binary framing used by Bedrock's
+            <c>ConverseStream</c> / <c>InvokeModelWithResponseStream</c> responses. Unlike the SSE/NDJSON streams
+            every other provider uses, this is a length-prefixed binary protocol: each message is a 12-byte
+            prelude (total length, headers length, prelude CRC-32), a headers block, a payload, and a trailing
+            message CRC-32. Both CRCs are validated to detect stream desynchronization.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Wire.EventStreamDecoder.DecodeAsync(System.IO.Stream,System.Threading.CancellationToken)">
+            <summary>
+            Asynchronously decode a stream of AWS event-stream messages until the underlying stream ends.
+            </summary>
+            <param name="stream">The response body stream.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An async sequence of decoded messages.</returns>
+            <exception cref="T:System.IO.InvalidDataException">Thrown when a CRC check fails or a frame is truncated.</exception>
+        </member>
+        <member name="M:PolyPrompt.Wire.EventStreamDecoder.EncodeMessage(System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.Byte[])">
+            <summary>
+            Encode a single event-stream message: prelude (with CRC), string-valued headers, payload, and the
+            trailing message CRC. Provided so tests (and any producer) can generate byte-accurate frames the
+            decoder round-trips.
+            </summary>
+            <param name="headers">String-valued headers (e.g. <c>:event-type</c>, <c>:content-type</c>).</param>
+            <param name="payload">The message payload bytes.</param>
+            <returns>The fully-framed message bytes.</returns>
+        </member>
+        <member name="T:PolyPrompt.Wire.EventStreamMessage">
+            <summary>
+            A single decoded AWS event-stream message: its string-valued headers and raw payload.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Wire.EventStreamMessage.Headers">
+            <summary>The string-valued message headers (e.g. <c>:event-type</c>, <c>:message-type</c>).</summary>
+        </member>
+        <member name="P:PolyPrompt.Wire.EventStreamMessage.Payload">
+            <summary>The raw payload bytes (for Bedrock, a JSON document).</summary>
+        </member>
+        <member name="P:PolyPrompt.Wire.EventStreamMessage.EventType">
+            <summary>The value of the <c>:event-type</c> header, or null when absent.</summary>
+        </member>
+        <member name="P:PolyPrompt.Wire.EventStreamMessage.ExceptionType">
+            <summary>The value of the <c>:exception-type</c> header, or null when absent.</summary>
+        </member>
+        <member name="P:PolyPrompt.Wire.EventStreamMessage.PayloadString">
+            <summary>The payload decoded as a UTF-8 string.</summary>
+        </member>
+        <member name="M:PolyPrompt.Wire.EventStreamMessage.#ctor(System.Collections.Generic.Dictionary{System.String,System.String},System.Byte[])">
+            <summary>Initialize a decoded message.</summary>
+            <param name="headers">The message headers.</param>
+            <param name="payload">The message payload.</param>
+        </member>
+        <member name="T:PolyPrompt.Wire.Crc32">
+            <summary>
+            Standard CRC-32 (IEEE 802.3 polynomial, reflected) as required by the AWS event-stream framing.
             </summary>
         </member>
     </members>

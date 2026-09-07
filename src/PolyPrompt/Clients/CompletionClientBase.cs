@@ -2,6 +2,7 @@ namespace PolyPrompt.Clients
 {
     using System.Diagnostics;
     using System.Runtime.CompilerServices;
+    using System.Text;
     using PolyPrompt.Models;
     using SyslogLogging;
 
@@ -513,13 +514,6 @@ namespace PolyPrompt.Clients
             detail.Method = "GET";
             detail.TimestampUtc = DateTime.UtcNow;
 
-            Dictionary<string, string> reqHeaders = new Dictionary<string, string>();
-            foreach (KeyValuePair<string, IEnumerable<string>> header in _HttpClient.DefaultRequestHeaders)
-            {
-                reqHeaders[header.Key] = string.Join(", ", header.Value);
-            }
-            detail.RequestHeaders = reqHeaders;
-
             Stopwatch sw = Stopwatch.StartNew();
 
             try
@@ -527,7 +521,14 @@ namespace PolyPrompt.Clients
                 using CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
                 using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
-                using HttpResponseMessage response = await _HttpClient.GetAsync(url, linkedCts.Token).ConfigureAwait(false);
+                // Build an explicit request so subclasses can attach per-request credentials (a fresh bearer
+                // token or a SigV4 signature) via PrepareRequestAsync. A GET carries no body, so the hook
+                // signs the hash of an empty payload.
+                using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
+                await PrepareRequestAsync(request, Array.Empty<byte>(), linkedCts.Token).ConfigureAwait(false);
+                detail.RequestHeaders = CaptureRequestHeaders(request);
+
+                using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
@@ -651,17 +652,6 @@ namespace PolyPrompt.Clients
             detail.RequestBody = requestBodyJson;
             detail.TimestampUtc = DateTime.UtcNow;
 
-            Dictionary<string, string> reqHeaders = new Dictionary<string, string>();
-            foreach (KeyValuePair<string, IEnumerable<string>> header in _HttpClient.DefaultRequestHeaders)
-            {
-                reqHeaders[header.Key] = string.Join(", ", header.Value);
-            }
-            if (content.Headers.ContentType != null)
-            {
-                reqHeaders["Content-Type"] = content.Headers.ContentType.ToString();
-            }
-            detail.RequestHeaders = reqHeaders;
-
             Stopwatch sw = Stopwatch.StartNew();
 
             try
@@ -669,7 +659,15 @@ namespace PolyPrompt.Clients
                 using CancellationTokenSource timeoutCts = new CancellationTokenSource(_TimeoutMs);
                 using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
-                using HttpResponseMessage response = await _HttpClient.PostAsync(url, content, linkedCts.Token).ConfigureAwait(false);
+                // Build an explicit request so subclasses can attach per-request credentials (a fresh bearer
+                // token or a SigV4 signature computed over the body) via PrepareRequestAsync.
+                using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Content = content;
+                byte[] body = Encoding.UTF8.GetBytes(requestBodyJson ?? string.Empty);
+                await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
+                detail.RequestHeaders = CaptureRequestHeaders(request);
+
+                using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
@@ -955,6 +953,11 @@ namespace PolyPrompt.Clients
 
             try
             {
+                // Attach per-request credentials (fresh bearer token or SigV4 signature over the body)
+                // before the request is sent, mirroring the non-streaming path.
+                byte[] body = await content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
+                await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
+
                 HttpResponseMessage response = await _HttpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
@@ -969,6 +972,56 @@ namespace PolyPrompt.Clients
                 timeoutCts.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Hook invoked after an outbound <see cref="HttpRequestMessage"/> is built and its body serialized,
+        /// immediately before the request is sent. The default implementation is a no-op, so existing clients
+        /// (which stamp static auth on <see cref="HttpClient.DefaultRequestHeaders"/>) are unaffected.
+        /// Subclasses override this to attach per-request credentials that cannot live in default headers —
+        /// a freshly-refreshed OAuth bearer token, or an AWS SigV4 signature computed over
+        /// <paramref name="body"/>. For a GET (or any request without a body) <paramref name="body"/> is an
+        /// empty array, which for SigV4 hashes to the well-known empty-payload digest.
+        /// </summary>
+        /// <param name="request">The request about to be sent. Add or replace headers on it as needed.</param>
+        /// <param name="body">The exact request body bytes (empty for bodyless requests).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A task that completes once the request has been prepared.</returns>
+        protected virtual Task PrepareRequestAsync(HttpRequestMessage request, byte[] body, CancellationToken token)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Captures the effective request headers — the client's default headers overlaid with any headers
+        /// (and content headers) attached to this specific request, so per-request credentials added by
+        /// <see cref="PrepareRequestAsync"/> are reflected in recorded <see cref="CompletionCallDetail"/>s.
+        /// </summary>
+        /// <param name="request">The outbound request.</param>
+        /// <returns>The merged request headers.</returns>
+        protected Dictionary<string, string> CaptureRequestHeaders(HttpRequestMessage request)
+        {
+            Dictionary<string, string> reqHeaders = new Dictionary<string, string>();
+
+            foreach (KeyValuePair<string, IEnumerable<string>> header in _HttpClient.DefaultRequestHeaders)
+            {
+                reqHeaders[header.Key] = string.Join(", ", header.Value);
+            }
+
+            foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+            {
+                reqHeaders[header.Key] = string.Join(", ", header.Value);
+            }
+
+            if (request.Content != null)
+            {
+                foreach (KeyValuePair<string, IEnumerable<string>> header in request.Content.Headers)
+                {
+                    reqHeaders[header.Key] = string.Join(", ", header.Value);
+                }
+            }
+
+            return reqHeaders;
         }
 
         /// <summary>
