@@ -65,7 +65,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + Model + ":generateContent");
+            _Logging.Debug(_Header + "POST " + StripQuery(url));
 
             try
             {
@@ -119,7 +119,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST (streaming) " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + Model + ":streamGenerateContent");
+            _Logging.Debug(_Header + "POST (streaming) " + StripQuery(url));
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -179,7 +179,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":generateContent");
+            _Logging.Debug(_Header + "POST " + StripQuery(url));
 
             try
             {
@@ -231,7 +231,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST (streaming tool chat) " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":streamGenerateContent");
+            _Logging.Debug(_Header + "POST (streaming tool chat) " + StripQuery(url));
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -312,7 +312,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":embedContent");
+            _Logging.Debug(_Header + "POST " + StripQuery(url));
 
             try
             {
@@ -419,7 +419,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":batchEmbedContents");
+            _Logging.Debug(_Header + "POST " + StripQuery(url));
 
             try
             {
@@ -500,7 +500,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":generateContent");
+            _Logging.Debug(_Header + "POST " + StripQuery(url));
 
             try
             {
@@ -553,7 +553,7 @@ namespace PolyPrompt.Clients
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _Logging.Debug(_Header + "POST (streaming) " + _Endpoint.TrimEnd('/') + "/v1beta/models/" + model + ":streamGenerateContent");
+            _Logging.Debug(_Header + "POST (streaming) " + StripQuery(url));
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -600,7 +600,7 @@ namespace PolyPrompt.Clients
         {
             string url = BuildListModelsUrl();
 
-            _Logging.Debug(_Header + "GET " + _Endpoint.TrimEnd('/') + "/v1beta/models");
+            _Logging.Debug(_Header + "GET " + StripQuery(url));
 
             CompletionHttpResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
 
@@ -666,7 +666,7 @@ namespace PolyPrompt.Clients
                 throw new ArgumentNullException(nameof(model));
 
             string url = BuildGetModelUrl(model);
-            _Logging.Debug(_Header + "GET " + url);
+            _Logging.Debug(_Header + "GET " + StripQuery(url));
 
             try
             {
@@ -749,6 +749,19 @@ namespace PolyPrompt.Clients
         {
             string modelPath = model.StartsWith("models/") ? model : "models/" + model;
             return _Endpoint.TrimEnd('/') + "/v1beta/" + modelPath + "?key=" + _ApiKey;
+        }
+
+        /// <summary>
+        /// Returns the request URL with its query string removed, for logging. The AI-Studio URLs carry the
+        /// API key in the query, so the query is dropped to keep it out of logs; this also means subclasses
+        /// (Vertex AI) log their real request path rather than the base class's AI-Studio path shape.
+        /// </summary>
+        /// <param name="url">The full request URL.</param>
+        /// <returns>The URL without its query string.</returns>
+        protected static string StripQuery(string url)
+        {
+            int index = url.IndexOf('?');
+            return index >= 0 ? url.Substring(0, index) : url;
         }
 
         #endregion

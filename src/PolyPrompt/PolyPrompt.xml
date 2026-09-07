@@ -1002,6 +1002,15 @@
             <param name="model">The model id (with or without a <c>models/</c> prefix).</param>
             <returns>The absolute request URL.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.StripQuery(System.String)">
+            <summary>
+            Returns the request URL with its query string removed, for logging. The AI-Studio URLs carry the
+            API key in the query, so the query is dropped to keep it out of logs; this also means subclasses
+            (Vertex AI) log their real request path rather than the base class's AI-Studio path shape.
+            </summary>
+            <param name="url">The full request URL.</param>
+            <returns>The URL without its query string.</returns>
+        </member>
         <member name="T:PolyPrompt.Clients.OllamaClient">
             <summary>
             Client for the Ollama API supporting chat completions, embeddings, and text generation.
