@@ -654,7 +654,14 @@ namespace PolyPrompt.Clients
 
         #region Private-Methods
 
-        private string BuildApiUrl(string path)
+        /// <summary>
+        /// Builds the full URL for an OpenAI API operation. Virtual so Azure OpenAI (which routes by
+        /// deployment name and requires an <c>api-version</c> query parameter) can override the URL shape
+        /// while inheriting every request/response body, streaming, and tool-call behavior unchanged.
+        /// </summary>
+        /// <param name="path">The operation path, e.g. <c>chat/completions</c>, <c>embeddings</c>, <c>models</c>.</param>
+        /// <returns>The absolute request URL.</returns>
+        protected virtual string BuildApiUrl(string path)
         {
             string endpoint = _Endpoint.TrimEnd('/');
             string normalizedPath = path.TrimStart('/');

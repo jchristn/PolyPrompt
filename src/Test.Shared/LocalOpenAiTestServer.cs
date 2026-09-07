@@ -3,6 +3,7 @@ namespace Test.Shared
     using System.Net;
     using System.Net.Sockets;
     using System.Text;
+    using PolyPrompt.Wire;
 
     internal sealed class LocalOpenAiTestServer : IDisposable
     {
@@ -738,12 +739,307 @@ namespace Test.Shared
                     return;
                 }
 
+                // ---- Azure OpenAI (deployment-scoped routing; wire-compatible with OpenAI) ----
+                if (path.Contains("/openai/deployments/", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (path.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LocalOpenAiChatRequest? request = LocalRequestParser.DeserializeOpenAiChatRequest(requestBody);
+                        if (request == null)
+                        {
+                            await WriteJsonAsync(context, 400, "{\"error\":\"invalid request\"}").ConfigureAwait(false);
+                            return;
+                        }
+
+                        bool hasApiKey = !string.IsNullOrEmpty(context.Request.Headers["api-key"]);
+                        bool hasBearer = !string.IsNullOrEmpty(context.Request.Headers["Authorization"]);
+                        if (!hasApiKey && !hasBearer)
+                        {
+                            // Neither api-key nor AAD bearer present: surface an auth error like Azure would.
+                            await WriteJsonAsync(context, 401, "{\"error\":{\"code\":\"401\",\"message\":\"missing credentials\"}}").ConfigureAwait(false);
+                            return;
+                        }
+
+                        if (HasMessageContaining(request, "reasoncapture") && !HasToolDefinitions(request) && request.Stream != true)
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"id\":\"az-reason\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"pong\",\"reasoning_content\":\"Let me think.\"},\"finish_reason\":\"stop\",\"index\":0}]}").ConfigureAwait(false);
+                        }
+                        else if (request.Stream == true && HasToolDefinitions(request))
+                        {
+                            await WriteStreamingOpenAiToolChatAsync(context).ConfigureAwait(false);
+                        }
+                        else if (request.Stream == true)
+                        {
+                            await WriteStreamingOpenAiChatAsync(context).ConfigureAwait(false);
+                        }
+                        else if (HasToolDefinitions(request))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"id\":\"az-tool-local\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}]},\"finish_reason\":\"tool_calls\",\"index\":0}]}").ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"id\":\"az-chat-local\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":\"stop\",\"index\":0}]}").ConfigureAwait(false);
+                        }
+                        return;
+                    }
+
+                    if (path.EndsWith("/embeddings", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LocalEmbeddingRequest? request = LocalRequestParser.DeserializeEmbeddingRequest(requestBody);
+                        if (request == null)
+                        {
+                            await WriteJsonAsync(context, 400, "{\"error\":\"invalid request\"}").ConfigureAwait(false);
+                            return;
+                        }
+
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"data\":[{\"index\":0,\"embedding\":[1.0,2.0,3.0]},{\"index\":1,\"embedding\":[4.0,5.0,6.0]}]}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (path.EndsWith("/completions", StringComparison.OrdinalIgnoreCase))
+                    {
+                        LocalGenerateRequest? request = LocalRequestParser.DeserializeGenerateRequest(requestBody);
+                        if (request == null)
+                        {
+                            await WriteJsonAsync(context, 400, "{\"error\":\"invalid request\"}").ConfigureAwait(false);
+                            return;
+                        }
+
+                        await WriteJsonAsync(context, 200, "{\"choices\":[{\"text\":\"generated text\"}]}").ConfigureAwait(false);
+                        return;
+                    }
+                }
+
+                if (path.Equals("/openai/models", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteJsonAsync(
+                        context,
+                        200,
+                        "{\"data\":[{\"id\":\"test-deployment\",\"object\":\"model\",\"owned_by\":\"azure\"}]}").ConfigureAwait(false);
+                    return;
+                }
+
+                // ---- Google Vertex AI (project/region/publisher routing; reuses the Gemini wire) ----
+                if (path.Contains("/publishers/google/models/", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (path.EndsWith(":predict", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int instanceCount = CountOccurrences(requestBody, "\"content\"");
+                        if (instanceCount < 1) instanceCount = 1;
+                        await WriteJsonAsync(context, 200, BuildVertexPredictResponse(instanceCount)).ConfigureAwait(false);
+                        return;
+                    }
+
+                    LocalGeminiRequest? request = LocalRequestParser.DeserializeGeminiRequest(requestBody);
+                    if (request == null)
+                    {
+                        await WriteJsonAsync(context, 400, "{\"error\":\"invalid request\"}").ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (path.EndsWith(":streamGenerateContent", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (HasFunctionDeclarations(request)) await WriteStreamingGeminiToolChatAsync(context).ConfigureAwait(false);
+                        else await WriteStreamingGeminiChatAsync(context).ConfigureAwait(false);
+                    }
+                    else if (HasFunctionDeclarations(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"responseId\":\"vertex-tool-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}").ConfigureAwait(false);
+                    }
+                    else if (HasFunctionResponse(request))
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"responseId\":\"vertex-final-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Seattle is 72 F and clear.\"}]},\"finishReason\":\"STOP\",\"index\":0}]}").ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteJsonAsync(
+                            context,
+                            200,
+                            "{\"responseId\":\"vertex-chat-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"pong\"}]},\"finishReason\":\"STOP\",\"index\":0}]}").ConfigureAwait(false);
+                    }
+                    return;
+                }
+
+                // ---- AWS Bedrock (Converse / ConverseStream / InvokeModel; SigV4-signed) ----
+                if (path.StartsWith("/model/", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (path.EndsWith("/converse", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (requestBody.Contains("reasoncapture", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"stopReason\":\"end_turn\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"Let me think.\"}}},{\"text\":\"pong\"}]}},\"usage\":{\"inputTokens\":3,\"outputTokens\":2,\"totalTokens\":5}}").ConfigureAwait(false);
+                        }
+                        else if (requestBody.Contains("toolResult", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"stopReason\":\"end_turn\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"Seattle is 72 F and clear.\"}]}},\"usage\":{\"inputTokens\":20,\"outputTokens\":5,\"totalTokens\":25}}").ConfigureAwait(false);
+                        }
+                        else if (requestBody.Contains("toolSpec", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"stopReason\":\"tool_use\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"toolUse\":{\"toolUseId\":\"tool-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]}},\"usage\":{\"inputTokens\":11,\"outputTokens\":7,\"totalTokens\":18}}").ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteJsonAsync(
+                                context,
+                                200,
+                                "{\"stopReason\":\"end_turn\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"pong\"}]}},\"usage\":{\"inputTokens\":3,\"outputTokens\":2,\"totalTokens\":5}}").ConfigureAwait(false);
+                        }
+                        return;
+                    }
+
+                    if (path.EndsWith("/converse-stream", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (requestBody.Contains("toolSpec", StringComparison.OrdinalIgnoreCase))
+                            await WriteBedrockToolStreamAsync(context).ConfigureAwait(false);
+                        else
+                            await WriteBedrockChatStreamAsync(context).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (path.EndsWith("/invoke", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (path.Contains("cohere.", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await WriteJsonAsync(context, 200, "{\"embeddings\":[[1.0,2.0,3.0],[4.0,5.0,6.0]]}").ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await WriteJsonAsync(context, 200, "{\"embedding\":[1.0,2.0,3.0]}").ConfigureAwait(false);
+                        }
+                        return;
+                    }
+                }
+
+                if (path.Equals("/foundation-models", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteJsonAsync(
+                        context,
+                        200,
+                        "{\"modelSummaries\":[{\"modelId\":\"anthropic.claude-3-5-sonnet-20240620-v1:0\",\"modelName\":\"Claude 3.5 Sonnet\",\"providerName\":\"Anthropic\"}]}").ConfigureAwait(false);
+                    return;
+                }
+
+                if (path.StartsWith("/foundation-models/", StringComparison.OrdinalIgnoreCase))
+                {
+                    await WriteJsonAsync(
+                        context,
+                        200,
+                        "{\"modelDetails\":{\"modelId\":\"anthropic.claude-3-5-sonnet-20240620-v1:0\",\"modelName\":\"Claude 3.5 Sonnet\",\"providerName\":\"Anthropic\"}}").ConfigureAwait(false);
+                    return;
+                }
+
                 await WriteJsonAsync(context, 404, "{\"error\":\"not found\"}").ConfigureAwait(false);
             }
             catch
             {
                 try { context.Response.Abort(); } catch { }
             }
+        }
+
+        private static int CountOccurrences(string haystack, string needle)
+        {
+            if (string.IsNullOrEmpty(haystack) || string.IsNullOrEmpty(needle)) return 0;
+            int count = 0;
+            int index = 0;
+            while ((index = haystack.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                index += needle.Length;
+            }
+            return count;
+        }
+
+        private static string BuildVertexPredictResponse(int instanceCount)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append("{\"predictions\":[");
+            for (int i = 0; i < instanceCount; i++)
+            {
+                if (i > 0) sb.Append(',');
+                float baseValue = i * 3;
+                sb.Append("{\"embeddings\":{\"values\":[")
+                  .Append((baseValue + 1).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                  .Append((baseValue + 2).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)).Append(',')
+                  .Append((baseValue + 3).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))
+                  .Append("]}}");
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        private async Task WriteBedrockChatStreamAsync(HttpListenerContext context)
+        {
+            await WriteBedrockEventStreamAsync(context, new List<(string, string)>
+            {
+                ("messageStart", "{\"role\":\"assistant\"}"),
+                ("contentBlockDelta", "{\"contentBlockIndex\":0,\"delta\":{\"text\":\"hello \"}}"),
+                ("contentBlockDelta", "{\"contentBlockIndex\":0,\"delta\":{\"text\":\"world\"}}"),
+                ("contentBlockStop", "{\"contentBlockIndex\":0}"),
+                ("messageStop", "{\"stopReason\":\"end_turn\"}"),
+                ("metadata", "{\"usage\":{\"inputTokens\":3,\"outputTokens\":2,\"totalTokens\":5}}"),
+            }).ConfigureAwait(false);
+        }
+
+        private async Task WriteBedrockToolStreamAsync(HttpListenerContext context)
+        {
+            await WriteBedrockEventStreamAsync(context, new List<(string, string)>
+            {
+                ("messageStart", "{\"role\":\"assistant\"}"),
+                ("contentBlockStart", "{\"contentBlockIndex\":0,\"start\":{\"toolUse\":{\"toolUseId\":\"tool-weather-1\",\"name\":\"get_weather\"}}}"),
+                ("contentBlockDelta", "{\"contentBlockIndex\":0,\"delta\":{\"toolUse\":{\"input\":\"{\\\"city\\\":\\\"Seattle\\\"}\"}}}"),
+                ("contentBlockStop", "{\"contentBlockIndex\":0}"),
+                ("messageStop", "{\"stopReason\":\"tool_use\"}"),
+                ("metadata", "{\"usage\":{\"inputTokens\":11,\"outputTokens\":7,\"totalTokens\":18}}"),
+            }).ConfigureAwait(false);
+        }
+
+        private async Task WriteBedrockEventStreamAsync(HttpListenerContext context, List<(string EventType, string Payload)> events)
+        {
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/vnd.amazon.eventstream";
+            context.Response.SendChunked = true;
+
+            foreach ((string eventType, string payload) in events)
+            {
+                Dictionary<string, string> headers = new Dictionary<string, string>
+                {
+                    { ":event-type", eventType },
+                    { ":content-type", "application/json" },
+                    { ":message-type", "event" },
+                };
+                byte[] frame = EventStreamDecoder.EncodeMessage(headers, Encoding.UTF8.GetBytes(payload));
+                await context.Response.OutputStream.WriteAsync(frame, 0, frame.Length).ConfigureAwait(false);
+                await context.Response.OutputStream.FlushAsync().ConfigureAwait(false);
+            }
+
+            context.Response.Close();
         }
 
         private static bool HasToolDefinitions(LocalOpenAiChatRequest request)
