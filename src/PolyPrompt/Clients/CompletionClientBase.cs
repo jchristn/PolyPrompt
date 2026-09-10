@@ -1215,6 +1215,21 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
+        /// Deserialize a nested JSON object stored under <paramref name="key"/> into a dictionary. Returns
+        /// null when the key is absent or its value is null.
+        /// </summary>
+        /// <param name="obj">The parent dictionary.</param>
+        /// <param name="key">The key whose value is a nested object.</param>
+        /// <returns>The nested object as a dictionary, or null.</returns>
+        protected Dictionary<string, object>? ParseNestedObject(Dictionary<string, object> obj, string key)
+        {
+            if (!obj.ContainsKey(key) || obj[key] == null) return null;
+
+            string nestedJson = _Serializer.SerializeJson(obj[key], false);
+            return _Serializer.DeserializeJson<Dictionary<string, object>>(nestedJson);
+        }
+
+        /// <summary>
         /// Normalizes a reasoning value: returns null for null/empty/whitespace, otherwise the value
         /// unchanged. Callers use this so an absent or empty reasoning channel surfaces as null rather than
         /// an empty string.

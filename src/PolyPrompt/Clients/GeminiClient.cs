@@ -84,6 +84,7 @@ namespace PolyPrompt.Clients
 
                 chatResponse.Text = ExtractTextFromResponse(responseBody);
                 chatResponse.Reasoning = ExtractReasoningFromResponse(responseBody);
+                chatResponse.Usage = ExtractUsageFromResponse(responseBody);
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -1003,6 +1004,7 @@ namespace PolyPrompt.Clients
 
             toolResponse.ResponseId = responseObj.ContainsKey("responseId") ? responseObj["responseId"]?.ToString() : null;
             toolResponse.Model = responseObj.ContainsKey("modelVersion") ? responseObj["modelVersion"]?.ToString() ?? toolResponse.Model : toolResponse.Model;
+            if (responseObj.ContainsKey("usageMetadata")) toolResponse.Usage = ParseGeminiUsageMetadata(responseObj["usageMetadata"]);
 
             string candidatesJson = _Serializer.SerializeJson(responseObj["candidates"], false);
             List<Dictionary<string, object>>? candidates = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(candidatesJson);
@@ -1245,20 +1247,7 @@ namespace PolyPrompt.Clients
 
                 if (chunk.ContainsKey("usageMetadata"))
                 {
-                    string usageJson = _Serializer.SerializeJson(chunk["usageMetadata"], false);
-                    Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
-
-                    if (usageObj != null)
-                    {
-                        ChatStreamingUsage usage = new ChatStreamingUsage();
-                        if (usageObj.ContainsKey("promptTokenCount") && int.TryParse(usageObj["promptTokenCount"]?.ToString(), out int pt))
-                            usage.PromptTokens = pt;
-                        if (usageObj.ContainsKey("candidatesTokenCount") && int.TryParse(usageObj["candidatesTokenCount"]?.ToString(), out int ct))
-                            usage.CompletionTokens = ct;
-                        if (usageObj.ContainsKey("totalTokenCount") && int.TryParse(usageObj["totalTokenCount"]?.ToString(), out int tt))
-                            usage.TotalTokens = tt;
-                        streamChunk.Usage = usage;
-                    }
+                    streamChunk.Usage = ParseGeminiUsageMetadata(chunk["usageMetadata"]);
                 }
 
                 yield return streamChunk;
@@ -1425,6 +1414,11 @@ namespace PolyPrompt.Clients
             if (usageObj.ContainsKey("totalTokenCount") && int.TryParse(usageObj["totalTokenCount"]?.ToString(), out int tt))
                 usage.TotalTokens = tt;
 
+            // cachedContentTokenCount is a subset of promptTokenCount; thoughtsTokenCount is the separately
+            // billed thinking-token count. Both are absent unless the request enabled caching / thinking.
+            usage.CachedPromptTokens = TryGetInt(usageObj, "cachedContentTokenCount");
+            usage.ReasoningTokens = TryGetInt(usageObj, "thoughtsTokenCount");
+
             return usage;
         }
 
@@ -1524,6 +1518,13 @@ namespace PolyPrompt.Clients
             }
 
             return NormalizeReasoning(combined);
+        }
+
+        private ChatStreamingUsage? ExtractUsageFromResponse(string responseBody)
+        {
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+            if (responseObj == null || !responseObj.ContainsKey("usageMetadata")) return null;
+            return ParseGeminiUsageMetadata(responseObj["usageMetadata"]);
         }
 
         private List<Dictionary<string, object>>? ExtractResponseParts(string responseBody, bool warnOnMissing)

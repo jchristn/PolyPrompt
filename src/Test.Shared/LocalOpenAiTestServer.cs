@@ -240,7 +240,7 @@ namespace Test.Shared
                         await WriteJsonAsync(
                             context,
                             200,
-                            "{\"id\":\"chatcmpl-tool-local\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}]},\"finish_reason\":\"tool_calls\",\"index\":0}]}").ConfigureAwait(false);
+                            "{\"id\":\"chatcmpl-tool-local\",\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call-weather-1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle\\\",\\\"unit\\\":\\\"fahrenheit\\\"}\"}}]},\"finish_reason\":\"tool_calls\",\"index\":0}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7,\"total_tokens\":18,\"prompt_tokens_details\":{\"cached_tokens\":8},\"completion_tokens_details\":{\"reasoning_tokens\":4}}}").ConfigureAwait(false);
                     }
                     else if (HasToolResultMessage(request))
                     {
@@ -367,7 +367,7 @@ namespace Test.Shared
                         await WriteJsonAsync(
                             context,
                             200,
-                            "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]},\"done\":true,\"done_reason\":\"tool_calls\"}").ConfigureAwait(false);
+                            "{\"model\":\"test-model\",\"message\":{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"function\":{\"name\":\"get_weather\",\"arguments\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]},\"done\":true,\"done_reason\":\"tool_calls\",\"prompt_eval_count\":11,\"eval_count\":7,\"total_duration\":1000,\"load_duration\":100,\"prompt_eval_duration\":200,\"eval_duration\":300}").ConfigureAwait(false);
                     }
                     else if (HasToolResultMessage(request))
                     {
@@ -552,7 +552,7 @@ namespace Test.Shared
                         await WriteJsonAsync(
                             context,
                             200,
-                            "{\"responseId\":\"gemini-tool-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]},\"finishReason\":\"STOP\",\"index\":0}]}").ConfigureAwait(false);
+                            "{\"responseId\":\"gemini-tool-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"get_weather\",\"args\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":11,\"candidatesTokenCount\":7,\"totalTokenCount\":18,\"cachedContentTokenCount\":6,\"thoughtsTokenCount\":3}}").ConfigureAwait(false);
                     }
                     else if (HasFunctionResponse(request))
                     {
@@ -662,7 +662,7 @@ namespace Test.Shared
                         await WriteJsonAsync(
                             context,
                             200,
-                            "{\"id\":\"anthropic-tool-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":11,\"output_tokens\":7}}").ConfigureAwait(false);
+                            "{\"id\":\"anthropic-tool-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}],\"stop_reason\":\"tool_use\",\"usage\":{\"input_tokens\":11,\"output_tokens\":7,\"cache_read_input_tokens\":9,\"cache_creation_input_tokens\":13}}").ConfigureAwait(false);
                     }
                     else if (HasAnthropicToolResult(request))
                     {
@@ -902,7 +902,7 @@ namespace Test.Shared
                             await WriteJsonAsync(
                                 context,
                                 200,
-                                "{\"stopReason\":\"tool_use\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"toolUse\":{\"toolUseId\":\"tool-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]}},\"usage\":{\"inputTokens\":11,\"outputTokens\":7,\"totalTokens\":18}}").ConfigureAwait(false);
+                                "{\"stopReason\":\"tool_use\",\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"toolUse\":{\"toolUseId\":\"tool-weather-1\",\"name\":\"get_weather\",\"input\":{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}}}]}},\"usage\":{\"inputTokens\":11,\"outputTokens\":7,\"totalTokens\":18,\"cacheReadInputTokens\":9,\"cacheWriteInputTokens\":13}}").ConfigureAwait(false);
                         }
                         else
                         {
@@ -1003,7 +1003,7 @@ namespace Test.Shared
                 ("contentBlockDelta", "{\"contentBlockIndex\":0,\"delta\":{\"text\":\"world\"}}"),
                 ("contentBlockStop", "{\"contentBlockIndex\":0}"),
                 ("messageStop", "{\"stopReason\":\"end_turn\"}"),
-                ("metadata", "{\"usage\":{\"inputTokens\":3,\"outputTokens\":2,\"totalTokens\":5}}"),
+                ("metadata", "{\"usage\":{\"inputTokens\":3,\"outputTokens\":2,\"totalTokens\":5,\"cacheReadInputTokens\":4,\"cacheWriteInputTokens\":6}}"),
             }).ConfigureAwait(false);
         }
 
@@ -1129,7 +1129,7 @@ namespace Test.Shared
             context.Response.ContentType = "text/event-stream";
             context.Response.SendChunked = true;
 
-            await WriteChunkAsync(context, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-chat-stream-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0}}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"anthropic-chat-stream-local\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"test-model\",\"content\":[],\"usage\":{\"input_tokens\":3,\"output_tokens\":0,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":11}}}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hello \"}}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"world\"}}\n\n").ConfigureAwait(false);
@@ -1269,7 +1269,7 @@ namespace Test.Shared
 
             await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"hello \"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{\"content\":\"world\"},\"index\":0,\"finish_reason\":null}]}\n\n").ConfigureAwait(false);
-            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"id\":\"chatcmpl-stream-local\",\"model\":\"test-model\",\"created\":1783728000,\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5,\"prompt_tokens_details\":{\"cached_tokens\":2},\"completion_tokens_details\":{\"reasoning_tokens\":1}}}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "data: [DONE]\n\n").ConfigureAwait(false);
 
             context.Response.Close();
@@ -1391,7 +1391,7 @@ namespace Test.Shared
 
             await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"Seattle is \"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
             await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"72 F and clear.\"}]},\"index\":0}]}\n\n").ConfigureAwait(false);
-            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":20,\"candidatesTokenCount\":5,\"totalTokenCount\":25}}\n\n").ConfigureAwait(false);
+            await WriteChunkAsync(context, "data: {\"responseId\":\"gemini-final-stream-local\",\"modelVersion\":\"test-model\",\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":20,\"candidatesTokenCount\":5,\"totalTokenCount\":25,\"cachedContentTokenCount\":10,\"thoughtsTokenCount\":2}}\n\n").ConfigureAwait(false);
 
             context.Response.Close();
         }

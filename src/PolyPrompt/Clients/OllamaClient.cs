@@ -130,6 +130,7 @@ namespace PolyPrompt.Clients
                 string? completionText = message["content"]?.ToString();
                 chatResponse.Text = string.IsNullOrWhiteSpace(completionText) ? null : completionText.Trim();
                 chatResponse.Reasoning = message.ContainsKey(ThinkingKey) ? NormalizeReasoning(message[ThinkingKey]?.ToString()) : null;
+                chatResponse.Usage = ParseOllamaUsage(responseObj);
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -997,6 +998,7 @@ namespace PolyPrompt.Clients
 
             toolResponse.Model = responseObj.ContainsKey("model") ? responseObj["model"]?.ToString() ?? toolResponse.Model : toolResponse.Model;
             toolResponse.FinishReason = responseObj.ContainsKey("done_reason") ? responseObj["done_reason"]?.ToString() : null;
+            toolResponse.Usage = ParseOllamaUsage(responseObj);
 
             string messageJson = _Serializer.SerializeJson(responseObj["message"], false);
             Dictionary<string, object>? message = _Serializer.DeserializeJson<Dictionary<string, object>>(messageJson);
@@ -1034,6 +1036,27 @@ namespace PolyPrompt.Clients
                     }
                 }
             }
+        }
+
+        // Build usage from an Ollama response object (a streamed final chunk or a non-streaming body). Ollama
+        // reports neither prompt-cache nor a distinct reasoning-token count, so CachedPromptTokens,
+        // CacheCreationTokens, and ReasoningTokens stay null; its thinking is surfaced as text only.
+        private ChatStreamingUsage? ParseOllamaUsage(Dictionary<string, object> chunk)
+        {
+            ChatStreamingUsage usage = new ChatStreamingUsage();
+            usage.PromptTokens = TryGetInt(chunk, "prompt_eval_count");
+            usage.CompletionTokens = TryGetInt(chunk, "eval_count");
+            usage.TotalDurationNs = TryGetLong(chunk, "total_duration");
+            usage.LoadDurationNs = TryGetLong(chunk, "load_duration");
+            usage.PromptEvalDurationNs = TryGetLong(chunk, "prompt_eval_duration");
+            usage.EvalDurationNs = TryGetLong(chunk, "eval_duration");
+
+            if (usage.PromptTokens.HasValue && usage.CompletionTokens.HasValue)
+            {
+                usage.TotalTokens = usage.PromptTokens.Value + usage.CompletionTokens.Value;
+            }
+
+            return usage;
         }
 
         private ToolCall? ParseOllamaToolCall(Dictionary<string, object> toolCallObj, int index)
@@ -1156,20 +1179,7 @@ namespace PolyPrompt.Clients
                 {
                     streamChunk.FinishReason = chunk.ContainsKey("done_reason") ? chunk["done_reason"]?.ToString() : null;
 
-                    ChatStreamingUsage usage = new ChatStreamingUsage();
-                    usage.PromptTokens = TryGetInt(chunk, "prompt_eval_count");
-                    usage.CompletionTokens = TryGetInt(chunk, "eval_count");
-                    usage.TotalDurationNs = TryGetLong(chunk, "total_duration");
-                    usage.LoadDurationNs = TryGetLong(chunk, "load_duration");
-                    usage.PromptEvalDurationNs = TryGetLong(chunk, "prompt_eval_duration");
-                    usage.EvalDurationNs = TryGetLong(chunk, "eval_duration");
-
-                    if (usage.PromptTokens.HasValue && usage.CompletionTokens.HasValue)
-                    {
-                        usage.TotalTokens = usage.PromptTokens.Value + usage.CompletionTokens.Value;
-                    }
-
-                    streamChunk.Usage = usage;
+                    streamChunk.Usage = ParseOllamaUsage(chunk);
                 }
 
                 yield return streamChunk;
@@ -1237,20 +1247,7 @@ namespace PolyPrompt.Clients
                 {
                     streamChunk.FinishReason = chunk.ContainsKey("done_reason") ? chunk["done_reason"]?.ToString() : null;
 
-                    ChatStreamingUsage usage = new ChatStreamingUsage();
-                    usage.PromptTokens = TryGetInt(chunk, "prompt_eval_count");
-                    usage.CompletionTokens = TryGetInt(chunk, "eval_count");
-                    usage.TotalDurationNs = TryGetLong(chunk, "total_duration");
-                    usage.LoadDurationNs = TryGetLong(chunk, "load_duration");
-                    usage.PromptEvalDurationNs = TryGetLong(chunk, "prompt_eval_duration");
-                    usage.EvalDurationNs = TryGetLong(chunk, "eval_duration");
-
-                    if (usage.PromptTokens.HasValue && usage.CompletionTokens.HasValue)
-                    {
-                        usage.TotalTokens = usage.PromptTokens.Value + usage.CompletionTokens.Value;
-                    }
-
-                    streamChunk.Usage = usage;
+                    streamChunk.Usage = ParseOllamaUsage(chunk);
                 }
 
                 yield return streamChunk;

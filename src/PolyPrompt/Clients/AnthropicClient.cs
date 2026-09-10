@@ -168,6 +168,7 @@ namespace PolyPrompt.Clients
 
                 chatResponse.Text = ExtractTextFromResponse(responseBody);
                 chatResponse.Reasoning = ExtractReasoningFromResponse(responseBody);
+                chatResponse.Usage = ParseAnthropicResponseUsage(responseBody);
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -876,6 +877,7 @@ namespace PolyPrompt.Clients
             toolResponse.ResponseId = responseObj.ContainsKey("id") ? responseObj["id"]?.ToString() : null;
             toolResponse.Model = responseObj.ContainsKey("model") ? responseObj["model"]?.ToString() ?? toolResponse.Model : toolResponse.Model;
             toolResponse.FinishReason = responseObj.ContainsKey("stop_reason") ? responseObj["stop_reason"]?.ToString() : null;
+            toolResponse.Usage = ParseAnthropicResponseUsage(responseBody);
 
             List<Dictionary<string, object>>? blocks = ParseContentBlocks(responseObj);
             if (blocks == null) return;
@@ -1019,6 +1021,8 @@ namespace PolyPrompt.Clients
             using StreamReader reader = new StreamReader(stream);
 
             int? promptTokens = null;
+            int? cacheReadTokens = null;
+            int? cacheCreationTokens = null;
 
             string? line;
             while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
@@ -1047,7 +1051,14 @@ namespace PolyPrompt.Clients
                         startChunk.Model = message.ContainsKey("model") ? message["model"]?.ToString() : null;
 
                         Dictionary<string, object>? usageObj = ParseNestedObject(message, "usage");
-                        if (usageObj != null) promptTokens = TryGetInt(usageObj, "input_tokens");
+                        if (usageObj != null)
+                        {
+                            // message_start carries input_tokens and the cache buckets; message_delta carries
+                            // only output_tokens (and sometimes echoes the cache buckets). Capture them here.
+                            promptTokens = TryGetInt(usageObj, "input_tokens");
+                            cacheReadTokens = TryGetInt(usageObj, "cache_read_input_tokens");
+                            cacheCreationTokens = TryGetInt(usageObj, "cache_creation_input_tokens");
+                        }
                     }
 
                     yield return startChunk;
@@ -1089,7 +1100,7 @@ namespace PolyPrompt.Clients
                         finalChunk.Done = true;
                     }
 
-                    finalChunk.Usage = ParseAnthropicStreamUsage(evt, promptTokens);
+                    finalChunk.Usage = ParseAnthropicStreamUsage(evt, promptTokens, cacheReadTokens, cacheCreationTokens);
 
                     yield return finalChunk;
                     continue;
@@ -1113,6 +1124,8 @@ namespace PolyPrompt.Clients
             using StreamReader reader = new StreamReader(stream);
 
             int? promptTokens = null;
+            int? cacheReadTokens = null;
+            int? cacheCreationTokens = null;
 
             string? line;
             while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
@@ -1141,7 +1154,14 @@ namespace PolyPrompt.Clients
                         startChunk.Model = message.ContainsKey("model") ? message["model"]?.ToString() : null;
 
                         Dictionary<string, object>? usageObj = ParseNestedObject(message, "usage");
-                        if (usageObj != null) promptTokens = TryGetInt(usageObj, "input_tokens");
+                        if (usageObj != null)
+                        {
+                            // message_start carries input_tokens and the cache buckets; message_delta carries
+                            // only output_tokens (and sometimes echoes the cache buckets). Capture them here.
+                            promptTokens = TryGetInt(usageObj, "input_tokens");
+                            cacheReadTokens = TryGetInt(usageObj, "cache_read_input_tokens");
+                            cacheCreationTokens = TryGetInt(usageObj, "cache_creation_input_tokens");
+                        }
                     }
 
                     yield return startChunk;
@@ -1214,7 +1234,7 @@ namespace PolyPrompt.Clients
                         finalChunk.Done = true;
                     }
 
-                    finalChunk.Usage = ParseAnthropicStreamUsage(evt, promptTokens);
+                    finalChunk.Usage = ParseAnthropicStreamUsage(evt, promptTokens, cacheReadTokens, cacheCreationTokens);
 
                     yield return finalChunk;
                     continue;
@@ -1291,21 +1311,15 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private Dictionary<string, object>? ParseNestedObject(Dictionary<string, object> obj, string key)
-        {
-            if (!obj.ContainsKey(key) || obj[key] == null) return null;
-
-            string nestedJson = _Serializer.SerializeJson(obj[key], false);
-            return _Serializer.DeserializeJson<Dictionary<string, object>>(nestedJson);
-        }
-
-        private ChatStreamingUsage? ParseAnthropicStreamUsage(Dictionary<string, object> evt, int? promptTokens)
+        private ChatStreamingUsage? ParseAnthropicStreamUsage(Dictionary<string, object> evt, int? promptTokens, int? cacheReadTokens, int? cacheCreationTokens)
         {
             Dictionary<string, object>? usageObj = ParseNestedObject(evt, "usage");
-            if (usageObj == null && promptTokens == null) return null;
+            if (usageObj == null && promptTokens == null && cacheReadTokens == null && cacheCreationTokens == null) return null;
 
             ChatStreamingUsage usage = new ChatStreamingUsage();
             usage.PromptTokens = promptTokens;
+            usage.CachedPromptTokens = cacheReadTokens;
+            usage.CacheCreationTokens = cacheCreationTokens;
 
             if (usageObj != null)
             {
@@ -1313,7 +1327,37 @@ namespace PolyPrompt.Clients
                 if (inputTokens.HasValue) usage.PromptTokens = inputTokens;
 
                 usage.CompletionTokens = TryGetInt(usageObj, "output_tokens");
+
+                // message_delta sometimes echoes the cache buckets; prefer an echoed value when present.
+                usage.CachedPromptTokens = TryGetInt(usageObj, "cache_read_input_tokens") ?? usage.CachedPromptTokens;
+                usage.CacheCreationTokens = TryGetInt(usageObj, "cache_creation_input_tokens") ?? usage.CacheCreationTokens;
             }
+
+            // TotalTokens preserves its historical meaning (input + output). Under Option A the cache buckets
+            // are surfaced separately and are additional to PromptTokens rather than folded into it.
+            if (usage.PromptTokens.HasValue || usage.CompletionTokens.HasValue)
+            {
+                usage.TotalTokens = (usage.PromptTokens ?? 0) + (usage.CompletionTokens ?? 0);
+            }
+
+            return usage;
+        }
+
+        // Parse the top-level usage object on a non-streaming Anthropic response. Uses the same Option A
+        // semantic as the streaming path: PromptTokens = input_tokens (uncached), cache buckets separate.
+        private ChatStreamingUsage? ParseAnthropicResponseUsage(string responseBody)
+        {
+            Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
+            if (responseObj == null) return null;
+
+            Dictionary<string, object>? usageObj = ParseNestedObject(responseObj, "usage");
+            if (usageObj == null) return null;
+
+            ChatStreamingUsage usage = new ChatStreamingUsage();
+            usage.PromptTokens = TryGetInt(usageObj, "input_tokens");
+            usage.CompletionTokens = TryGetInt(usageObj, "output_tokens");
+            usage.CachedPromptTokens = TryGetInt(usageObj, "cache_read_input_tokens");
+            usage.CacheCreationTokens = TryGetInt(usageObj, "cache_creation_input_tokens");
 
             if (usage.PromptTokens.HasValue || usage.CompletionTokens.HasValue)
             {

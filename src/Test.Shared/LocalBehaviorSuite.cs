@@ -666,6 +666,9 @@ namespace Test.Shared
             SharedAssert.Equal("chatcmpl-stream-local", stream.ResponseId, "OpenAI-compatible streaming chat should expose response id.");
             SharedAssert.NotNull(stream.Usage, "OpenAI-compatible streaming chat should expose usage.");
             SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "OpenAI-compatible streaming chat should parse completion tokens.");
+            SharedAssert.Equal(2, stream.Usage!.CachedPromptTokens, "OpenAI-compatible streaming chat should parse cached prompt tokens.");
+            SharedAssert.Equal(1, stream.Usage!.ReasoningTokens, "OpenAI-compatible streaming chat should parse reasoning tokens.");
+            SharedAssert.True(stream.Usage!.CacheCreationTokens == null, "OpenAI does not report cache-creation tokens.");
             SharedAssert.True(stream.ChunkCount >= 2, "OpenAI-compatible streaming chat should count text chunks.");
 
             LocalOpenAiChatRequest recordedRequest = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -689,6 +692,9 @@ namespace Test.Shared
             SharedAssert.Equal("stop", stream.FinishReason, "Ollama streaming chat should expose finish reason.");
             SharedAssert.NotNull(stream.Usage, "Ollama streaming chat should expose usage.");
             SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Ollama streaming chat should parse eval count.");
+            SharedAssert.True(stream.Usage!.CachedPromptTokens == null, "Ollama does not report cached prompt tokens.");
+            SharedAssert.True(stream.Usage!.CacheCreationTokens == null, "Ollama does not report cache-creation tokens.");
+            SharedAssert.True(stream.Usage!.ReasoningTokens == null, "Ollama does not report a distinct reasoning-token count.");
             SharedAssert.True(stream.ChunkCount >= 2, "Ollama streaming chat should count text chunks.");
 
             LocalOpenAiChatRequest recordedRequest = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -915,6 +921,13 @@ namespace Test.Shared
             Dictionary<string, string> openAiArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
             SharedAssert.Equal("Seattle", openAiArguments["city"], "OpenAI-compatible response should parse tool call arguments.");
 
+            SharedAssert.NotNull(first.Usage, "OpenAI-compatible non-streaming tool chat should expose usage.");
+            SharedAssert.Equal(11, first.Usage!.PromptTokens, "OpenAI-compatible non-streaming tool chat should parse prompt tokens.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "OpenAI-compatible non-streaming tool chat should parse completion tokens.");
+            SharedAssert.Equal(8, first.Usage!.CachedPromptTokens, "OpenAI-compatible non-streaming tool chat should parse cached prompt tokens.");
+            SharedAssert.Equal(4, first.Usage!.ReasoningTokens, "OpenAI-compatible non-streaming tool chat should parse reasoning tokens.");
+            SharedAssert.True(first.Usage!.CacheCreationTokens == null, "OpenAI does not report cache-creation tokens.");
+
             request.Messages.Add(first.ToAssistantMessage());
             request.Tools.Clear();
             request.ToolChoice = "none";
@@ -1028,6 +1041,13 @@ namespace Test.Shared
             Dictionary<string, string> ollamaArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
             SharedAssert.Equal("Seattle", ollamaArguments["city"], "Ollama response should parse object arguments.");
 
+            SharedAssert.NotNull(first.Usage, "Ollama non-streaming tool chat should expose usage.");
+            SharedAssert.Equal(11, first.Usage!.PromptTokens, "Ollama non-streaming tool chat should parse prompt eval count.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Ollama non-streaming tool chat should parse eval count.");
+            SharedAssert.True(first.Usage!.CachedPromptTokens == null, "Ollama does not report cached prompt tokens.");
+            SharedAssert.True(first.Usage!.CacheCreationTokens == null, "Ollama does not report cache-creation tokens.");
+            SharedAssert.True(first.Usage!.ReasoningTokens == null, "Ollama does not report a distinct reasoning-token count.");
+
             request.Messages.Add(first.ToAssistantMessage());
             request.Tools.Clear();
             request.ToolChoice = "none";
@@ -1137,6 +1157,13 @@ namespace Test.Shared
             Dictionary<string, string> geminiArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
             SharedAssert.Equal("Seattle", geminiArguments["city"], "Gemini response should parse function call args.");
 
+            SharedAssert.NotNull(first.Usage, "Gemini non-streaming tool chat should expose usage.");
+            SharedAssert.Equal(11, first.Usage!.PromptTokens, "Gemini non-streaming tool chat should parse prompt token count.");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Gemini non-streaming tool chat should parse candidates token count.");
+            SharedAssert.Equal(6, first.Usage!.CachedPromptTokens, "Gemini non-streaming tool chat should parse cached content token count.");
+            SharedAssert.Equal(3, first.Usage!.ReasoningTokens, "Gemini non-streaming tool chat should parse thoughts token count.");
+            SharedAssert.True(first.Usage!.CacheCreationTokens == null, "Gemini does not report cache-creation tokens.");
+
             request.Messages.Add(first.ToAssistantMessage());
             request.Tools.Clear();
             request.ToolChoice = "none";
@@ -1230,6 +1257,9 @@ namespace Test.Shared
             SharedAssert.Equal("gemini-final-stream-local", final.ResponseId, "Gemini final streaming response should expose response id.");
             SharedAssert.NotNull(final.Usage, "Gemini final streaming response should expose usage.");
             SharedAssert.Equal(5, final.Usage!.CompletionTokens, "Gemini final streaming response should parse candidates token count.");
+            SharedAssert.Equal(10, final.Usage!.CachedPromptTokens, "Gemini final streaming response should parse cached content token count.");
+            SharedAssert.Equal(2, final.Usage!.ReasoningTokens, "Gemini final streaming response should parse thoughts token count.");
+            SharedAssert.True(final.Usage!.CacheCreationTokens == null, "Gemini does not report cache-creation tokens.");
 
             List<string> bodies = server.RequestBodies;
             LocalGeminiRequest initialRequest = DeserializeRecordedGeminiRequest(bodies[0]);
@@ -2296,6 +2326,9 @@ namespace Test.Shared
             SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Anthropic streaming chat should parse output tokens.");
             SharedAssert.Equal(3, stream.Usage!.PromptTokens, "Anthropic streaming chat should carry input tokens from message_start.");
             SharedAssert.Equal(5, stream.Usage!.TotalTokens, "Anthropic streaming chat should total token usage.");
+            SharedAssert.Equal(7, stream.Usage!.CachedPromptTokens, "Anthropic streaming chat should carry cache-read tokens from message_start.");
+            SharedAssert.Equal(11, stream.Usage!.CacheCreationTokens, "Anthropic streaming chat should carry cache-creation tokens from message_start.");
+            SharedAssert.True(stream.Usage!.ReasoningTokens == null, "Anthropic does not report a distinct reasoning-token count.");
             SharedAssert.True(stream.ChunkCount >= 2, "Anthropic streaming chat should count text chunks.");
 
             LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
@@ -2349,6 +2382,13 @@ namespace Test.Shared
             SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Anthropic response should parse the tool name.");
             Dictionary<string, string> anthropicArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
             SharedAssert.Equal("Seattle", anthropicArguments["city"], "Anthropic response should parse tool_use input as arguments.");
+
+            SharedAssert.NotNull(first.Usage, "Anthropic non-streaming tool chat should expose usage.");
+            SharedAssert.Equal(11, first.Usage!.PromptTokens, "Anthropic non-streaming tool chat should keep PromptTokens as the uncached input count (Option A).");
+            SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Anthropic non-streaming tool chat should parse output tokens.");
+            SharedAssert.Equal(9, first.Usage!.CachedPromptTokens, "Anthropic non-streaming tool chat should parse cache-read tokens.");
+            SharedAssert.Equal(13, first.Usage!.CacheCreationTokens, "Anthropic non-streaming tool chat should parse cache-creation tokens.");
+            SharedAssert.True(first.Usage!.ReasoningTokens == null, "Anthropic does not report a distinct reasoning-token count.");
 
             request.Messages.Add(first.ToAssistantMessage());
             request.Tools.Clear();
@@ -3321,6 +3361,13 @@ namespace Test.Shared
             ToolCall call = response.ToolCalls.First(c => c.Name == "get_weather");
             SharedAssert.True(call.ArgumentsJson != null && call.ArgumentsJson.Contains("Seattle", StringComparison.Ordinal), "Bedrock toolUse input should carry the arguments.");
             SharedAssert.True(server.RequestBodies[0].Contains("toolSpec", StringComparison.Ordinal), "Bedrock tool chat should send toolConfig.tools[].toolSpec.");
+
+            SharedAssert.NotNull(response.Usage, "Bedrock non-streaming tool chat should expose usage.");
+            SharedAssert.Equal(11, response.Usage!.PromptTokens, "Bedrock non-streaming tool chat should keep PromptTokens as the uncached input count (Option A).");
+            SharedAssert.Equal(7, response.Usage!.CompletionTokens, "Bedrock non-streaming tool chat should parse output tokens.");
+            SharedAssert.Equal(9, response.Usage!.CachedPromptTokens, "Bedrock non-streaming tool chat should parse cache-read tokens.");
+            SharedAssert.Equal(13, response.Usage!.CacheCreationTokens, "Bedrock non-streaming tool chat should parse cache-write tokens.");
+            SharedAssert.True(response.Usage!.ReasoningTokens == null, "Bedrock does not report a distinct reasoning-token count.");
         }
 
         private static async Task RunBedrockConverseStreamEventFramesAsync(CancellationToken token)
@@ -3338,6 +3385,10 @@ namespace Test.Shared
             SharedAssert.Equal("end_turn", stream.FinishReason, "Bedrock streaming should surface the stop reason.");
             SharedAssert.NotNull(stream.Usage, "Bedrock streaming should surface usage from the metadata frame.");
             SharedAssert.Equal(2, stream.Usage!.CompletionTokens, "Bedrock streaming should parse output tokens.");
+            SharedAssert.Equal(3, stream.Usage!.PromptTokens, "Bedrock streaming should keep PromptTokens as the uncached input count (Option A).");
+            SharedAssert.Equal(4, stream.Usage!.CachedPromptTokens, "Bedrock streaming should parse cache-read tokens from the metadata frame.");
+            SharedAssert.Equal(6, stream.Usage!.CacheCreationTokens, "Bedrock streaming should parse cache-write tokens from the metadata frame.");
+            SharedAssert.True(stream.Usage!.ReasoningTokens == null, "Bedrock does not report a distinct reasoning-token count.");
         }
 
         private static async Task RunBedrockToolChatStreamingAsync(CancellationToken token)

@@ -123,6 +123,7 @@ namespace PolyPrompt.Clients
                 ConverseParseResult parsed = ParseConverseResponse(result.ResponseBody);
                 chatResponse.Text = parsed.Text;
                 chatResponse.Reasoning = NormalizeReasoning(parsed.Reasoning);
+                chatResponse.Usage = parsed.Usage;
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -244,6 +245,7 @@ namespace PolyPrompt.Clients
                 toolResponse.Text = parsed.Text;
                 toolResponse.Reasoning = NormalizeReasoning(parsed.Reasoning);
                 toolResponse.FinishReason = parsed.StopReason;
+                toolResponse.Usage = parsed.Usage;
                 foreach (ToolCall call in parsed.ToolCalls) toolResponse.ToolCalls.Add(call);
                 toolResponse.Success = true;
             }
@@ -841,6 +843,8 @@ namespace PolyPrompt.Clients
             Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);
             if (responseObj == null) return parseResult;
 
+            parseResult.Usage = ReadMetadataUsage(responseObj);
+
             if (responseObj.ContainsKey("stopReason"))
                 parseResult.StopReason = responseObj["stopReason"]?.ToString();
 
@@ -1165,6 +1169,11 @@ namespace PolyPrompt.Clients
                 usage.CompletionTokens = outTok;
             if (usageObj.ContainsKey("totalTokens") && int.TryParse(usageObj["totalTokens"]?.ToString(), out int totTok))
                 usage.TotalTokens = totTok;
+
+            // Bedrock reports cache reads/writes as separate buckets additional to inputTokens (matching
+            // Anthropic's semantic). Absent unless prompt caching was used.
+            usage.CachedPromptTokens = TryGetInt(usageObj, "cacheReadInputTokens");
+            usage.CacheCreationTokens = TryGetInt(usageObj, "cacheWriteInputTokens");
             return usage;
         }
 
@@ -1173,6 +1182,7 @@ namespace PolyPrompt.Clients
             public string? Text { get; set; }
             public string? Reasoning { get; set; }
             public string? StopReason { get; set; }
+            public ChatStreamingUsage? Usage { get; set; }
             public List<ToolCall> ToolCalls { get; } = new List<ToolCall>();
         }
 

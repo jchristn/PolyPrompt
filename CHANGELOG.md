@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.6.0 (2026-09-10)
+
+### Added
+
+- Added **cached-prompt-token and reasoning-token accounting** to the usage surface. `ChatStreamingUsage` gains three nullable properties — `CachedPromptTokens` (prompt tokens served from the provider's prompt cache), `CacheCreationTokens` (prompt tokens written into the cache, billed at a premium), and `ReasoningTokens` (tokens billed separately for reasoning/thinking). All are `null` when a provider does not report them, so cost and cache-hit-rate accounting no longer has to be reconstructed from `PromptTokens`/`CompletionTokens` alone.
+- Populated these fields from every provider's native usage payload: OpenAI/Azure OpenAI (`prompt_tokens_details.cached_tokens`, `completion_tokens_details.reasoning_tokens`), Gemini/Vertex (`cachedContentTokenCount`, `thoughtsTokenCount`), Anthropic (`cache_read_input_tokens`, `cache_creation_input_tokens`; no distinct reasoning count), Bedrock (`cacheReadInputTokens`, `cacheWriteInputTokens`; no distinct reasoning count), and Ollama (reports none, so the fields stay `null`). Azure and Vertex inherit the OpenAI and Gemini parsers unchanged.
+- Exposed usage on the **non-streaming** paths for consistency: `ChatResponse` and `ToolChatResponse` gain a nullable `Usage` property (`ChatStreamingUsage`), populated by every provider's non-streaming chat and tool-chat parse. Telemetry is now identical whether a caller uses the streaming or non-streaming API.
+- Cross-provider semantic (Option A, additive and non-breaking): `PromptTokens` keeps its provider-native meaning — on OpenAI/Azure/Gemini/Vertex the cached count is a **subset** of `PromptTokens`; on Anthropic/Bedrock the cache buckets are **additional** to `PromptTokens` (which counts only the uncached input). This is documented on each field's XML docs and pinned by tests.
+
+### Tests
+
+- Extended the hermetic Touchstone suite (green across `Test.Automated selftest`, `Test.Xunit`, and `Test.Nunit` on net8.0 and net10.0) with positive and negative assertions for the new fields on both the streaming and non-streaming paths of all providers: cache and reasoning tokens are asserted where a provider reports them, and asserted `null` where it does not (Ollama for everything, reasoning on Anthropic/Bedrock, cache-creation on OpenAI/Gemini). Anthropic and Bedrock cases pin the Option A semantic by asserting `PromptTokens` remains the uncached input count while the cache buckets carry the cached values. The local test server's mock usage payloads were enriched with the corresponding cache/reasoning fields.
+- Verified live against Ollama (`gemma3:4b`) and Gemini (`gemini-2.5-flash`): usage populates identically on the streaming and non-streaming paths, with Gemini's reasoning-token count confirmed end-to-end and Ollama's cache/reasoning fields correctly `null`.
+
+### Changed
+
+- README updated with a usage/token-accounting section documenting the new fields and the cross-provider cached-token semantic; package version is now 2.6.0.
+
 ## v2.5.0 (2026-09-07)
 
 ### Added

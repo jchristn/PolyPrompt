@@ -29,7 +29,7 @@ PolyPrompt provides a single, consistent API surface for interacting with multip
 - **Embeddings** - Single and batch embedding vector generation for semantic search and RAG
 - **Model Management** - List models, check existence, get model details, pull, and delete
 - **Connectivity Validation** - Verify provider reachability before running workloads
-- **Timing & Usage Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput, plus provider-reported token usage (prompt/completion/total) on responses when the provider returns it
+- **Timing & Usage Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput, plus provider-reported token usage (prompt/completion/total, and cached-prompt/cache-creation/reasoning tokens where reported) on both streaming and non-streaming responses when the provider returns it
 - **Call Recording** - Every HTTP call is recorded with full request/response details for debugging and auditing
 - **Provider-Specific Options** - Fine-tune each provider's unique parameters without losing portability
 
@@ -447,6 +447,38 @@ await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 | Ollama | `message.thinking` |
 | Gemini | `content.parts[]` with `thought: true` |
 | Anthropic | `thinking` content blocks and streamed `thinking_delta` events |
+
+### Token Usage
+
+Provider-reported token usage is surfaced on `ChatStreamingUsage`, available as `Usage` on all four response types — `ChatResponse`, `ToolChatResponse`, `ChatStreamingResponse`, and `ToolChatStreamingResponse` — so the same telemetry is available whether you call the streaming or non-streaming API. `Usage` is `null` when the provider returns no usage data, and each field is nullable so "not reported" stays distinct from "reported as zero".
+
+Alongside `PromptTokens`, `CompletionTokens`, and `TotalTokens`, three fields carry cache and reasoning accounting:
+
+- **`CachedPromptTokens`** — prompt tokens served from the provider's prompt cache (a cache read), billed at a fraction of full input.
+- **`CacheCreationTokens`** — prompt tokens written into the cache (a cache-creation/write), billed at a premium by the providers that report it.
+- **`ReasoningTokens`** — tokens billed separately for reasoning/thinking.
+
+```csharp
+ChatResponse response = await client.ChatAsync("Summarize the attached document.");
+ChatStreamingUsage? usage = response.Usage;
+if (usage != null)
+{
+    Console.WriteLine($"Prompt: {usage.PromptTokens}, cached: {usage.CachedPromptTokens}, " +
+                      $"completion: {usage.CompletionTokens}, reasoning: {usage.ReasoningTokens}");
+}
+```
+
+What each provider reports, and one **cross-provider semantic** that matters for cost math — whether cached tokens are counted *inside* `PromptTokens` or *in addition to* it:
+
+| Provider | `CachedPromptTokens` | `CacheCreationTokens` | `ReasoningTokens` | Cached vs `PromptTokens` |
+|---|---|---|---|---|
+| OpenAI / Azure OpenAI | yes | — | yes | subset of `PromptTokens` |
+| Gemini / Vertex | yes | — | yes | subset of `PromptTokens` |
+| Anthropic | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
+| Bedrock | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
+| Ollama | — | — | — (thinking is text only) | n/a |
+
+On OpenAI, Azure, Gemini, and Vertex, `CachedPromptTokens` is already included in `PromptTokens`. On Anthropic and Bedrock, `PromptTokens` counts only the uncached input, and the cache buckets are additional — so full input is `PromptTokens + CachedPromptTokens + CacheCreationTokens`. `PromptTokens` keeps its provider-native meaning; no previously returned value changed with this addition.
 
 ### Streaming Chat
 

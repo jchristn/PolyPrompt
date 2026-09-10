@@ -919,6 +919,15 @@
             <param name="key">The key to look up.</param>
             <returns>The long value or null.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ParseNestedObject(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Deserialize a nested JSON object stored under <paramref name="key"/> into a dictionary. Returns
+            null when the key is absent or its value is null.
+            </summary>
+            <param name="obj">The parent dictionary.</param>
+            <param name="key">The key whose value is a nested object.</param>
+            <returns>The nested object as a dictionary, or null.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.NormalizeReasoning(System.String)">
             <summary>
             Normalizes a reasoning value: returns null for null/empty/whitespace, otherwise the value
@@ -1453,6 +1462,13 @@
             Error message if the request failed.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.Usage">
+            <summary>
+            Token usage for this completion, when the provider reported it. Populated on both the streaming
+            and non-streaming paths so cost and cache accounting is identical regardless of which was used.
+            Null when the provider returned no usage data.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ChatResponse.OverallRuntimeMs">
             <summary>
             Overall runtime of the request in milliseconds.
@@ -1613,6 +1629,30 @@
         <member name="P:PolyPrompt.Models.ChatStreamingUsage.TotalTokens">
             <summary>
             Total tokens (prompt + completion).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.CachedPromptTokens">
+            <summary>
+            Prompt tokens served from the provider's prompt cache (a cache read). Null when the provider does
+            not report cache usage. Note the cross-provider semantic: on OpenAI, Azure OpenAI, Gemini, and
+            Vertex this is a subset of <see cref="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens"/> (the provider already counts cached tokens
+            inside the prompt total); on Anthropic and Bedrock it is additional to <see cref="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens"/>
+            (the provider reports only the uncached portion as the prompt total). Ollama does not report it.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.CacheCreationTokens">
+            <summary>
+            Prompt tokens written into the provider's prompt cache (a cache-creation/write), billed at a
+            premium by the providers that report it (Anthropic, Bedrock). Null when the provider does not
+            report a distinct cache-write count (OpenAI, Azure OpenAI, Gemini, Vertex, Ollama).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingUsage.ReasoningTokens">
+            <summary>
+            Reasoning/thinking tokens billed separately by the model (OpenAI and Azure OpenAI reasoning
+            models, Gemini and Vertex thinking). Null when the provider does not report a distinct
+            reasoning-token count (Anthropic and Bedrock bill extended thinking as ordinary output tokens;
+            Ollama streams thinking as text only).
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingUsage.TotalDurationNs">
@@ -2310,6 +2350,13 @@
         <member name="P:PolyPrompt.Models.ToolChatResponse.Error">
             <summary>
             Error message when Success is false.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolChatResponse.Usage">
+            <summary>
+            Token usage for this completion, when the provider reported it. Populated on both the streaming
+            and non-streaming paths so cost and cache accounting is identical regardless of which was used.
+            Null when the provider returned no usage data.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ToolChatResponse.OverallRuntimeMs">

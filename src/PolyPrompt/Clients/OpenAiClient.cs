@@ -129,6 +129,7 @@ namespace PolyPrompt.Clients
                 string? completionText = message["content"]?.ToString();
                 chatResponse.Text = string.IsNullOrWhiteSpace(completionText) ? null : completionText.Trim();
                 chatResponse.Reasoning = ReadOpenAiReasoning(message);
+                chatResponse.Usage = ParseOpenAiUsage(ParseNestedObject(responseObj, "usage"));
                 chatResponse.Success = true;
             }
             catch (OperationCanceledException)
@@ -844,6 +845,7 @@ namespace PolyPrompt.Clients
             }
 
             toolResponse.ResponseId = responseObj.ContainsKey("id") ? responseObj["id"]?.ToString() : null;
+            toolResponse.Usage = ParseOpenAiUsage(ParseNestedObject(responseObj, "usage"));
 
             string choicesJson = _Serializer.SerializeJson(responseObj["choices"], false);
             List<Dictionary<string, object>>? choices = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(choicesJson);
@@ -974,6 +976,28 @@ namespace PolyPrompt.Clients
             return requestBody;
         }
 
+        // Parse an OpenAI-shape usage object. Shared by the streaming chunk readers and the non-streaming
+        // response parsers so telemetry is identical across both paths. cached_tokens and reasoning_tokens
+        // live in nested detail objects and are absent unless the request opted into usage
+        // (stream_options.include_usage) and the model reports them.
+        private ChatStreamingUsage? ParseOpenAiUsage(Dictionary<string, object>? usageObj)
+        {
+            if (usageObj == null) return null;
+
+            ChatStreamingUsage usage = new ChatStreamingUsage();
+            usage.PromptTokens = TryGetInt(usageObj, "prompt_tokens");
+            usage.CompletionTokens = TryGetInt(usageObj, "completion_tokens");
+            usage.TotalTokens = TryGetInt(usageObj, "total_tokens");
+
+            Dictionary<string, object>? promptDetails = ParseNestedObject(usageObj, "prompt_tokens_details");
+            if (promptDetails != null) usage.CachedPromptTokens = TryGetInt(promptDetails, "cached_tokens");
+
+            Dictionary<string, object>? completionDetails = ParseNestedObject(usageObj, "completion_tokens_details");
+            if (completionDetails != null) usage.ReasoningTokens = TryGetInt(completionDetails, "reasoning_tokens");
+
+            return usage;
+        }
+
         private async IAsyncEnumerable<ChatStreamingChunk> ReadOpenAiChatChunks(
             HttpResponseMessage response,
             [EnumeratorCancellation] CancellationToken token)
@@ -1047,20 +1071,7 @@ namespace PolyPrompt.Clients
 
                 if (chunk.ContainsKey("usage") && chunk["usage"] != null)
                 {
-                    string usageJson = _Serializer.SerializeJson(chunk["usage"], false);
-                    Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
-
-                    if (usageObj != null)
-                    {
-                        ChatStreamingUsage usage = new ChatStreamingUsage();
-                        if (usageObj.ContainsKey("prompt_tokens") && int.TryParse(usageObj["prompt_tokens"]?.ToString(), out int pt))
-                            usage.PromptTokens = pt;
-                        if (usageObj.ContainsKey("completion_tokens") && int.TryParse(usageObj["completion_tokens"]?.ToString(), out int ct))
-                            usage.CompletionTokens = ct;
-                        if (usageObj.ContainsKey("total_tokens") && int.TryParse(usageObj["total_tokens"]?.ToString(), out int tt))
-                            usage.TotalTokens = tt;
-                        streamChunk.Usage = usage;
-                    }
+                    streamChunk.Usage = ParseOpenAiUsage(ParseNestedObject(chunk, "usage"));
                 }
 
                 yield return streamChunk;
@@ -1148,20 +1159,7 @@ namespace PolyPrompt.Clients
 
                 if (chunk.ContainsKey("usage") && chunk["usage"] != null)
                 {
-                    string usageJson = _Serializer.SerializeJson(chunk["usage"], false);
-                    Dictionary<string, object>? usageObj = _Serializer.DeserializeJson<Dictionary<string, object>>(usageJson);
-
-                    if (usageObj != null)
-                    {
-                        ChatStreamingUsage usage = new ChatStreamingUsage();
-                        if (usageObj.ContainsKey("prompt_tokens") && int.TryParse(usageObj["prompt_tokens"]?.ToString(), out int pt))
-                            usage.PromptTokens = pt;
-                        if (usageObj.ContainsKey("completion_tokens") && int.TryParse(usageObj["completion_tokens"]?.ToString(), out int ct))
-                            usage.CompletionTokens = ct;
-                        if (usageObj.ContainsKey("total_tokens") && int.TryParse(usageObj["total_tokens"]?.ToString(), out int tt))
-                            usage.TotalTokens = tt;
-                        streamChunk.Usage = usage;
-                    }
+                    streamChunk.Usage = ParseOpenAiUsage(ParseNestedObject(chunk, "usage"));
                 }
 
                 yield return streamChunk;

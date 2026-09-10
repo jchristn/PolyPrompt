@@ -56,6 +56,13 @@ namespace PolyPrompt.Models
         public string? Error { get; set; } = null;
 
         /// <summary>
+        /// Token usage for this completion, when the provider reported it. Populated on both the streaming
+        /// and non-streaming paths so cost and cache accounting is identical regardless of which was used.
+        /// Null when the provider returned no usage data.
+        /// </summary>
+        public ChatStreamingUsage? Usage { get; set; } = null;
+
+        /// <summary>
         /// Overall runtime of the request in milliseconds.
         /// </summary>
         public long OverallRuntimeMs { get; set; }
