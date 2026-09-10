@@ -503,6 +503,9 @@ namespace AnthropicConsole
                 if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens   : " + response.Usage.PromptTokens.Value);
                 if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens   : " + response.Usage.CompletionTokens.Value);
                 if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens    : " + response.Usage.TotalTokens.Value);
+                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens   : " + response.Usage.CachedPromptTokens.Value);
+                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tok : " + response.Usage.CacheCreationTokens.Value);
+                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens: " + response.Usage.ReasoningTokens.Value);
             }
             Console.WriteLine("--- Timing ---");
             Console.WriteLine("  Overall runtime : " + response.OverallRuntimeMs + " ms");
@@ -714,6 +717,9 @@ namespace AnthropicConsole
                 if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens   : " + response.Usage.PromptTokens.Value);
                 if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens   : " + response.Usage.CompletionTokens.Value);
                 if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens    : " + response.Usage.TotalTokens.Value);
+                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens   : " + response.Usage.CachedPromptTokens.Value);
+                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tok : " + response.Usage.CacheCreationTokens.Value);
+                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens: " + response.Usage.ReasoningTokens.Value);
             }
             Console.WriteLine("--- Timing ---");
             Console.WriteLine("  Overall runtime : " + response.OverallRuntimeMs + " ms");
