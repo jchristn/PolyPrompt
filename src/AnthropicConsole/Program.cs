@@ -482,39 +482,39 @@ namespace AnthropicConsole
         {
             Console.WriteLine("");
             Console.WriteLine("--- Metadata ---");
-            Console.WriteLine("  Model           : " + response.Model);
-            if (response.ResponseId != null) Console.WriteLine("  Response ID     : " + response.ResponseId);
-            if (response.FinishReason != null) Console.WriteLine("  Finish reason   : " + response.FinishReason);
-            if (response.StatusCode.HasValue) Console.WriteLine("  HTTP status     : " + response.StatusCode.Value);
+            Console.WriteLine("  Model              : " + response.Model);
+            if (response.ResponseId != null) Console.WriteLine("  Response ID        : " + response.ResponseId);
+            if (response.FinishReason != null) Console.WriteLine("  Finish reason      : " + response.FinishReason);
+            if (response.StatusCode.HasValue) Console.WriteLine("  HTTP status        : " + response.StatusCode.Value);
             Console.WriteLine("--- Timing ---");
-            Console.WriteLine("  Runtime         : " + response.OverallRuntimeMs + " ms");
+            Console.WriteLine("  Runtime            : " + response.OverallRuntimeMs + " ms");
         }
 
         private static void PrintToolChatStreamingMetadata(ToolChatStreamingResponse response)
         {
             Console.WriteLine("");
             Console.WriteLine("--- Metadata ---");
-            Console.WriteLine("  Model           : " + response.Model);
-            if (response.ResponseId != null) Console.WriteLine("  Response ID     : " + response.ResponseId);
-            if (response.FinishReason != null) Console.WriteLine("  Finish reason   : " + response.FinishReason);
-            if (response.StatusCode.HasValue) Console.WriteLine("  HTTP status     : " + response.StatusCode.Value);
+            Console.WriteLine("  Model              : " + response.Model);
+            if (response.ResponseId != null) Console.WriteLine("  Response ID        : " + response.ResponseId);
+            if (response.FinishReason != null) Console.WriteLine("  Finish reason      : " + response.FinishReason);
+            if (response.StatusCode.HasValue) Console.WriteLine("  HTTP status        : " + response.StatusCode.Value);
             if (response.Usage != null)
             {
-                if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens   : " + response.Usage.PromptTokens.Value);
-                if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens   : " + response.Usage.CompletionTokens.Value);
-                if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens    : " + response.Usage.TotalTokens.Value);
-                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens   : " + response.Usage.CachedPromptTokens.Value);
-                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tok : " + response.Usage.CacheCreationTokens.Value);
-                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens: " + response.Usage.ReasoningTokens.Value);
+                if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens      : " + response.Usage.PromptTokens.Value);
+                if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens      : " + response.Usage.CompletionTokens.Value);
+                if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens       : " + response.Usage.TotalTokens.Value);
+                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens      : " + response.Usage.CachedPromptTokens.Value);
+                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tokens : " + response.Usage.CacheCreationTokens.Value);
+                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens   : " + response.Usage.ReasoningTokens.Value);
             }
             Console.WriteLine("--- Timing ---");
-            Console.WriteLine("  Overall runtime : " + response.OverallRuntimeMs + " ms");
-            if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token     : " + response.TimeToFirstTokenMs + " ms");
-            if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token      : " + response.TimeToLastTokenMs + " ms");
-            Console.WriteLine("  Chunks received : " + response.ChunkCount);
-            Console.WriteLine("  Tool deltas     : " + response.ToolCallDeltaCount);
-            if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec : " + response.OverallTokensPerSecond.ToString("F1"));
-            if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec  : " + response.InterTokenTokensPerSecond.ToString("F1"));
+            Console.WriteLine("  Overall runtime    : " + response.OverallRuntimeMs + " ms");
+            if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token        : " + response.TimeToFirstTokenMs + " ms");
+            if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token         : " + response.TimeToLastTokenMs + " ms");
+            Console.WriteLine("  Chunks received    : " + response.ChunkCount);
+            Console.WriteLine("  Tool deltas        : " + response.ToolCallDeltaCount);
+            if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec    : " + response.OverallTokensPerSecond.ToString("F1"));
+            if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec     : " + response.InterTokenTokensPerSecond.ToString("F1"));
         }
 
         private static async Task EmbedAsync()
@@ -655,12 +655,12 @@ namespace AnthropicConsole
                 Console.WriteLine("");
                 Console.WriteLine("");
                 Console.WriteLine("--- Timing ---");
-                Console.WriteLine("  Overall runtime : " + response.OverallRuntimeMs + " ms");
-                if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token     : " + response.TimeToFirstTokenMs + " ms");
-                if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token      : " + response.TimeToLastTokenMs + " ms");
-                Console.WriteLine("  Chunks received : " + response.ChunkCount);
-                if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec : " + response.OverallTokensPerSecond.ToString("F1"));
-                if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec  : " + response.InterTokenTokensPerSecond.ToString("F1"));
+                Console.WriteLine("  Overall runtime    : " + response.OverallRuntimeMs + " ms");
+                if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token        : " + response.TimeToFirstTokenMs + " ms");
+                if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token         : " + response.TimeToLastTokenMs + " ms");
+                Console.WriteLine("  Chunks received    : " + response.ChunkCount);
+                if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec    : " + response.OverallTokensPerSecond.ToString("F1"));
+                if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec     : " + response.InterTokenTokensPerSecond.ToString("F1"));
             }
             catch (Exception ex)
             {
@@ -709,25 +709,25 @@ namespace AnthropicConsole
         private static void PrintStreamingMetadata(ChatStreamingResponse response)
         {
             Console.WriteLine("--- Metadata ---");
-            Console.WriteLine("  Model           : " + response.Model);
-            if (response.ResponseId != null) Console.WriteLine("  Response ID     : " + response.ResponseId);
-            if (response.FinishReason != null) Console.WriteLine("  Finish reason   : " + response.FinishReason);
+            Console.WriteLine("  Model              : " + response.Model);
+            if (response.ResponseId != null) Console.WriteLine("  Response ID        : " + response.ResponseId);
+            if (response.FinishReason != null) Console.WriteLine("  Finish reason      : " + response.FinishReason);
             if (response.Usage != null)
             {
-                if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens   : " + response.Usage.PromptTokens.Value);
-                if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens   : " + response.Usage.CompletionTokens.Value);
-                if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens    : " + response.Usage.TotalTokens.Value);
-                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens   : " + response.Usage.CachedPromptTokens.Value);
-                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tok : " + response.Usage.CacheCreationTokens.Value);
-                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens: " + response.Usage.ReasoningTokens.Value);
+                if (response.Usage.PromptTokens.HasValue) Console.WriteLine("  Prompt tokens      : " + response.Usage.PromptTokens.Value);
+                if (response.Usage.CompletionTokens.HasValue) Console.WriteLine("  Compl. tokens      : " + response.Usage.CompletionTokens.Value);
+                if (response.Usage.TotalTokens.HasValue) Console.WriteLine("  Total tokens       : " + response.Usage.TotalTokens.Value);
+                if (response.Usage.CachedPromptTokens.HasValue) Console.WriteLine("  Cached tokens      : " + response.Usage.CachedPromptTokens.Value);
+                if (response.Usage.CacheCreationTokens.HasValue) Console.WriteLine("  Cache-write tokens : " + response.Usage.CacheCreationTokens.Value);
+                if (response.Usage.ReasoningTokens.HasValue) Console.WriteLine("  Reasoning tokens   : " + response.Usage.ReasoningTokens.Value);
             }
             Console.WriteLine("--- Timing ---");
-            Console.WriteLine("  Overall runtime : " + response.OverallRuntimeMs + " ms");
-            if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token     : " + response.TimeToFirstTokenMs + " ms");
-            if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token      : " + response.TimeToLastTokenMs + " ms");
-            Console.WriteLine("  Chunks received : " + response.ChunkCount);
-            if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec : " + response.OverallTokensPerSecond.ToString("F1"));
-            if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec  : " + response.InterTokenTokensPerSecond.ToString("F1"));
+            Console.WriteLine("  Overall runtime    : " + response.OverallRuntimeMs + " ms");
+            if (response.TimeToFirstTokenMs >= 0) Console.WriteLine("  First token        : " + response.TimeToFirstTokenMs + " ms");
+            if (response.TimeToLastTokenMs >= 0) Console.WriteLine("  Last token         : " + response.TimeToLastTokenMs + " ms");
+            Console.WriteLine("  Chunks received    : " + response.ChunkCount);
+            if (response.OverallTokensPerSecond > 0) Console.WriteLine("  Overall tok/sec    : " + response.OverallTokensPerSecond.ToString("F1"));
+            if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec     : " + response.InterTokenTokensPerSecond.ToString("F1"));
         }
 
         #endregion
