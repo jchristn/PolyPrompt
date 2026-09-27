@@ -148,6 +148,11 @@ namespace Test.Shared
                     _RequestPaths.Add(path);
                 }
 
+                if (await LocalExtendedRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
+                {
+                    return;
+                }
+
                 if (path == "/v1/chat/completions")
                 {
                     LocalOpenAiChatRequest? request = LocalRequestParser.DeserializeOpenAiChatRequest(requestBody);

@@ -28,16 +28,18 @@ namespace Test.Shared
                 "Live provider behavior",
                 new List<TestCaseDescriptor>
                 {
-                    Case("required_models", "Required models are available", token => RunRequiredModelsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI does not provide a model listing API."),
+                    Case("required_models", "Required models are available", token => RunRequiredModelsAsync(configuration, token), skip: IsVoyageAi(configuration) || IsTei(configuration), skipReason: IsTei(configuration) ? "TEI serves a single server-defined model; see list_models." : "VoyageAI does not provide a model listing API."),
                     Case("properties", "Client and option properties behave correctly", token => RunPropertyTestsAsync(configuration, token)),
-                    Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
-                    Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
-                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
-                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token), skip: IsVoyageAi(configuration), skipReason: "VoyageAI is an embeddings-only provider."),
+                    Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
+                    Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
+                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
+                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
                     Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
                     Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
-                    Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration) || IsVoyageAi(configuration), skipReason: IsVoyageAi(configuration) ? "VoyageAI is an embeddings-only provider." : "OpenAI does not support the legacy completions API."),
-                    Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration) || IsVoyageAi(configuration), skipReason: IsVoyageAi(configuration) ? "VoyageAI is an embeddings-only provider." : "OpenAI does not support the legacy completions API."),
+                    Case("rerank", "Rerank succeeds, or throws NotSupportedException on providers without reranking", token => RunRerankTestsAsync(configuration, token)),
+                    Case("classify", "Classification succeeds, or throws NotSupportedException on providers without classification", token => RunClassifyTestsAsync(configuration, token)),
+                    Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration) || HasNoChat(configuration), skipReason: HasNoChat(configuration) ? NoChatReason(configuration) : "OpenAI does not support the legacy completions API."),
+                    Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration) || HasNoChat(configuration), skipReason: HasNoChat(configuration) ? NoChatReason(configuration) : "OpenAI does not support the legacy completions API."),
                     Case("call_details", "CallDetails records upstream calls", token => RunCallDetailsTestsAsync(configuration, token)),
                     Case("list_models", "ListModelsAsync returns models", token => RunListModelsTestsAsync(configuration, token)),
                     Case("model_exists", "ModelExistsAsync handles existing and missing models", token => RunModelExistsTestsAsync(configuration, token)),
@@ -396,6 +398,15 @@ namespace Test.Shared
             using CompletionClientBase client = CreateClient(configuration);
             EmbeddingOptions embeddingModelOptions = CreateEmbeddingModelOptions(configuration);
 
+            if (IsTei(configuration) && !await TeiServesAsync(client, "embedding", token).ConfigureAwait(false))
+            {
+                // A TEI server hosting a reranker or classifier rejects /embed; the failure must surface cleanly.
+                EmbeddingResponse rejected = await client.EmbedAsync("Hello, world!", embeddingModelOptions, token).ConfigureAwait(false);
+                SharedAssert.False(rejected.Success, "TEI /embed should fail when the server does not host an embedding model.");
+                SharedAssert.NotEmpty(rejected.Error, "TEI /embed on a non-embedding model should report an error.");
+                return;
+            }
+
             EmbeddingResponse response = await client.EmbedAsync("Hello, world!", embeddingModelOptions, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Single embedding should succeed.");
             SharedAssert.Equal(200, response.StatusCode, "Single embedding should return HTTP 200.");
@@ -424,6 +435,13 @@ namespace Test.Shared
             using CompletionClientBase client = CreateClient(configuration);
             EmbeddingOptions embeddingModelOptions = CreateEmbeddingModelOptions(configuration);
 
+            if (IsTei(configuration) && !await TeiServesAsync(client, "embedding", token).ConfigureAwait(false))
+            {
+                EmbeddingResponse rejected = await client.EmbedAsync(new List<string> { "a", "b" }, embeddingModelOptions, token).ConfigureAwait(false);
+                SharedAssert.False(rejected.Success, "TEI batch /embed should fail when the server does not host an embedding model.");
+                return;
+            }
+
             List<string> inputs = new List<string> { "The cat sat on the mat.", "Dogs are loyal companions.", "Fish swim in the ocean." };
             EmbeddingResponse response = await client.EmbedAsync(inputs, embeddingModelOptions, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Batch embedding should succeed.");
@@ -444,6 +462,101 @@ namespace Test.Shared
             EmbeddingResponse singleBatchResponse = await client.EmbedAsync(new List<string> { "Single item batch" }, embeddingModelOptions, token).ConfigureAwait(false);
             SharedAssert.True(singleBatchResponse.Success, "Batch embedding with one input should succeed.");
             SharedAssert.Equal(1, singleBatchResponse.Embeddings.Count, "Batch embedding with one input should return one vector.");
+        }
+
+        private static async Task RunRerankTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using CompletionClientBase client = CreateClient(configuration);
+
+            List<string> documents = new List<string>
+            {
+                "The Great Wall of China is thousands of kilometers long.",
+                "Photosynthesis converts light into chemical energy in plants.",
+                "Paris is the capital and largest city of France.",
+                "Bananas are rich in potassium.",
+            };
+
+            if (!SupportsRerank(configuration))
+            {
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.RerankAsync("What is the capital of France?", documents, null, token),
+                    configuration.ProviderType + " RerankAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
+
+            RerankOptions options = new RerankOptions();
+            if (!string.IsNullOrEmpty(configuration.RerankModel)) options.Model = configuration.RerankModel;
+
+            if (IsTei(configuration) && !await TeiServesAsync(client, "reranker", token).ConfigureAwait(false))
+            {
+                RerankResponse rejected = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+                SharedAssert.False(rejected.Success, "TEI /rerank should fail when the server does not host a reranker.");
+                SharedAssert.NotEmpty(rejected.Error, "TEI /rerank on a non-reranker should report an error.");
+                return;
+            }
+
+            RerankResponse response = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Rerank should succeed. " + response.Error);
+            SharedAssert.Equal(200, response.StatusCode, "Rerank should return HTTP 200.");
+            SharedAssert.Equal(documents.Count, response.Results.Count, "Rerank should score every document.");
+            SharedAssert.Equal(2, response.Results[0].Index, "Rerank should rank the passage about the capital of France first.");
+            for (int i = 1; i < response.Results.Count; i++)
+            {
+                SharedAssert.True(response.Results[i - 1].Score >= response.Results[i].Score, "Rerank results should be sorted by score.");
+            }
+
+            options.TopN = 2;
+            options.ReturnDocuments = true;
+            RerankResponse top = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+            SharedAssert.True(top.Success, "Rerank with TopN should succeed.");
+            SharedAssert.Equal(2, top.Results.Count, "Rerank with TopN should return TopN results.");
+            SharedAssert.Equal(documents[top.Results[0].Index], top.Results[0].Document, "Rerank should attach document text on request.");
+
+            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => client.RerankAsync("q", documents, new RerankOptions { TopN = documents.Count + 1 }, token),
+                "Rerank should reject TopN greater than the document count.").ConfigureAwait(false);
+        }
+
+        private static async Task RunClassifyTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using CompletionClientBase client = CreateClient(configuration);
+            List<string> inputs = new List<string> { "I absolutely love this product, it is wonderful!", "This is the worst purchase I have ever made." };
+
+            if (!SupportsClassify(configuration))
+            {
+                await SharedAssert.ThrowsAsync<NotSupportedException>(
+                    () => client.ClassifyAsync(inputs, null, token),
+                    configuration.ProviderType + " ClassifyAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
+
+            // TEI /predict works for classifier models and for rerankers (single-label cross-encoders), and
+            // is rejected (HTTP 424) for embedding models.
+            if (IsTei(configuration)
+                && !await TeiServesAsync(client, "classifier", token).ConfigureAwait(false)
+                && !await TeiServesAsync(client, "reranker", token).ConfigureAwait(false))
+            {
+                ClassificationResponse rejected = await client.ClassifyAsync(inputs, null, token).ConfigureAwait(false);
+                SharedAssert.False(rejected.Success, "TEI /predict should fail when the server hosts an embedding model.");
+                SharedAssert.Equal(424, rejected.StatusCode, "TEI /predict on an embedding model should return HTTP 424.");
+                return;
+            }
+
+            ClassificationOptions? options = null;
+            if (IsCohere(configuration))
+            {
+                CohereClassificationOptions cohereOptions = new CohereClassificationOptions();
+                cohereOptions.Examples.Add(new ClassificationExample("I love it", "positive"));
+                cohereOptions.Examples.Add(new ClassificationExample("This is fantastic", "positive"));
+                cohereOptions.Examples.Add(new ClassificationExample("I hate it", "negative"));
+                cohereOptions.Examples.Add(new ClassificationExample("This is awful", "negative"));
+                options = cohereOptions;
+            }
+
+            ClassificationResponse response = await client.ClassifyAsync(inputs, options, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Classification should succeed. " + response.Error);
+            SharedAssert.Equal(2, response.Classifications.Count, "Classification should return one result per input.");
+            SharedAssert.True(response.Classifications.All(c => !string.IsNullOrEmpty(c.Label) && c.Labels.Count > 0), "Every classification should have a top label and a label list.");
         }
 
         private static async Task RunGenerationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
@@ -523,6 +636,17 @@ namespace Test.Shared
                 // VoyageAI has no chat API; record an embedding call instead.
                 await client.EmbedAsync("Ping", CreateEmbeddingModelOptions(configuration), token).ConfigureAwait(false);
             }
+            else if (IsTei(configuration))
+            {
+                // TEI has no chat API; record the operation the hosted model serves. Discard the /info probe.
+                bool embedding = await TeiServesAsync(client, "embedding", token).ConfigureAwait(false);
+                bool reranker = await TeiServesAsync(client, "reranker", token).ConfigureAwait(false);
+                client.ClearCallDetails();
+
+                if (embedding) await client.EmbedAsync("Ping", null, token).ConfigureAwait(false);
+                else if (reranker) await client.RerankAsync("Ping", new List<string> { "Pong" }, null, token).ConfigureAwait(false);
+                else await client.ClassifyAsync("Ping", null, token).ConfigureAwait(false);
+            }
             else
             {
                 await client.ChatAsync("Ping", token: token).ConfigureAwait(false);
@@ -575,6 +699,16 @@ namespace Test.Shared
                 return;
             }
 
+            if (IsTei(configuration))
+            {
+                // TEI serves one model; the client Model is informational, so check the hosted model's name.
+                List<ModelInformation> hosted = await GetModelsAsync(client, token).ConfigureAwait(false);
+                SharedAssert.Equal(1, hosted.Count, "TEI should list exactly one hosted model.");
+                SharedAssert.True(await client.ModelExistsAsync(hosted[0].Name, token).ConfigureAwait(false), "TEI hosted model should exist.");
+                SharedAssert.False(await client.ModelExistsAsync(BogusModel, token).ConfigureAwait(false), "A nonexistent model should return false.");
+                return;
+            }
+
             bool inferenceExists = await client.ModelExistsAsync(client.Model, token).ConfigureAwait(false);
             SharedAssert.True(inferenceExists, "Inference model should exist.");
 
@@ -597,6 +731,17 @@ namespace Test.Shared
                 await SharedAssert.ThrowsAsync<NotSupportedException>(
                     () => client.GetModelInformationAsync(client.Model, token),
                     "VoyageAI GetModelInformationAsync should be unsupported.").ConfigureAwait(false);
+                return;
+            }
+
+            if (IsTei(configuration))
+            {
+                List<ModelInformation> hosted = await GetModelsAsync(client, token).ConfigureAwait(false);
+                SharedAssert.Equal(1, hosted.Count, "TEI should list exactly one hosted model.");
+                ModelInformation? hostedInfo = await client.GetModelInformationAsync(hosted[0].Name, token).ConfigureAwait(false);
+                SharedAssert.NotNull(hostedInfo, "TEI hosted model information should be found.");
+                SharedAssert.True(hostedInfo!.Metadata.ContainsKey("model_type"), "TEI model information should report the model type.");
+                SharedAssert.True(await client.GetModelInformationAsync(BogusModel, token).ConfigureAwait(false) == null, "A nonexistent model should return null model information.");
                 return;
             }
 
@@ -676,16 +821,25 @@ namespace Test.Shared
 
             using CompletionClientBase client = CreateClient(configuration);
 
-            if (IsVoyageAi(configuration))
+            if (SupportsRerank(configuration))
             {
-                // VoyageAI has no chat or generation API; the unsupported exception wins over cancellation.
+                using CancellationTokenSource rerankCancelled = new CancellationTokenSource();
+                rerankCancelled.Cancel();
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(
+                    () => client.RerankAsync("q", new List<string> { "d" }, null, rerankCancelled.Token),
+                    "RerankAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+            }
+
+            if (IsVoyageAi(configuration) || IsTei(configuration))
+            {
+                // VoyageAI and TEI have no chat or generation API; the unsupported exception wins over cancellation.
                 await SharedAssert.ThrowsAsync<NotSupportedException>(
                     () => client.ChatAsync("This should be unsupported", token: token),
-                    "VoyageAI ChatAsync should be unsupported.").ConfigureAwait(false);
+                    configuration.ProviderType + " ChatAsync should be unsupported.").ConfigureAwait(false);
 
                 await SharedAssert.ThrowsAsync<NotSupportedException>(
                     () => client.GenerateAsync("This should be unsupported", token: token),
-                    "VoyageAI GenerateAsync should be unsupported.").ConfigureAwait(false);
+                    configuration.ProviderType + " GenerateAsync should be unsupported.").ConfigureAwait(false);
 
                 using CancellationTokenSource voyageEmbedCancelled = new CancellationTokenSource();
                 voyageEmbedCancelled.Cancel();
@@ -817,6 +971,8 @@ namespace Test.Shared
                 "gemini" => new GeminiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 "anthropic" => new AnthropicClient(endpoint, apiKey) { TimeoutMs = 120000, WorkspaceId = anthropicWorkspaceId },
                 "voyageai" => new VoyageAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
+                "cohere" => new CohereClient(endpoint, apiKey) { TimeoutMs = 120000 },
+                "tei" => new TeiClient(endpoint, apiKey) { TimeoutMs = 60000 },
                 _ => throw new ArgumentException("Unknown provider: " + providerType, nameof(providerType)),
             };
 
@@ -887,6 +1043,16 @@ namespace Test.Shared
                         MaxTokens = ResolveLiveMaxTokens(providerType, 64),
                     };
 
+                case "cohere":
+                    return new CohereChatCompletionOptions
+                    {
+                        Temperature = 0.5,
+                        TopP = 0.9,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
+                        TopK = 40,
+                        Seed = 42,
+                    };
+
                 default:
                     return new ChatCompletionOptions();
             }
@@ -927,6 +1093,20 @@ namespace Test.Shared
                     {
                         Model = configuration.EmbeddingModel,
                         InputType = "document",
+                    };
+
+                case "cohere":
+                    return new CohereEmbeddingOptions
+                    {
+                        Model = configuration.EmbeddingModel,
+                        InputType = "search_document",
+                    };
+
+                case "tei":
+                    return new TeiEmbeddingOptions
+                    {
+                        Normalize = true,
+                        Truncate = true,
                     };
 
                 default:
@@ -973,6 +1153,15 @@ namespace Test.Shared
                     return new AnthropicGenerationOptions
                     {
                         MaxTokens = ResolveLiveMaxTokens(providerType, 64),
+                    };
+
+                case "cohere":
+                    return new CohereGenerationOptions
+                    {
+                        Temperature = 0.5,
+                        TopP = 0.9,
+                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
+                        TopK = 40,
                     };
 
                 default:
@@ -1052,6 +1241,47 @@ namespace Test.Shared
         private static bool IsVoyageAi(ProviderTestConfiguration configuration)
         {
             return string.Equals(configuration.ProviderType, "voyageai", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCohere(ProviderTestConfiguration configuration)
+        {
+            return string.Equals(configuration.ProviderType, "cohere", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsTei(ProviderTestConfiguration configuration)
+        {
+            return string.Equals(configuration.ProviderType, "tei", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasNoChat(ProviderTestConfiguration configuration)
+        {
+            return IsVoyageAi(configuration) || IsTei(configuration);
+        }
+
+        private static string NoChatReason(ProviderTestConfiguration configuration)
+        {
+            return IsTei(configuration)
+                ? "Text Embeddings Inference has no chat or generation API."
+                : "VoyageAI is an embeddings and reranking provider.";
+        }
+
+        private static bool SupportsRerank(ProviderTestConfiguration configuration)
+        {
+            return IsCohere(configuration) || IsVoyageAi(configuration) || IsTei(configuration);
+        }
+
+        private static bool SupportsClassify(ProviderTestConfiguration configuration)
+        {
+            return IsCohere(configuration) || IsTei(configuration);
+        }
+
+        private static async Task<bool> TeiServesAsync(CompletionClientBase client, string modelType, CancellationToken token)
+        {
+            List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
+            if (models.Count == 0) throw new TestFailureException("TEI /info did not return the hosted model.");
+
+            return models[0].Metadata.TryGetValue("model_type", out string? actual)
+                && string.Equals(actual, modelType, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -57,6 +57,7 @@ namespace PolyPrompt.Models
         private string? _OllamaThink = null;
         private string? _AnthropicEffort = null;
         private int? _BedrockThinkingBudget = null;
+        private int? _CohereThinkingBudget = null;
 
         // Accepted override tokens. A value outside its set is rejected (reverts to null) so the projection
         // falls back to the Level-derived default — the same "silently clamp to a valid value" idiom the
@@ -75,6 +76,9 @@ namespace PolyPrompt.Models
 
         private const int BedrockThinkingBudgetFloor = 0;      // 0 = thinking off
         private const int BedrockThinkingBudgetCeiling = 65536; // generous upper bound for Converse thinking
+
+        private const int CohereThinkingBudgetFloor = 0;       // 0 = thinking disabled
+        private const int CohereThinkingBudgetCeiling = 32768; // generous upper bound for Cohere reasoning models
 
         #endregion
 
@@ -135,6 +139,22 @@ namespace PolyPrompt.Models
         {
             get { return _AnthropicEffort; }
             set { _AnthropicEffort = NormalizeToken(value, _AnthropicValues); }
+        }
+
+        /// <summary>
+        /// Cohere thinking-token budget override (<c>thinking.token_budget</c> on reasoning models such as
+        /// command-a-reasoning). Null derives from <see cref="Level"/>. 0 disables thinking, positive is an
+        /// explicit token budget. Clamped to 0..32768.
+        /// </summary>
+        public int? CohereThinkingBudget
+        {
+            get { return _CohereThinkingBudget; }
+            set
+            {
+                _CohereThinkingBudget = value.HasValue
+                    ? Math.Clamp(value.Value, CohereThinkingBudgetFloor, CohereThinkingBudgetCeiling)
+                    : null;
+            }
         }
 
         /// <summary>
@@ -227,6 +247,28 @@ namespace PolyPrompt.Models
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
                 case ReasoningEffortLevel.High:    return "high";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the Cohere thinking-token budget (override if set, else derived from <see cref="Level"/>).
+        /// 0 means thinking is off; the Cohere client then sends <c>thinking: {type: "disabled"}</c>, otherwise
+        /// <c>thinking: {type: "enabled", token_budget: N}</c>. Minimal maps to 0, Low to 1024, Medium to 4096,
+        /// and High to 16384.
+        /// </summary>
+        /// <returns>0 (off) or a positive token budget.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public int ToCohereThinkingBudget()
+        {
+            if (_CohereThinkingBudget.HasValue) return _CohereThinkingBudget.Value;
+
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.Minimal: return 0;      // thinking off
+                case ReasoningEffortLevel.Low:     return 1024;
+                case ReasoningEffortLevel.Medium:  return 4096;
+                case ReasoningEffortLevel.High:    return 16384;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }

@@ -7,10 +7,11 @@ namespace PolyPrompt.Clients
     using SyslogLogging;
 
     /// <summary>
-    /// Client for the VoyageAI API. VoyageAI is an embeddings-only provider: single and batch embeddings
-    /// are fully supported, while chat, tool chat, text generation, and model management have no VoyageAI
-    /// API and throw <see cref="NotSupportedException"/>. Connectivity validation is implemented with a
-    /// minimal embeddings request because VoyageAI has no model listing endpoint.
+    /// Client for the VoyageAI API. VoyageAI is an embeddings and reranking provider: single and batch
+    /// embeddings and reranking (<c>/v1/rerank</c>) are fully supported, while chat, tool chat, text
+    /// generation, and model management have no VoyageAI API and throw <see cref="NotSupportedException"/>.
+    /// Connectivity validation is implemented with a minimal embeddings request because VoyageAI has no
+    /// model listing endpoint.
     /// </summary>
     public class VoyageAiClient : CompletionClientBase
     {
@@ -19,10 +20,31 @@ namespace PolyPrompt.Clients
         // The prompt used by ValidateConnectivityAsync; a single short word keeps the probe cost negligible.
         private const string ConnectivityProbeInput = "ping";
 
-        private const string UnsupportedChat = "VoyageAI is an embeddings-only provider and does not support chat completions.";
-        private const string UnsupportedToolChat = "VoyageAI is an embeddings-only provider and does not support tool calling.";
-        private const string UnsupportedGeneration = "VoyageAI is an embeddings-only provider and does not support text generation.";
+        private const string UnsupportedChat = "VoyageAI is an embeddings and reranking provider and does not support chat completions.";
+        private const string UnsupportedToolChat = "VoyageAI is an embeddings and reranking provider and does not support tool calling.";
+        private const string UnsupportedGeneration = "VoyageAI is an embeddings and reranking provider and does not support text generation.";
         private const string UnsupportedModelManagement = "VoyageAI does not provide a model management API.";
+
+        private string _RerankModel = "rerank-2.5";
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Model used by <see cref="RerankAsync"/> when the request does not override it. Default: rerank-2.5.
+        /// Cannot be null, empty, or whitespace.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
+        public string RerankModel
+        {
+            get { return _RerankModel; }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(RerankModel));
+                _RerankModel = value;
+            }
+        }
 
         #endregion
 
@@ -56,7 +78,7 @@ namespace PolyPrompt.Clients
         #region Public-Methods
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="prompt">User message.</param>
         /// <param name="options">Optional per-call overrides.</param>
@@ -72,7 +94,7 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="prompt">User message.</param>
         /// <param name="options">Optional per-call overrides.</param>
@@ -88,7 +110,7 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="request">Tool chat request.</param>
         /// <param name="token">Cancellation token.</param>
@@ -102,7 +124,7 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="request">Tool chat request.</param>
         /// <param name="token">Cancellation token.</param>
@@ -224,7 +246,114 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Score documents against a query through <c>POST /v1/rerank</c>, using <see cref="RerankModel"/>
+        /// unless the request overrides the model.
+        /// </summary>
+        /// <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+        /// <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+        /// <param name="options">Optional per-call overrides; pass <see cref="VoyageAiRerankOptions"/> for VoyageAI-specific fields.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query or documents is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public override async Task<RerankResponse> RerankAsync(
+            string query,
+            List<string> documents,
+            RerankOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValidateRerankArguments(query, documents, options);
+
+            RerankResponse rerankResponse = new RerankResponse();
+            string model = options?.Model ?? _RerankModel;
+            rerankResponse.Model = model;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            string url = _Endpoint.TrimEnd('/') + "/v1/rerank";
+
+            Dictionary<string, object> requestBody = new Dictionary<string, object>
+            {
+                { "model", model },
+                { "query", query },
+                { "documents", documents }
+            };
+
+            if (options?.TopN != null) requestBody["top_k"] = options.TopN.Value;
+
+            VoyageAiRerankOptions? voyageOptions = options as VoyageAiRerankOptions;
+            if (voyageOptions != null && voyageOptions.Truncation.HasValue) requestBody["truncation"] = voyageOptions.Truncation.Value;
+
+            string json = _Serializer.SerializeJson(requestBody, false);
+            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            _Logging.Debug(_Header + "POST " + url);
+
+            try
+            {
+                CompletionHttpResult result = await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+                rerankResponse.StatusCode = result.StatusCode;
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "rerank request failed with status " + result.StatusCode + ": " + result.ResponseBody);
+                    rerankResponse.Success = false;
+                    rerankResponse.Error = "HTTP " + result.StatusCode + ": " + result.ResponseBody;
+                    return rerankResponse;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(result.ResponseBody);
+                if (responseObj == null || !responseObj.ContainsKey("data"))
+                {
+                    rerankResponse.Success = false;
+                    rerankResponse.Error = "Response missing 'data' field";
+                    return rerankResponse;
+                }
+
+                string dataJson = _Serializer.SerializeJson(responseObj["data"], false);
+                List<Dictionary<string, object>>? dataList = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(dataJson);
+                if (dataList != null)
+                {
+                    foreach (Dictionary<string, object> item in dataList)
+                    {
+                        int? index = TryGetInt(item, "index");
+                        double? score = TryGetDouble(item, "relevance_score");
+                        if (!index.HasValue || !score.HasValue) continue;
+                        rerankResponse.Results.Add(new RerankResult { Index = index.Value, Score = score.Value });
+                    }
+                }
+
+                if (responseObj.ContainsKey("model") && responseObj["model"] != null)
+                    rerankResponse.Model = responseObj["model"]?.ToString() ?? model;
+
+                Dictionary<string, object>? usage = ParseNestedObject(responseObj, "usage");
+                if (usage != null) rerankResponse.TotalTokens = TryGetRoundedInt(usage, "total_tokens");
+
+                FinalizeRerankResults(rerankResponse, documents, options);
+                rerankResponse.Success = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                rerankResponse.Success = false;
+                rerankResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                rerankResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return rerankResponse;
+        }
+
+        /// <summary>
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="prompt">The prompt text.</param>
         /// <param name="options">Optional per-call overrides.</param>
@@ -240,7 +369,7 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Not supported. VoyageAI is an embeddings-only provider.
+        /// Not supported. VoyageAI is an embeddings and reranking provider.
         /// </summary>
         /// <param name="prompt">The prompt text.</param>
         /// <param name="options">Optional per-call overrides.</param>

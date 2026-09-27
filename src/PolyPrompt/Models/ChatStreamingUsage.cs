@@ -22,8 +22,8 @@ namespace PolyPrompt.Models
 
         /// <summary>
         /// Prompt tokens served from the provider's prompt cache (a cache read). Null when the provider does
-        /// not report cache usage. Note the cross-provider semantic: on OpenAI, Azure OpenAI, Gemini, and
-        /// Vertex this is a subset of <see cref="PromptTokens"/> (the provider already counts cached tokens
+        /// not report cache usage. Note the cross-provider semantic: on OpenAI, Azure OpenAI, Gemini, Vertex, and
+        /// Cohere this is a subset of <see cref="PromptTokens"/> (the provider already counts cached tokens
         /// inside the prompt total); on Anthropic and Bedrock it is additional to <see cref="PromptTokens"/>
         /// (the provider reports only the uncached portion as the prompt total). Ollama does not report it.
         /// </summary>

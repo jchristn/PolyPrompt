@@ -424,11 +424,20 @@
             Client for AWS Bedrock. Inference uses the unified <c>Converse</c> / <c>ConverseStream</c> API, which
             normalizes messages, tools, reasoning, and usage across the model families Bedrock hosts (Anthropic,
             Amazon, Meta, Cohere, Mistral), so PolyPrompt needs almost no per-family branching. Embeddings use
-            <c>InvokeModel</c> with family-specific bodies (Amazon Titan and Cohere). Every request is authenticated
+            <c>InvokeModel</c> with family-specific bodies (Amazon Titan and Cohere), and so does reranking
+            (Cohere Rerank and Amazon Rerank, see <see cref="P:PolyPrompt.Clients.BedrockClient.RerankModel"/>). Every request is authenticated
             with AWS Signature Version 4 (see <see cref="T:PolyPrompt.Auth.SigV4Signer"/>) via the per-request
             <see cref="M:PolyPrompt.Clients.CompletionClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> hook. <c>ConverseStream</c> responses are the
             AWS binary event-stream format, decoded by <see cref="T:PolyPrompt.Wire.EventStreamDecoder"/>.
             </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.BedrockClient.RerankModel">
+            <summary>
+            Model used by <see cref="M:PolyPrompt.Clients.BedrockClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)"/> when the request does not override it. Default:
+            cohere.rerank-v3-5:0. Amazon's amazon.rerank-v1:0 is also accepted. Cannot be null, empty, or
+            whitespace.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
         </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.#ctor(PolyPrompt.Auth.IAwsCredentialProvider,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient,System.String)">
             <summary>
@@ -459,6 +468,23 @@
         <member name="M:PolyPrompt.Clients.BedrockClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
+            <summary>
+            Score documents against a query with a Bedrock-hosted rerank model through <c>InvokeModel</c>,
+            using <see cref="P:PolyPrompt.Clients.BedrockClient.RerankModel"/> unless the request overrides the model. Cohere rerank models
+            (<c>cohere.*</c>) are sent with <c>api_version: 2</c> as Bedrock requires; other rerank models
+            (for example <c>amazon.rerank-v1:0</c>) omit it.
+            </summary>
+            <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+            <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.BedrockRerankOptions"/> for Bedrock-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -472,6 +498,181 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.CohereClient">
+            <summary>
+            Client for the Cohere API. Chat, tool chat, and text generation use the v2 Chat API
+            (<c>/v2/chat</c>, text generation is mapped onto a single-turn chat because Cohere retired its legacy
+            generate endpoint); embeddings use <c>/v2/embed</c>; reranking uses <c>/v2/rerank</c>; classification
+            uses <c>/v1/classify</c>; and model listing and lookup use <c>/v1/models</c>. Chat, embeddings, reranking,
+            and classification each have their own default model (<see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/>,
+            <see cref="P:PolyPrompt.Clients.CohereClient.EmbeddingModel"/>, <see cref="P:PolyPrompt.Clients.CohereClient.RerankModel"/>, <see cref="P:PolyPrompt.Clients.CohereClient.ClassificationModel"/>) because
+            Cohere serves each operation from a different model family. Model pull and delete throw
+            <see cref="T:System.NotSupportedException"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CohereClient.EmbeddingModel">
+            <summary>
+            Model used by EmbedAsync when the request does not override it. Default: embed-v4.0. Cannot be
+            null, empty, or whitespace.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
+        </member>
+        <member name="P:PolyPrompt.Clients.CohereClient.RerankModel">
+            <summary>
+            Model used by RerankAsync when the request does not override it. Default: rerank-v3.5. Cannot be
+            null, empty, or whitespace.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
+        </member>
+        <member name="P:PolyPrompt.Clients.CohereClient.ClassificationModel">
+            <summary>
+            Model used by ClassifyAsync when the request does not override it, typically a fine-tuned
+            classification model. Default: null, which omits the model field so Cohere uses its default model
+            with the request's few-shot examples. Whitespace is treated as null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CohereClient.ModelsPageSize">
+            <summary>
+            Page size requested from the models list endpoint. Clamped to 1..1,000. Default: 1,000.
+            ListModelsAsync follows pagination until no page token is returned, so this affects request count,
+            not result completeness.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new CohereClient.
+            </summary>
+            <param name="endpoint">Cohere API endpoint URL. Default: https://api.cohere.com.</param>
+            <param name="apiKey">Cohere API key (required); when non-empty an Authorization: Bearer header is added. Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Send a tool-capable chat request to Cohere's v2 Chat API. Cohere's tool_choice accepts only
+            "REQUIRED" and "NONE": "auto" (or null) omits the field, "required"/"any" sends "REQUIRED", "none"
+            sends "NONE", and a specific tool name sends only that tool with "REQUIRED" so the model must call
+            it. The model's tool plan and thinking are surfaced as <see cref="P:PolyPrompt.Models.ToolChatResponse.Reasoning"/> and
+            are never sent back on follow-up turns.
+            </summary>
+            <param name="request">Tool chat request containing messages and tool definitions.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ToolChatResponse containing assistant text and requested tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Streaming variant of <see cref="M:PolyPrompt.Clients.CohereClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)"/>. Tool-call arguments arriving across multiple
+            tool-call-delta events are reassembled per call index, and tool-plan deltas are surfaced as
+            reasoning text rather than answer text.
+            </summary>
+            <param name="request">Tool chat request containing messages and tool definitions.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ToolChatStreamingResponse containing streamed chunks, accumulated text, and tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is empty.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate embeddings through <c>POST /v2/embed</c>, using <see cref="P:PolyPrompt.Clients.CohereClient.EmbeddingModel"/> unless the
+            request overrides the model. Cohere requires input_type for v3 and later models; when
+            <see cref="P:PolyPrompt.Options.CohereEmbeddingOptions.InputType"/> is not set, "search_document" is sent.
+            </summary>
+            <param name="inputs">The texts to embed (at most 96 per request).</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.CohereEmbeddingOptions"/> for Cohere-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An EmbeddingResponse with one vector per input.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
+            <summary>
+            Score documents against a query through <c>POST /v2/rerank</c>, using <see cref="P:PolyPrompt.Clients.CohereClient.RerankModel"/>
+            unless the request overrides the model. Relevance scores are normalized to 0..1.
+            </summary>
+            <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+            <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.CohereRerankOptions"/> for Cohere-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ClassifyAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.ClassificationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Classify inputs through <c>POST /v1/classify</c>, using <see cref="P:PolyPrompt.Clients.CohereClient.ClassificationModel"/> unless the
+            request overrides the model. Without a fine-tuned model, pass labeled few-shot examples through
+            <see cref="P:PolyPrompt.Options.CohereClassificationOptions.Examples"/> (at least 2 per label).
+            </summary>
+            <param name="inputs">The texts to classify (at most 96 per request). Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.CohereClassificationOptions"/> for examples and truncation.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ClassificationResponse with one result per input, labels sorted by confidence.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate text from a prompt. Cohere retired its legacy generate endpoint, so this is sent as a
+            single-user-turn <c>/v2/chat</c> request.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.CohereGenerationOptions"/> for Cohere-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A GenerationResponse containing the generated text.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Streaming variant of <see cref="M:PolyPrompt.Clients.CohereClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)"/>, sent as a single-user-turn streaming
+            <c>/v2/chat</c> request. Only answer text is streamed; thinking is omitted.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.CohereGenerationOptions"/> for Cohere-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A GenerationStreamingResponse containing an async enumerable of chunks.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List models through <c>GET /v1/models</c>, following <c>next_page_token</c> pagination. Each model's
+            Metadata carries <c>endpoints</c> (comma-separated, for example "chat,embed"), <c>finetuned</c>, and
+            <c>features</c> when reported, and InputTokenLimit carries the context length.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>An async enumerable of ModelInformation objects.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Validate connectivity and credentials by requesting a single-entry page from <c>GET /v1/models</c>.
+            Returns false on any non-success status (for example an invalid API key), an unreachable server,
+            or a request that exceeds <see cref="P:PolyPrompt.Clients.CompletionClientBase.TimeoutMs"/>; only cancellation of
+            <paramref name="token"/> propagates.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the models endpoint answered successfully, false otherwise.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
@@ -720,6 +921,85 @@
             <returns>A ModelInformation object if found, null otherwise.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
+            <summary>
+            Score a list of documents for relevance to a query and return them highest score first.
+            Not all providers support reranking; the default implementation throws NotSupportedException
+            without making a network call. Supported by Cohere, Text Embeddings Inference, VoyageAI, and
+            Bedrock.
+            </summary>
+            <param name="query">The query to score documents against. Cannot be null, empty, or whitespace.</param>
+            <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides. TopN, when set, cannot exceed the number of documents.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support reranking.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown by supporting providers when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown by supporting providers when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown by supporting providers when TopN exceeds the number of documents.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ClassifyAsync(System.String,PolyPrompt.Models.ClassificationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Classify a single input string. Delegates to the batch overload.
+            Not all providers support classification; the default batch implementation throws
+            NotSupportedException without making a network call. Supported by Cohere and Text Embeddings
+            Inference.
+            </summary>
+            <param name="input">The text to classify. Cannot be null.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ClassificationResponse with one result.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support classification.</exception>
+            <exception cref="T:System.ArgumentException">Thrown by supporting providers when input is null.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ClassifyAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.ClassificationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Classify a batch of input strings, returning one result per input in input order.
+            Not all providers support classification; the default implementation throws NotSupportedException
+            without making a network call. Supported by Cohere and Text Embeddings Inference.
+            </summary>
+            <param name="inputs">The texts to classify. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ClassificationResponse with one result per input.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support classification.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown by supporting providers when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown by supporting providers when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedSparseAsync(System.String,PolyPrompt.Models.SparseEmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate a sparse embedding for a single input string. Delegates to the batch overload.
+            Not all providers support sparse embeddings; the default batch implementation throws
+            NotSupportedException without making a network call. Supported by Text Embeddings Inference
+            when it serves a SPLADE-style model.
+            </summary>
+            <param name="input">The text to embed. Cannot be null.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A SparseEmbeddingResponse with one sparse vector.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support sparse embeddings.</exception>
+            <exception cref="T:System.ArgumentException">Thrown by supporting providers when input is null.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.EmbedSparseAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.SparseEmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate sparse embeddings for a batch of input strings, one per input in input order.
+            Not all providers support sparse embeddings; the default implementation throws
+            NotSupportedException without making a network call. Supported by Text Embeddings Inference
+            when it serves a SPLADE-style model.
+            </summary>
+            <param name="inputs">The texts to embed. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A SparseEmbeddingResponse with one sparse vector per input.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the provider does not support sparse embeddings.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown by supporting providers when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown by supporting providers when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.Dispose">
             <summary>
             Dispose of HTTP client resources.
@@ -937,6 +1217,55 @@
             <param name="value">The raw reasoning string.</param>
             <returns>The value, or null when it is null/empty/whitespace.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ValidateRerankArguments(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions)">
+            <summary>
+            Validate the arguments of a rerank request. Supporting providers call this before building a
+            request so every provider rejects bad input identically.
+            </summary>
+            <param name="query">The query.</param>
+            <param name="documents">The documents.</param>
+            <param name="options">Optional rerank options.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when options.TopN exceeds the number of documents.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ValidateInputList(System.Collections.Generic.List{System.String},System.String,System.String)">
+            <summary>
+            Validate a list of inputs for a batch request (classification, sparse embeddings, rerank documents).
+            </summary>
+            <param name="inputs">The input list.</param>
+            <param name="parameterName">Parameter name reported in exceptions.</param>
+            <param name="emptyMessage">Message used when the list is empty.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.FinalizeRerankResults(PolyPrompt.Models.RerankResponse,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions)">
+            <summary>
+            Normalize rerank results: drop results whose index does not refer to an input document, sort by
+            score (highest first, ties broken by index), trim to TopN, and attach document text when
+            requested. Providers call this after parsing so ordering and trimming behave identically.
+            </summary>
+            <param name="response">The response whose Results are normalized in place.</param>
+            <param name="documents">The caller's documents.</param>
+            <param name="options">Optional rerank options.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.TryGetDouble(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Try to parse a double from a dictionary value using the invariant culture.
+            </summary>
+            <param name="dict">The dictionary.</param>
+            <param name="key">The key to look up.</param>
+            <returns>The double value or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.TryGetRoundedInt(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
+            <summary>
+            Try to parse an integer from a dictionary value that may be serialized as a floating point number
+            (for example <c>71.0</c>). The value is rounded to the nearest integer.
+            </summary>
+            <param name="dict">The dictionary.</param>
+            <param name="key">The key to look up.</param>
+            <returns>The rounded integer value or null.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.IsTruthy(System.Collections.Generic.Dictionary{System.String,System.Object},System.String)">
             <summary>
             Check if a dictionary value represents a truthy boolean.
@@ -1128,6 +1457,180 @@
             <param name="path">The operation path, e.g. <c>chat/completions</c>, <c>embeddings</c>, <c>models</c>.</param>
             <returns>The absolute request URL.</returns>
         </member>
+        <member name="T:PolyPrompt.Clients.TeiClient">
+            <summary>
+            Client for Hugging Face Text Embeddings Inference (TEI). A TEI server hosts exactly one model, whose
+            type (embedding, reranker, or classifier) is fixed when the server starts and is reported by
+            <c>GET /info</c>. Supported operations: dense embeddings (<c>/embed</c>), sparse embeddings
+            (<c>/embed_sparse</c>), reranking (<c>/rerank</c>), classification (<c>/predict</c>), model listing and
+            lookup (from <c>/info</c>), and connectivity validation (<c>/health</c>). Which of these succeed depends
+            on the model the server hosts; calling an operation the model does not support returns an
+            unsuccessful response carrying TEI's error (typically HTTP 424). Chat, tool chat, and text generation
+            are served by Hugging Face Text Generation Inference, not TEI, and throw
+            <see cref="T:System.NotSupportedException"/>. Because the server hosts a single model, the
+            <see cref="P:PolyPrompt.Clients.CompletionClientBase.Model"/> property and per-request model overrides are informational
+            only and are not sent on the wire.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new TeiClient.
+            </summary>
+            <param name="endpoint">TEI server URL. Default: http://localhost:8080.</param>
+            <param name="apiKey">Optional API key, required only when the server was started with --api-key. When non-empty an Authorization: Bearer header is added. Default: null.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+            <param name="httpClient">Optional HTTP client. When supplied, the caller owns and disposes it; use this to configure the transport (custom handler, TLS, proxy). Default: null (an internally owned client is created).</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no chat API.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no chat API.
+            </summary>
+            <param name="prompt">User message.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no tool calling API.
+            </summary>
+            <param name="request">Tool chat request.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no tool calling API.
+            </summary>
+            <param name="request">Tool chat request.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no text generation API.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Not supported. Text Embeddings Inference has no text generation API.
+            </summary>
+            <param name="prompt">The prompt text.</param>
+            <param name="options">Optional per-call overrides.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>Never returns; always throws.</returns>
+            <exception cref="T:System.NotSupportedException">Always thrown.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.EmbedAsync(System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate dense embeddings for a batch of inputs through <c>POST /embed</c>. The request fails with a
+            TEI error (HTTP 413) when the batch exceeds the server's max_client_batch_size.
+            </summary>
+            <param name="inputs">The texts to embed.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.TeiEmbeddingOptions"/> for TEI-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An EmbeddingResponse with one vector per input, indexed by input position.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
+            <summary>
+            Score documents against a query through <c>POST /rerank</c>. Requires the server to host a reranker
+            (cross-encoder) model; otherwise TEI returns HTTP 424 and the response is unsuccessful. TEI has no
+            native top-N parameter, so every document is scored and the results are trimmed client-side.
+            </summary>
+            <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+            <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.TeiRerankOptions"/> for TEI-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ClassifyAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.ClassificationOptions,System.Threading.CancellationToken)">
+            <summary>
+            Classify a batch of inputs through <c>POST /predict</c>. Requires the server to host a sequence
+            classification model. Inputs are always sent in TEI's batch form (each input wrapped in its own
+            array) so that two inputs are never mistaken for a single text pair.
+            </summary>
+            <param name="inputs">The texts to classify. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.TeiClassificationOptions"/> for TEI-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ClassificationResponse with one result per input, labels sorted by score.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.EmbedSparseAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.SparseEmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>
+            Generate sparse embeddings for a batch of inputs through <c>POST /embed_sparse</c>. Requires the
+            server to host a SPLADE-style model.
+            </summary>
+            <param name="inputs">The texts to embed. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.TeiSparseEmbeddingOptions"/> for TEI-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A SparseEmbeddingResponse with one sparse vector per input.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when inputs is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List the single model hosted by the TEI server, read from <c>GET /info</c>. Yields nothing when the
+            server is unreachable or returns an error. The returned model's Metadata carries <c>model_type</c>
+            ("embedding", "reranker", or "classifier"), <c>model_dtype</c>, <c>max_client_batch_size</c>,
+            <c>max_batch_tokens</c>, <c>version</c>, and <c>served_model_name</c> when reported.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>An async enumerable with zero or one ModelInformation.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Return the hosted model's information when <paramref name="model"/> matches its model_id or
+            served_model_name (case-insensitive); otherwise null.
+            </summary>
+            <param name="model">The model name to look up.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The hosted model's information, or null when the name does not match or the server is unreachable.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null or empty.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.TeiClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Validate connectivity by calling <c>GET /health</c>, which TEI answers with 200 once the model is
+            loaded and 503 while it is unhealthy. An unreachable server or a request that exceeds
+            <see cref="P:PolyPrompt.Clients.CompletionClientBase.TimeoutMs"/> returns false; only cancellation of
+            <paramref name="token"/> propagates.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the server reports healthy, false otherwise.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
         <member name="T:PolyPrompt.Clients.VertexAiClient">
             <summary>
             Client for Google Vertex AI (Gemini models). Vertex serves the same Gemini <c>generateContent</c>
@@ -1207,11 +1710,19 @@
         </member>
         <member name="T:PolyPrompt.Clients.VoyageAiClient">
             <summary>
-            Client for the VoyageAI API. VoyageAI is an embeddings-only provider: single and batch embeddings
-            are fully supported, while chat, tool chat, text generation, and model management have no VoyageAI
-            API and throw <see cref="T:System.NotSupportedException"/>. Connectivity validation is implemented with a
-            minimal embeddings request because VoyageAI has no model listing endpoint.
+            Client for the VoyageAI API. VoyageAI is an embeddings and reranking provider: single and batch
+            embeddings and reranking (<c>/v1/rerank</c>) are fully supported, while chat, tool chat, text
+            generation, and model management have no VoyageAI API and throw <see cref="T:System.NotSupportedException"/>.
+            Connectivity validation is implemented with a minimal embeddings request because VoyageAI has no
+            model listing endpoint.
             </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.VoyageAiClient.RerankModel">
+            <summary>
+            Model used by <see cref="M:PolyPrompt.Clients.VoyageAiClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)"/> when the request does not override it. Default: rerank-2.5.
+            Cannot be null, empty, or whitespace.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
@@ -1224,7 +1735,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.ChatAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="prompt">User message.</param>
             <param name="options">Optional per-call overrides.</param>
@@ -1234,7 +1745,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.ChatStreamingAsync(System.String,PolyPrompt.Models.ChatCompletionOptions,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="prompt">User message.</param>
             <param name="options">Optional per-call overrides.</param>
@@ -1244,7 +1755,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="request">Tool chat request.</param>
             <param name="token">Cancellation token.</param>
@@ -1253,7 +1764,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="request">Tool chat request.</param>
             <param name="token">Cancellation token.</param>
@@ -1266,9 +1777,24 @@
         <member name="M:PolyPrompt.Clients.VoyageAiClient.EmbedAsync(System.Collections.Generic.List{System.String},PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.VoyageAiClient.RerankAsync(System.String,System.Collections.Generic.List{System.String},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
+            <summary>
+            Score documents against a query through <c>POST /v1/rerank</c>, using <see cref="P:PolyPrompt.Clients.VoyageAiClient.RerankModel"/>
+            unless the request overrides the model.
+            </summary>
+            <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+            <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+            <param name="options">Optional per-call overrides; pass <see cref="T:PolyPrompt.Options.VoyageAiRerankOptions"/> for VoyageAI-specific fields.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when query or documents is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.GenerateAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="prompt">The prompt text.</param>
             <param name="options">Optional per-call overrides.</param>
@@ -1278,7 +1804,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.VoyageAiClient.GenerateStreamingAsync(System.String,PolyPrompt.Models.GenerationOptions,System.Threading.CancellationToken)">
             <summary>
-            Not supported. VoyageAI is an embeddings-only provider.
+            Not supported. VoyageAI is an embeddings and reranking provider.
             </summary>
             <param name="prompt">The prompt text.</param>
             <param name="options">Optional per-call overrides.</param>
@@ -1634,8 +2160,8 @@
         <member name="P:PolyPrompt.Models.ChatStreamingUsage.CachedPromptTokens">
             <summary>
             Prompt tokens served from the provider's prompt cache (a cache read). Null when the provider does
-            not report cache usage. Note the cross-provider semantic: on OpenAI, Azure OpenAI, Gemini, and
-            Vertex this is a subset of <see cref="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens"/> (the provider already counts cached tokens
+            not report cache usage. Note the cross-provider semantic: on OpenAI, Azure OpenAI, Gemini, Vertex, and
+            Cohere this is a subset of <see cref="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens"/> (the provider already counts cached tokens
             inside the prompt total); on Anthropic and Bedrock it is additional to <see cref="P:PolyPrompt.Models.ChatStreamingUsage.PromptTokens"/>
             (the provider reports only the uncached portion as the prompt total). Ollama does not report it.
             </summary>
@@ -1673,6 +2199,128 @@
         <member name="P:PolyPrompt.Models.ChatStreamingUsage.EvalDurationNs">
             <summary>
             Token generation duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ClassificationExample">
+            <summary>
+            A labeled example used for few-shot classification by providers that accept examples (Cohere).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ClassificationExample.#ctor">
+            <summary>
+            Initialize an empty classification example.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ClassificationExample.#ctor(System.String,System.String)">
+            <summary>
+            Initialize a classification example.
+            </summary>
+            <param name="text">Example text.</param>
+            <param name="label">Label for the example text.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when text or label is null.</exception>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationExample.Text">
+            <summary>
+            Example text. Cannot be null.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null.</exception>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationExample.Label">
+            <summary>
+            Label for the example text. Cannot be null.
+            </summary>
+            <exception cref="T:System.ArgumentNullException">Thrown when set to null.</exception>
+        </member>
+        <member name="T:PolyPrompt.Models.ClassificationLabel">
+            <summary>
+            A candidate label and its score for one classified input.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationLabel.Label">
+            <summary>
+            Label name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationLabel.Score">
+            <summary>
+            Score for the label. Higher is more likely. Cohere returns a 0..1 confidence; Text Embeddings
+            Inference returns a normalized 0..1 score by default or raw logits when raw scores are requested.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ClassificationOptions">
+            <summary>
+            Base options for classification requests. When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationOptions.Model">
+            <summary>
+            Model override for this classification request. Null uses the client's classification model
+            default. Ignored by Text Embeddings Inference, which serves a single model.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ClassificationResponse">
+            <summary>
+            Response from a classification request, with one result per input in input order.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.Error">
+            <summary>
+            Error message if the request failed; null on success.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.Model">
+            <summary>
+            The model name used for this request, or null when the provider chose its default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.Classifications">
+            <summary>
+            Classification results, one per input, in input order. Empty when the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ClassificationResult">
+            <summary>
+            Classification output for a single input.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResult.Index">
+            <summary>
+            Zero-based position of the input in the list passed to ClassifyAsync.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResult.Input">
+            <summary>
+            The input text that was classified.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResult.Label">
+            <summary>
+            The highest-scoring label, or null when the provider returned no labels.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResult.Score">
+            <summary>
+            Score of <see cref="P:PolyPrompt.Models.ClassificationResult.Label"/>, or null when the provider returned no labels.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ClassificationResult.Labels">
+            <summary>
+            Every label the provider scored for this input, highest score first.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.CompletionCallDetail">
@@ -2123,6 +2771,13 @@
             have no level preset and are reachable only through this override.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ReasoningEffort.CohereThinkingBudget">
+            <summary>
+            Cohere thinking-token budget override (<c>thinking.token_budget</c> on reasoning models such as
+            command-a-reasoning). Null derives from <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>. 0 disables thinking, positive is an
+            explicit token budget. Clamped to 0..32768.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ReasoningEffort.BedrockThinkingBudget">
             <summary>
             AWS Bedrock Converse thinking-token budget override (<c>additionalModelRequestFields.thinking.budget_tokens</c>
@@ -2148,6 +2803,16 @@
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToAnthropicEffort">
             <summary>Returns the Anthropic output_config.effort wire value (override if set, else derived from Level).</summary>
             <returns>One of "low"/"medium"/"high", or the configured override ("xhigh"/"max" included).</returns>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ReasoningEffort.ToCohereThinkingBudget">
+            <summary>
+            Returns the Cohere thinking-token budget (override if set, else derived from <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>).
+            0 means thinking is off; the Cohere client then sends <c>thinking: {type: "disabled"}</c>, otherwise
+            <c>thinking: {type: "enabled", token_budget: N}</c>. Minimal maps to 0, Low to 1024, Medium to 4096,
+            and High to 16384.
+            </summary>
+            <returns>0 (off) or a positive token budget.</returns>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown for an undefined <see cref="P:PolyPrompt.Models.ReasoningEffort.Level"/>.</exception>
         </member>
         <member name="M:PolyPrompt.Models.ReasoningEffort.ToBedrockThinkingBudget">
@@ -2189,6 +2854,185 @@
         </member>
         <member name="F:PolyPrompt.Models.ReasoningEffortLevel.High">
             <summary>High reasoning effort.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.RerankOptions">
+            <summary>
+            Base options for rerank requests. When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankOptions.Model">
+            <summary>
+            Model override for this rerank request. Null uses the client's rerank model default (for example
+            <c>CohereClient.RerankModel</c>). Ignored by Text Embeddings Inference, which serves a single model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankOptions.TopN">
+            <summary>
+            Maximum number of results to return, highest score first. Null returns a score for every document.
+            Minimum 1. It must also not exceed the number of documents passed to RerankAsync, which is checked
+            when the request is made. Providers without a native top-N parameter (Text Embeddings Inference)
+            score every document and the list is trimmed client-side.
+            </summary>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when set to a value less than 1.</exception>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankOptions.ReturnDocuments">
+            <summary>
+            When true, each <see cref="P:PolyPrompt.Models.RerankResult.Document"/> is populated with the text of the document it
+            scores. The text is taken from the caller's input list by index, so no extra data is requested
+            from the provider. Default: false.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.RerankResponse">
+            <summary>
+            Response from a rerank request. Results are always sorted by score, highest first, regardless of the
+            order the provider returned them in, and each result's Index refers back to the caller's input list.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.Error">
+            <summary>
+            Error message if the request failed; null on success.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.Model">
+            <summary>
+            The model name used for this request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.ResponseId">
+            <summary>
+            Provider-assigned response identifier, when the provider returns one (Cohere). Null otherwise.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.Results">
+            <summary>
+            Scored documents, highest score first. Empty when the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.TotalTokens">
+            <summary>
+            Tokens processed by the request, when the provider reports them (Cohere input tokens, VoyageAI
+            total tokens). Null when the provider does not report token usage.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.SearchUnits">
+            <summary>
+            Billed search units, when the provider reports them (Cohere). Null otherwise.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.RerankResult">
+            <summary>
+            A single scored document from a rerank request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResult.Index">
+            <summary>
+            Zero-based position of the scored document in the list passed to RerankAsync.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResult.Score">
+            <summary>
+            Relevance score for the document. Higher is more relevant. Scores are provider-specific and are
+            not comparable across providers: Cohere, VoyageAI, and Bedrock return a normalized 0..1
+            relevance, while Text Embeddings Inference returns a sigmoid-normalized 0..1 score by default or
+            raw logits (any real number) when raw scores are requested.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.RerankResult.Document">
+            <summary>
+            Text of the scored document. Populated only when <see cref="P:PolyPrompt.Models.RerankOptions.ReturnDocuments"/> is
+            true; otherwise null.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.SparseEmbeddingOptions">
+            <summary>
+            Base options for sparse embedding requests. When a value is null, the client instance default is used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingOptions.Model">
+            <summary>
+            Model override for this request. Null uses the client default. Ignored by Text Embeddings
+            Inference, which serves a single model.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.SparseEmbeddingResponse">
+            <summary>
+            Response from a sparse embedding request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.Success">
+            <summary>
+            Whether the request was successful.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.StatusCode">
+            <summary>
+            HTTP status code from the request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.Error">
+            <summary>
+            Error message if the request failed; null on success.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.Model">
+            <summary>
+            The model name used for this request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.Embeddings">
+            <summary>
+            Sparse embeddings, one per input, in input order. Empty when the request failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResponse.OverallRuntimeMs">
+            <summary>
+            Overall runtime of the request in milliseconds.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.SparseEmbeddingResult">
+            <summary>
+            A sparse embedding for a single input.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResult.Index">
+            <summary>
+            Zero-based position of the input in the list passed to EmbedSparseAsync.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseEmbeddingResult.Values">
+            <summary>
+            Non-zero entries of the sparse vector, in the order the provider returned them.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.SparseValue">
+            <summary>
+            One non-zero entry of a sparse embedding vector.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseValue.Index">
+            <summary>
+            Dimension (vocabulary token) index of the entry.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.SparseValue.Value">
+            <summary>
+            Weight of the entry.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Models.ToolCall">
             <summary>
@@ -2644,6 +3488,150 @@
             omits the field and uses the model default.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Options.BedrockRerankOptions">
+            <summary>
+            Bedrock-specific options for rerank requests sent through InvokeModel.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.BedrockRerankOptions.MaxTokensPerDoc">
+            <summary>
+            Maximum tokens considered per document (max_tokens_per_doc), honored by Cohere rerank models.
+            Minimum 1; smaller values are clamped to 1. Null uses the model default.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.CohereChatCompletionOptions">
+            <summary>
+            Cohere-specific options for chat completion requests.
+            These map to fields on the Cohere /v2/chat request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereChatCompletionOptions.TopK">
+            <summary>
+            Top-K sampling (k). Clamped to 0..500, where 0 disables top-K. Null uses the model default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereChatCompletionOptions.Seed">
+            <summary>
+            Random seed for deterministic sampling (seed). Null lets the provider choose.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereChatCompletionOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty (frequency_penalty). Clamped to 0.0..1.0. Higher values reduce repetition of
+            tokens in proportion to how often they have appeared. Null uses the model default (0.0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereChatCompletionOptions.PresencePenalty">
+            <summary>
+            Presence penalty (presence_penalty). Clamped to 0.0..1.0. Higher values penalize any token that
+            has already appeared. Null uses the model default (0.0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereChatCompletionOptions.StopSequences">
+            <summary>
+            Custom stop sequences (stop_sequences). Cohere accepts at most 5; only the first 5 are kept.
+            Null or empty sends no stop sequences.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.CohereClassificationOptions">
+            <summary>
+            Cohere-specific options for classification requests.
+            These map to fields on the Cohere /v1/classify request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereClassificationOptions.Examples">
+            <summary>
+            Labeled examples for few-shot classification (examples). Required unless the request targets a
+            fine-tuned classification model; Cohere requires at least 2 examples per label and accepts at most
+            2,500. Setting null clears the list. Default: empty.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereClassificationOptions.Truncate">
+            <summary>
+            How over-length inputs are handled (truncate). Valid values are "NONE", "START", and "END"; values
+            are normalized (trimmed, upper-cased) and an unrecognized value reverts to null. Null uses the
+            provider default ("END").
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.CohereEmbeddingOptions">
+            <summary>
+            Cohere-specific options for embedding requests.
+            These map to fields on the Cohere /v2/embed request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereEmbeddingOptions.InputType">
+            <summary>
+            Input type (input_type). Valid values are "search_document", "search_query", "classification",
+            and "clustering"; values are normalized (trimmed, lower-cased) and an unrecognized value reverts
+            to null. Cohere requires input_type for v3 and later embedding models, so when this is null the
+            client sends "search_document".
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereEmbeddingOptions.EmbeddingType">
+            <summary>
+            Embedding value type to request and parse (embedding_types). Valid values are "float" (default),
+            "int8", "uint8", "binary", and "ubinary"; values are normalized and an unrecognized value reverts
+            to null. Null requests "float". Quantized values are surfaced through the same float vector on
+            <see cref="T:PolyPrompt.Models.EmbeddingResult"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereEmbeddingOptions.OutputDimension">
+            <summary>
+            Output embedding dimension (output_dimension), supported by embed-v4.0 and later. Valid values are
+            256, 512, 1024, and 1536; a value outside that set reverts to null. Null uses the model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereEmbeddingOptions.Truncate">
+            <summary>
+            How over-length inputs are handled (truncate). Valid values are "NONE" (return an error), "START",
+            and "END"; values are normalized (trimmed, upper-cased) and an unrecognized value reverts to null.
+            Null uses the provider default ("END").
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.CohereGenerationOptions">
+            <summary>
+            Cohere-specific options for text generation requests. Cohere retired its legacy generate endpoint, so
+            generation is sent as a single-turn /v2/chat request and these map to fields on that request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereGenerationOptions.TopK">
+            <summary>
+            Top-K sampling (k). Clamped to 0..500, where 0 disables top-K. Null uses the model default (0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereGenerationOptions.Seed">
+            <summary>
+            Random seed for deterministic sampling (seed). Null lets the provider choose.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereGenerationOptions.FrequencyPenalty">
+            <summary>
+            Frequency penalty (frequency_penalty). Clamped to 0.0..1.0. Null uses the model default (0.0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereGenerationOptions.PresencePenalty">
+            <summary>
+            Presence penalty (presence_penalty). Clamped to 0.0..1.0. Null uses the model default (0.0).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereGenerationOptions.StopSequences">
+            <summary>
+            Custom stop sequences (stop_sequences). Cohere accepts at most 5; only the first 5 are kept.
+            Null or empty sends no stop sequences.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.CohereRerankOptions">
+            <summary>
+            Cohere-specific options for rerank requests.
+            These map to fields on the Cohere /v2/rerank request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.CohereRerankOptions.MaxTokensPerDoc">
+            <summary>
+            Maximum tokens considered per document (max_tokens_per_doc); longer documents are truncated.
+            Minimum 1; smaller values are clamped to 1. Null uses the provider default (4096).
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Options.GeminiChatCompletionOptions">
             <summary>
             Gemini-specific options for chat completion requests.
@@ -2873,6 +3861,128 @@
             Include log probabilities. Null uses API default.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Options.TeiClassificationOptions">
+            <summary>
+            Text Embeddings Inference options for classification requests.
+            These map to fields on the TEI /predict request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiClassificationOptions.RawScores">
+            <summary>
+            When true, label scores are raw logits rather than normalized probabilities (raw_scores). Null uses
+            the server default (false).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiClassificationOptions.Truncate">
+            <summary>
+            Whether over-length inputs are truncated (truncate). Null uses the server default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiClassificationOptions.TruncationDirection">
+            <summary>
+            Which end of an over-length input is removed when truncating (truncation_direction). Valid values
+            are "left" and "right" (case-insensitive); an unrecognized value reverts to null. Null uses the
+            server default ("Right").
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.TeiEmbeddingOptions">
+            <summary>
+            Text Embeddings Inference options for embedding requests.
+            These map to fields on the TEI /embed request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiEmbeddingOptions.Normalize">
+            <summary>
+            Whether vectors are L2-normalized (normalize). Null uses the server default (true).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiEmbeddingOptions.Truncate">
+            <summary>
+            Whether over-length inputs are truncated to the model's maximum input length (truncate). Null uses
+            the server default, which depends on the server's --auto-truncate setting. When false, over-length
+            inputs return a 413 or 422 error.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiEmbeddingOptions.TruncationDirection">
+            <summary>
+            Which end of an over-length input is removed when truncating (truncation_direction). Valid values
+            are "left" and "right" (case-insensitive, sent as "Left"/"Right"); an unrecognized value reverts to
+            null. Null uses the server default ("Right").
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiEmbeddingOptions.PromptName">
+            <summary>
+            Name of a sentence-transformers prompt to prepend (prompt_name), for example "query". Must be a key
+            in the model's configured prompts. Null or whitespace applies no prompt.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiEmbeddingOptions.Dimensions">
+            <summary>
+            Output dimension for Matryoshka-capable models (dimensions). Minimum 1; a value below 1 reverts to
+            null. Null returns the model's native dimension.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.TeiOptionValues">
+            <summary>
+            Shared normalization for Text Embeddings Inference option values.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Options.TeiOptionValues.NormalizeTruncationDirection(System.String)">
+            <summary>
+            Normalize a truncation direction to TEI's wire casing ("Left" or "Right"). Returns null for null,
+            whitespace, or an unrecognized value.
+            </summary>
+            <param name="value">Raw value, case-insensitive.</param>
+            <returns>"Left", "Right", or null.</returns>
+        </member>
+        <member name="T:PolyPrompt.Options.TeiRerankOptions">
+            <summary>
+            Text Embeddings Inference options for rerank requests.
+            These map to fields on the TEI /rerank request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiRerankOptions.RawScores">
+            <summary>
+            When true, scores are raw logits (any real number) rather than sigmoid-normalized 0..1 values
+            (raw_scores). Null uses the server default (false).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiRerankOptions.Truncate">
+            <summary>
+            Whether over-length query/document pairs are truncated (truncate). Null uses the server default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiRerankOptions.TruncationDirection">
+            <summary>
+            Which end of an over-length input is removed when truncating (truncation_direction). Valid values
+            are "left" and "right" (case-insensitive); an unrecognized value reverts to null. Null uses the
+            server default ("Right").
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.TeiSparseEmbeddingOptions">
+            <summary>
+            Text Embeddings Inference options for sparse embedding requests.
+            These map to fields on the TEI /embed_sparse request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiSparseEmbeddingOptions.Truncate">
+            <summary>
+            Whether over-length inputs are truncated (truncate). Null uses the server default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiSparseEmbeddingOptions.TruncationDirection">
+            <summary>
+            Which end of an over-length input is removed when truncating (truncation_direction). Valid values
+            are "left" and "right" (case-insensitive); an unrecognized value reverts to null. Null uses the
+            server default ("Right").
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.TeiSparseEmbeddingOptions.PromptName">
+            <summary>
+            Name of a sentence-transformers prompt to prepend (prompt_name). Null or whitespace applies no
+            prompt.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Options.VertexAiEmbeddingOptions">
             <summary>
             Google Vertex AI options for embedding requests. Vertex embeddings use the <c>:predict</c> endpoint,
@@ -2930,6 +4040,18 @@
             "binary", and "ubinary"; values are normalized (trimmed, lower-cased) and an unrecognized value
             reverts to null. Null omits the field. Quantized outputs are surfaced through the same float
             vector on <see cref="T:PolyPrompt.Models.EmbeddingResult"/>.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.VoyageAiRerankOptions">
+            <summary>
+            VoyageAI-specific options for rerank requests.
+            These map to fields on the VoyageAI /v1/rerank request body.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.VoyageAiRerankOptions.Truncation">
+            <summary>
+            Whether over-length query/document pairs are truncated to the model context length (truncation).
+            Null uses the provider default (true). When false, over-length inputs cause an error.
             </summary>
         </member>
         <member name="T:PolyPrompt.Wire.EventStreamDecoder">

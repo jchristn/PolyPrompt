@@ -19,7 +19,8 @@ namespace PolyPrompt.Clients
     /// Client for AWS Bedrock. Inference uses the unified <c>Converse</c> / <c>ConverseStream</c> API, which
     /// normalizes messages, tools, reasoning, and usage across the model families Bedrock hosts (Anthropic,
     /// Amazon, Meta, Cohere, Mistral), so PolyPrompt needs almost no per-family branching. Embeddings use
-    /// <c>InvokeModel</c> with family-specific bodies (Amazon Titan and Cohere). Every request is authenticated
+    /// <c>InvokeModel</c> with family-specific bodies (Amazon Titan and Cohere), and so does reranking
+    /// (Cohere Rerank and Amazon Rerank, see <see cref="RerankModel"/>). Every request is authenticated
     /// with AWS Signature Version 4 (see <see cref="SigV4Signer"/>) via the per-request
     /// <see cref="CompletionClientBase.PrepareRequestAsync"/> hook. <c>ConverseStream</c> responses are the
     /// AWS binary event-stream format, decoded by <see cref="EventStreamDecoder"/>.
@@ -34,6 +35,27 @@ namespace PolyPrompt.Clients
         private readonly IAwsCredentialProvider _CredentialProvider;
         private readonly string _Region;
         private readonly string _ControlPlaneEndpoint;
+        private string _RerankModel = "cohere.rerank-v3-5:0";
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// Model used by <see cref="RerankAsync"/> when the request does not override it. Default:
+        /// cohere.rerank-v3-5:0. Amazon's amazon.rerank-v1:0 is also accepted. Cannot be null, empty, or
+        /// whitespace.
+        /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown when set to null, empty, or whitespace.</exception>
+        public string RerankModel
+        {
+            get { return _RerankModel; }
+            set
+            {
+                if (string.IsNullOrWhiteSpace(value)) throw new ArgumentNullException(nameof(RerankModel));
+                _RerankModel = value;
+            }
+        }
 
         #endregion
 
@@ -379,6 +401,103 @@ namespace PolyPrompt.Clients
             }
 
             return embedResponse;
+        }
+
+        /// <summary>
+        /// Score documents against a query with a Bedrock-hosted rerank model through <c>InvokeModel</c>,
+        /// using <see cref="RerankModel"/> unless the request overrides the model. Cohere rerank models
+        /// (<c>cohere.*</c>) are sent with <c>api_version: 2</c> as Bedrock requires; other rerank models
+        /// (for example <c>amazon.rerank-v1:0</c>) omit it.
+        /// </summary>
+        /// <param name="query">The query. Cannot be null, empty, or whitespace.</param>
+        /// <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+        /// <param name="options">Optional per-call overrides; pass <see cref="BedrockRerankOptions"/> for Bedrock-specific fields.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when query or documents is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when TopN exceeds the number of documents.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public override async Task<RerankResponse> RerankAsync(
+            string query,
+            List<string> documents,
+            RerankOptions? options = null,
+            CancellationToken token = default)
+        {
+            ValidateRerankArguments(query, documents, options);
+
+            RerankResponse rerankResponse = new RerankResponse();
+            string model = options?.Model ?? _RerankModel;
+            rerankResponse.Model = model;
+
+            Dictionary<string, object> body = new Dictionary<string, object>
+            {
+                { "query", query },
+                { "documents", documents }
+            };
+
+            if (options?.TopN != null) body["top_n"] = options.TopN.Value;
+            if (model.StartsWith("cohere.", StringComparison.OrdinalIgnoreCase)) body["api_version"] = 2;
+
+            BedrockRerankOptions? bedrockOptions = options as BedrockRerankOptions;
+            if (bedrockOptions?.MaxTokensPerDoc != null) body["max_tokens_per_doc"] = bedrockOptions.MaxTokensPerDoc.Value;
+
+            Stopwatch sw = Stopwatch.StartNew();
+
+            try
+            {
+                string json = _Serializer.SerializeJson(body, false);
+                CompletionHttpResult result = await InvokeModelAsync(model, json, token).ConfigureAwait(false);
+                rerankResponse.StatusCode = result.StatusCode;
+
+                if (!result.IsSuccessStatusCode)
+                {
+                    _Logging.Warn(_Header + "rerank request failed with status " + result.StatusCode + ": " + result.ResponseBody);
+                    rerankResponse.Success = false;
+                    rerankResponse.Error = "HTTP " + result.StatusCode + ": " + result.ResponseBody;
+                    return rerankResponse;
+                }
+
+                Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(result.ResponseBody);
+                if (responseObj == null || !responseObj.ContainsKey("results"))
+                {
+                    rerankResponse.Success = false;
+                    rerankResponse.Error = "Response missing 'results' field";
+                    return rerankResponse;
+                }
+
+                string resultsJson = _Serializer.SerializeJson(responseObj["results"], false);
+                List<Dictionary<string, object>>? results = _Serializer.DeserializeJson<List<Dictionary<string, object>>>(resultsJson);
+                if (results != null)
+                {
+                    foreach (Dictionary<string, object> item in results)
+                    {
+                        int? index = TryGetInt(item, "index");
+                        double? score = TryGetDouble(item, "relevance_score");
+                        if (!index.HasValue || !score.HasValue) continue;
+                        rerankResponse.Results.Add(new RerankResult { Index = index.Value, Score = score.Value });
+                    }
+                }
+
+                FinalizeRerankResults(rerankResponse, documents, options);
+                rerankResponse.Success = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                rerankResponse.Success = false;
+                rerankResponse.Error = ex.Message;
+            }
+            finally
+            {
+                sw.Stop();
+                rerankResponse.OverallRuntimeMs = sw.ElapsedMilliseconds;
+            }
+
+            return rerankResponse;
         }
 
         /// <inheritdoc />

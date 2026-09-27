@@ -43,6 +43,14 @@ namespace Test.Shared
             "POLYPROMPT_TEST_VOYAGEAI_ENDPOINT",
             "POLYPROMPT_TEST_VOYAGEAI_MODEL",
             "POLYPROMPT_TEST_VOYAGEAI_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_RERANK_MODEL",
+            "POLYPROMPT_TEST_COHERE_API_KEY",
+            "POLYPROMPT_TEST_COHERE_ENDPOINT",
+            "POLYPROMPT_TEST_COHERE_MODEL",
+            "POLYPROMPT_TEST_COHERE_EMBEDDING_MODEL",
+            "POLYPROMPT_TEST_COHERE_RERANK_MODEL",
+            "POLYPROMPT_TEST_TEI_API_KEY",
+            "POLYPROMPT_TEST_TEI_ENDPOINT",
         };
 
         /// <summary>
@@ -51,10 +59,14 @@ namespace Test.Shared
         /// <returns>A Touchstone suite descriptor containing local provider protocol and behavior tests.</returns>
         public static TestSuiteDescriptor Create()
         {
-            return new TestSuiteDescriptor(
-                SuiteId,
-                "Local behavior",
-                new List<TestCaseDescriptor>
+            List<TestCaseDescriptor> cases = CreateCoreCases();
+            cases.AddRange(LocalExtendedBehaviorCases.Create(SuiteId));
+            return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
+        }
+
+        private static List<TestCaseDescriptor> CreateCoreCases()
+        {
+            return new List<TestCaseDescriptor>
                 {
                     Case("chat_and_call_details", "Chat and CallDetails behavior", RunChatAndCallDetailsAsync),
                     Case("client_options_and_guards", "Client options and guard clauses", RunClientOptionsAndGuardsAsync),
@@ -186,7 +198,7 @@ namespace Test.Shared
                     Case("eventstream_crc_detects_corruption", "AWS event-stream CRC detects a corrupt frame", RunEventStreamCrcDetectsCorruptionAsync),
                     Case("credential_refresh_per_request", "Bearer credential is resolved per request", RunCredentialRefreshPerRequestAsync),
                     Case("credential_caching_reuses_token", "Caching credential reuses a token within its lifetime", RunCredentialCachingReusesTokenAsync),
-                });
+                };
         }
 
         private static TestCaseDescriptor Case(string caseId, string displayName, Func<CancellationToken, Task> executeAsync)
@@ -3060,7 +3072,7 @@ namespace Test.Shared
             return request;
         }
 
-        private static Dictionary<string, string?> CaptureProviderEnvironment()
+        internal static Dictionary<string, string?> CaptureProviderEnvironment()
         {
             Dictionary<string, string?> values = new Dictionary<string, string?>();
 
@@ -3072,7 +3084,7 @@ namespace Test.Shared
             return values;
         }
 
-        private static void ClearProviderEnvironment()
+        internal static void ClearProviderEnvironment()
         {
             foreach (string name in _ProviderEnvironmentVariables)
             {
@@ -3080,7 +3092,7 @@ namespace Test.Shared
             }
         }
 
-        private static void RestoreProviderEnvironment(Dictionary<string, string?> values)
+        internal static void RestoreProviderEnvironment(Dictionary<string, string?> values)
         {
             foreach (string name in _ProviderEnvironmentVariables)
             {

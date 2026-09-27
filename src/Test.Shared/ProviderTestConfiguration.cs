@@ -31,7 +31,17 @@ namespace Test.Shared
         public const string DefaultVoyageAiEndpoint = "https://api.voyageai.com";
 
         /// <summary>
-        /// Provider type for live tests. Valid values are openai, ollama, gemini, anthropic, and voyageai.
+        /// Default Cohere endpoint used when Cohere live tests are configured without an endpoint.
+        /// </summary>
+        public const string DefaultCohereEndpoint = "https://api.cohere.com";
+
+        /// <summary>
+        /// Default Text Embeddings Inference endpoint used when TEI live tests are configured without an endpoint.
+        /// </summary>
+        public const string DefaultTeiEndpoint = "http://localhost:8080";
+
+        /// <summary>
+        /// Provider type for live tests. Valid values are openai, ollama, gemini, anthropic, voyageai, cohere, and tei.
         /// </summary>
         public string ProviderType { get; set; } = string.Empty;
 
@@ -63,6 +73,12 @@ namespace Test.Shared
         public string? AnthropicWorkspaceId { get; set; }
 
         /// <summary>
+        /// Rerank model used by the live rerank test. Empty when the provider has no rerank model setting
+        /// (Text Embeddings Inference serves a single model) or no rerank API.
+        /// </summary>
+        public string RerankModel { get; set; } = string.Empty;
+
+        /// <summary>
         /// Creates live provider configuration from generic or provider-specific POLYPROMPT_TEST_* environment variables.
         /// </summary>
         /// <returns>A configuration when environment variables identify a provider; otherwise null.</returns>
@@ -74,12 +90,16 @@ namespace Test.Shared
 
             if (!string.IsNullOrWhiteSpace(provider))
             {
-                return CreateWithDefaults(
+                ProviderTestConfiguration generic = CreateWithDefaults(
                     provider,
                     endpoint,
                     Environment.GetEnvironmentVariable("POLYPROMPT_TEST_API_KEY"),
                     Environment.GetEnvironmentVariable("POLYPROMPT_TEST_MODEL"),
                     Environment.GetEnvironmentVariable("POLYPROMPT_TEST_EMBEDDING_MODEL"));
+
+                string? rerankModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_RERANK_MODEL");
+                if (!string.IsNullOrWhiteSpace(rerankModel)) generic.RerankModel = rerankModel;
+                return generic;
             }
 
             ProviderTestConfiguration? providerSpecific = FromProviderSpecificEnvironment();
@@ -141,12 +161,30 @@ namespace Test.Shared
                 || !string.IsNullOrWhiteSpace(voyageModel)
                 || !string.IsNullOrWhiteSpace(voyageEmbeddingModel);
 
+            string? cohereKey = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_COHERE_API_KEY");
+            string? cohereEndpoint = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_COHERE_ENDPOINT");
+            string? cohereModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_COHERE_MODEL");
+            string? cohereEmbeddingModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_COHERE_EMBEDDING_MODEL");
+            string? cohereRerankModel = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_COHERE_RERANK_MODEL");
+            bool hasCohere = !string.IsNullOrWhiteSpace(cohereKey)
+                || !string.IsNullOrWhiteSpace(cohereEndpoint)
+                || !string.IsNullOrWhiteSpace(cohereModel)
+                || !string.IsNullOrWhiteSpace(cohereEmbeddingModel)
+                || !string.IsNullOrWhiteSpace(cohereRerankModel);
+
+            string? teiKey = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_TEI_API_KEY");
+            string? teiEndpoint = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_TEI_ENDPOINT");
+            bool hasTei = !string.IsNullOrWhiteSpace(teiKey)
+                || !string.IsNullOrWhiteSpace(teiEndpoint);
+
             int providerCount = 0;
             if (hasOpenAi) providerCount++;
             if (hasOllama) providerCount++;
             if (hasGemini) providerCount++;
             if (hasAnthropic) providerCount++;
             if (hasVoyageAi) providerCount++;
+            if (hasCohere) providerCount++;
+            if (hasTei) providerCount++;
 
             if (providerCount == 0)
                 return null;
@@ -174,6 +212,18 @@ namespace Test.Shared
             if (hasVoyageAi)
             {
                 return CreateWithDefaults("voyageai", voyageEndpoint, voyageKey, voyageModel, voyageEmbeddingModel);
+            }
+
+            if (hasCohere)
+            {
+                ProviderTestConfiguration cohere = CreateWithDefaults("cohere", cohereEndpoint, cohereKey, cohereModel, cohereEmbeddingModel);
+                if (!string.IsNullOrWhiteSpace(cohereRerankModel)) cohere.RerankModel = cohereRerankModel;
+                return cohere;
+            }
+
+            if (hasTei)
+            {
+                return CreateWithDefaults("tei", teiEndpoint, teiKey, null, null);
             }
 
             return CreateWithDefaults("gemini", geminiEndpoint, geminiKey, geminiModel, geminiEmbeddingModel);
@@ -234,8 +284,31 @@ namespace Test.Shared
                 Endpoint = endpoint,
                 ApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey,
                 InferenceModel = string.IsNullOrWhiteSpace(inferenceModel) ? null : inferenceModel,
-                EmbeddingModel = string.IsNullOrWhiteSpace(embeddingModel) ? ResolveEmbeddingModelName(normalizedProvider) : embeddingModel!
+                EmbeddingModel = string.IsNullOrWhiteSpace(embeddingModel) ? ResolveEmbeddingModelName(normalizedProvider) : embeddingModel!,
+                RerankModel = ResolveRerankModelName(normalizedProvider)
             };
+        }
+
+        /// <summary>
+        /// Resolves the default rerank model for a provider.
+        /// </summary>
+        /// <param name="providerType">Provider type.</param>
+        /// <returns>The default rerank model, or empty when the provider has no rerank model setting.</returns>
+        /// <exception cref="ArgumentException">Thrown when the provider type is unsupported.</exception>
+        public static string ResolveRerankModelName(string providerType)
+        {
+            switch (providerType.ToLowerInvariant())
+            {
+                case "cohere": return "rerank-v3.5";
+                case "voyageai": return "rerank-2.5";
+                case "ollama":
+                case "openai":
+                case "gemini":
+                case "anthropic":
+                case "tei":
+                    return string.Empty;
+                default: throw new ArgumentException("Unknown provider type: " + providerType, nameof(providerType));
+            }
         }
 
         /// <summary>
@@ -253,6 +326,8 @@ namespace Test.Shared
                 case "gemini": return DefaultGeminiEndpoint;
                 case "anthropic": return DefaultAnthropicEndpoint;
                 case "voyageai": return DefaultVoyageAiEndpoint;
+                case "cohere": return DefaultCohereEndpoint;
+                case "tei": return DefaultTeiEndpoint;
                 default: throw new ArgumentException("Unknown provider type: " + providerType, nameof(providerType));
             }
         }
@@ -272,6 +347,8 @@ namespace Test.Shared
                 case "gemini": return "text-embedding-004";
                 case "anthropic": return string.Empty;
                 case "voyageai": return "voyage-3.5";
+                case "cohere": return "embed-v4.0";
+                case "tei": return "tei";
                 default: throw new ArgumentException("Unknown provider type: " + providerType, nameof(providerType));
             }
         }
@@ -282,8 +359,9 @@ namespace Test.Shared
                 throw new ArgumentException("Provider type is required.", nameof(providerType));
 
             string normalizedProvider = providerType.Trim().ToLowerInvariant();
-            if (normalizedProvider != "ollama" && normalizedProvider != "openai" && normalizedProvider != "gemini" && normalizedProvider != "anthropic" && normalizedProvider != "voyageai")
-                throw new ArgumentException("Provider type must be ollama, openai, gemini, anthropic, or voyageai.", nameof(providerType));
+            if (normalizedProvider != "ollama" && normalizedProvider != "openai" && normalizedProvider != "gemini" && normalizedProvider != "anthropic" && normalizedProvider != "voyageai"
+                && normalizedProvider != "cohere" && normalizedProvider != "tei")
+                throw new ArgumentException("Provider type must be ollama, openai, gemini, anthropic, voyageai, cohere, or tei.", nameof(providerType));
 
             return normalizedProvider;
         }

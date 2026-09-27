@@ -45,5 +45,24 @@ namespace Test.Shared
 
             throw new TestFailureException(message);
         }
+
+        public static async Task ThrowsExactAsync<TException>(Func<Task> action, string message)
+            where TException : Exception
+        {
+            try
+            {
+                await action().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex.GetType() == typeof(TException))
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                throw new TestFailureException(message + " Expected " + typeof(TException).Name + ", got " + ex.GetType().Name + ": " + ex.Message);
+            }
+
+            throw new TestFailureException(message + " No exception was thrown.");
+        }
     }
 }

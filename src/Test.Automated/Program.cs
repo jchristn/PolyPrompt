@@ -78,6 +78,7 @@ namespace Test.Automated
                 Console.WriteLine("API Key         : " + (string.IsNullOrEmpty(configuration.ApiKey) ? "(none)" : "(set)"));
                 Console.WriteLine("Inference model : " + (string.IsNullOrEmpty(configuration.InferenceModel) ? "(provider default)" : configuration.InferenceModel));
                 Console.WriteLine("Embedding model : " + configuration.EmbeddingModel);
+                Console.WriteLine("Rerank model    : " + (string.IsNullOrEmpty(configuration.RerankModel) ? "(provider default or n/a)" : configuration.RerankModel));
                 Console.WriteLine();
             }
             else if (args.Length > 0)
@@ -107,19 +108,25 @@ namespace Test.Automated
             if (!string.IsNullOrWhiteSpace(genericProvider))
             {
                 EnsureNoProviderSpecificOptions(options, genericProvider);
-                return ProviderTestConfiguration.CreateWithDefaults(
+                ProviderTestConfiguration generic = ProviderTestConfiguration.CreateWithDefaults(
                     genericProvider,
                     GetOption(options, "--endpoint"),
                     GetApiKeyOption(options),
                     GetOption(options, "--model"),
                     GetOption(options, "--embedding-model"));
+
+                string? rerankModel = GetOption(options, "--rerank-model");
+                if (rerankModel != null) generic.RerankModel = rerankModel;
+                return generic;
             }
 
             bool hasOpenAi = HasAnyOption(options, "--openai-key", "--openai-api-key", "--openai-endpoint", "--openai-model", "--openai-embedding-model");
             bool hasOllama = HasAnyOption(options, "--ollama-key", "--ollama-api-key", "--ollama-endpoint", "--ollama-model", "--ollama-embedding-model");
             bool hasGemini = HasAnyOption(options, "--gemini-key", "--gemini-api-key", "--gemini-endpoint", "--gemini-model", "--gemini-embedding-model");
             bool hasAnthropic = HasAnyOption(options, "--anthropic-key", "--anthropic-api-key", "--anthropic-endpoint", "--anthropic-model", "--anthropic-workspace");
-            bool hasVoyageAi = HasAnyOption(options, "--voyageai-key", "--voyageai-api-key", "--voyageai-endpoint", "--voyageai-model", "--voyageai-embedding-model");
+            bool hasVoyageAi = HasAnyOption(options, "--voyageai-key", "--voyageai-api-key", "--voyageai-endpoint", "--voyageai-model", "--voyageai-embedding-model", "--voyageai-rerank-model");
+            bool hasCohere = HasAnyOption(options, "--cohere-key", "--cohere-api-key", "--cohere-endpoint", "--cohere-model", "--cohere-embedding-model", "--cohere-rerank-model");
+            bool hasTei = HasAnyOption(options, "--tei-key", "--tei-api-key", "--tei-endpoint");
 
             int providerCount = 0;
             if (hasOpenAi) providerCount++;
@@ -127,6 +134,8 @@ namespace Test.Automated
             if (hasGemini) providerCount++;
             if (hasAnthropic) providerCount++;
             if (hasVoyageAi) providerCount++;
+            if (hasCohere) providerCount++;
+            if (hasTei) providerCount++;
 
             if (providerCount == 0) return null;
 
@@ -167,12 +176,40 @@ namespace Test.Automated
 
             if (hasVoyageAi)
             {
-                return ProviderTestConfiguration.CreateWithDefaults(
+                ProviderTestConfiguration voyage = ProviderTestConfiguration.CreateWithDefaults(
                     "voyageai",
                     GetOption(options, "--voyageai-endpoint"),
                     GetFirstOption(options, "--voyageai-key", "--voyageai-api-key"),
                     GetOption(options, "--voyageai-model"),
                     GetOption(options, "--voyageai-embedding-model"));
+
+                string? voyageRerankModel = GetOption(options, "--voyageai-rerank-model");
+                if (voyageRerankModel != null) voyage.RerankModel = voyageRerankModel;
+                return voyage;
+            }
+
+            if (hasCohere)
+            {
+                ProviderTestConfiguration cohere = ProviderTestConfiguration.CreateWithDefaults(
+                    "cohere",
+                    GetOption(options, "--cohere-endpoint"),
+                    GetFirstOption(options, "--cohere-key", "--cohere-api-key"),
+                    GetOption(options, "--cohere-model"),
+                    GetOption(options, "--cohere-embedding-model"));
+
+                string? cohereRerankModel = GetOption(options, "--cohere-rerank-model");
+                if (cohereRerankModel != null) cohere.RerankModel = cohereRerankModel;
+                return cohere;
+            }
+
+            if (hasTei)
+            {
+                return ProviderTestConfiguration.CreateWithDefaults(
+                    "tei",
+                    GetOption(options, "--tei-endpoint"),
+                    GetFirstOption(options, "--tei-key", "--tei-api-key"),
+                    null,
+                    null);
             }
 
             return ProviderTestConfiguration.CreateWithDefaults(
@@ -212,9 +249,11 @@ namespace Test.Automated
             bool hasOllama = HasAnyOption(options, "--ollama-key", "--ollama-api-key", "--ollama-endpoint", "--ollama-model", "--ollama-embedding-model");
             bool hasGemini = HasAnyOption(options, "--gemini-key", "--gemini-api-key", "--gemini-endpoint", "--gemini-model", "--gemini-embedding-model");
             bool hasAnthropic = HasAnyOption(options, "--anthropic-key", "--anthropic-api-key", "--anthropic-endpoint", "--anthropic-model", "--anthropic-workspace");
-            bool hasVoyageAi = HasAnyOption(options, "--voyageai-key", "--voyageai-api-key", "--voyageai-endpoint", "--voyageai-model", "--voyageai-embedding-model");
+            bool hasVoyageAi = HasAnyOption(options, "--voyageai-key", "--voyageai-api-key", "--voyageai-endpoint", "--voyageai-model", "--voyageai-embedding-model", "--voyageai-rerank-model");
+            bool hasCohere = HasAnyOption(options, "--cohere-key", "--cohere-api-key", "--cohere-endpoint", "--cohere-model", "--cohere-embedding-model", "--cohere-rerank-model");
+            bool hasTei = HasAnyOption(options, "--tei-key", "--tei-api-key", "--tei-endpoint");
 
-            if (hasOpenAi || hasOllama || hasGemini || hasAnthropic || hasVoyageAi)
+            if (hasOpenAi || hasOllama || hasGemini || hasAnthropic || hasVoyageAi || hasCohere || hasTei)
                 throw new ArgumentException("--provider cannot be combined with provider-specific options.");
 
             if (string.IsNullOrWhiteSpace(provider))
@@ -289,14 +328,17 @@ namespace Test.Automated
             Console.WriteLine("  --ollama-endpoint <url> [--ollama-key <key>] [--ollama-model <model>] [--ollama-embedding-model <model>]");
             Console.WriteLine("  --gemini-key <key> [--gemini-endpoint <url>] [--gemini-model <model>] [--gemini-embedding-model <model>]");
             Console.WriteLine("  --anthropic-key <key> [--anthropic-endpoint <url>] [--anthropic-model <model>] [--anthropic-workspace <id>]");
-            Console.WriteLine("  --voyageai-key <key> [--voyageai-endpoint <url>] [--voyageai-embedding-model <model>]");
-            Console.WriteLine("  --provider <ollama|openai|gemini|anthropic|voyageai> [--endpoint <url>] [--key <key>] [--model <model>] [--embedding-model <model>]");
+            Console.WriteLine("  --voyageai-key <key> [--voyageai-endpoint <url>] [--voyageai-embedding-model <model>] [--voyageai-rerank-model <model>]");
+            Console.WriteLine("  --cohere-key <key> [--cohere-endpoint <url>] [--cohere-model <model>] [--cohere-embedding-model <model>] [--cohere-rerank-model <model>]");
+            Console.WriteLine("  --tei-endpoint <url> [--tei-key <key>]");
+            Console.WriteLine("  --provider <ollama|openai|gemini|anthropic|voyageai|cohere|tei> [--endpoint <url>] [--key <key>] [--model <model>] [--embedding-model <model>] [--rerank-model <model>]");
             Console.WriteLine();
-            Console.WriteLine("  provider        : ollama | openai | gemini | anthropic | voyageai");
-            Console.WriteLine("  endpoint        : Provider API endpoint URL. OpenAI, Gemini, Anthropic, and VoyageAI default to their public APIs.");
-            Console.WriteLine("  apikey          : API key (optional for Ollama)");
-            Console.WriteLine("  model           : Inference model override (optional, uses provider default; VoyageAI is embeddings-only)");
-            Console.WriteLine("  embedding-model : Embedding model override (optional; Anthropic has no embeddings API)");
+            Console.WriteLine("  provider        : ollama | openai | gemini | anthropic | voyageai | cohere | tei");
+            Console.WriteLine("  endpoint        : Provider API endpoint URL. OpenAI, Gemini, Anthropic, VoyageAI, and Cohere default to their public APIs; TEI defaults to http://localhost:8080.");
+            Console.WriteLine("  apikey          : API key (optional for Ollama and TEI)");
+            Console.WriteLine("  model           : Inference model override (optional, uses provider default; VoyageAI and TEI have no chat API)");
+            Console.WriteLine("  embedding-model : Embedding model override (optional; Anthropic has no embeddings API; TEI serves one model)");
+            Console.WriteLine("  rerank-model    : Rerank model override (optional; Cohere and VoyageAI only)");
             Console.WriteLine();
             Console.WriteLine("Environment variables:");
             Console.WriteLine("  POLYPROMPT_TEST_PROVIDER");
@@ -304,11 +346,14 @@ namespace Test.Automated
             Console.WriteLine("  POLYPROMPT_TEST_API_KEY");
             Console.WriteLine("  POLYPROMPT_TEST_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_EMBEDDING_MODEL");
+            Console.WriteLine("  POLYPROMPT_TEST_RERANK_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_OPENAI_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_OLLAMA_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_GEMINI_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
             Console.WriteLine("  POLYPROMPT_TEST_ANTHROPIC_API_KEY / ENDPOINT / MODEL / WORKSPACE_ID");
             Console.WriteLine("  POLYPROMPT_TEST_VOYAGEAI_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL");
+            Console.WriteLine("  POLYPROMPT_TEST_COHERE_API_KEY / ENDPOINT / MODEL / EMBEDDING_MODEL / RERANK_MODEL");
+            Console.WriteLine("  POLYPROMPT_TEST_TEI_API_KEY / ENDPOINT");
             Console.WriteLine();
             Console.WriteLine("Examples:");
             Console.WriteLine("  Test.Automated selftest");
@@ -317,6 +362,8 @@ namespace Test.Automated
             Console.WriteLine("  Test.Automated --gemini-key AIza... --gemini-model gemini-2.5-flash");
             Console.WriteLine("  Test.Automated --anthropic-key sk-ant-... --anthropic-model claude-opus-4-8");
             Console.WriteLine("  Test.Automated --voyageai-key pa-... --voyageai-embedding-model voyage-3.5");
+            Console.WriteLine("  Test.Automated --cohere-key co-... --cohere-model command-a-03-2025");
+            Console.WriteLine("  Test.Automated --tei-endpoint http://localhost:8080");
             Console.WriteLine("  Test.Automated ollama http://localhost:11434 \"\" gemma3:4b all-minilm");
         }
     }

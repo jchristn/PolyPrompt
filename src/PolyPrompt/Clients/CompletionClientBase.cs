@@ -474,6 +474,116 @@ namespace PolyPrompt.Clients
         public abstract Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default);
 
         /// <summary>
+        /// Score a list of documents for relevance to a query and return them highest score first.
+        /// Not all providers support reranking; the default implementation throws NotSupportedException
+        /// without making a network call. Supported by Cohere, Text Embeddings Inference, VoyageAI, and
+        /// Bedrock.
+        /// </summary>
+        /// <param name="query">The query to score documents against. Cannot be null, empty, or whitespace.</param>
+        /// <param name="documents">The documents to score. Cannot be null or empty, and no element can be null.</param>
+        /// <param name="options">Optional per-call overrides. TopN, when set, cannot exceed the number of documents.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A RerankResponse whose Results are sorted by score, highest first.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the provider does not support reranking.</exception>
+        /// <exception cref="ArgumentNullException">Thrown by supporting providers when query or documents is null.</exception>
+        /// <exception cref="ArgumentException">Thrown by supporting providers when query is empty or whitespace, documents is empty, or a document is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown by supporting providers when TopN exceeds the number of documents.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public virtual Task<RerankResponse> RerankAsync(
+            string query,
+            List<string> documents,
+            RerankOptions? options = null,
+            CancellationToken token = default)
+        {
+            throw new NotSupportedException("This provider does not support reranking.");
+        }
+
+        /// <summary>
+        /// Classify a single input string. Delegates to the batch overload.
+        /// Not all providers support classification; the default batch implementation throws
+        /// NotSupportedException without making a network call. Supported by Cohere and Text Embeddings
+        /// Inference.
+        /// </summary>
+        /// <param name="input">The text to classify. Cannot be null.</param>
+        /// <param name="options">Optional per-call overrides.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ClassificationResponse with one result.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the provider does not support classification.</exception>
+        /// <exception cref="ArgumentException">Thrown by supporting providers when input is null.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public virtual Task<ClassificationResponse> ClassifyAsync(
+            string input,
+            ClassificationOptions? options = null,
+            CancellationToken token = default)
+        {
+            return ClassifyAsync(new List<string> { input }, options, token);
+        }
+
+        /// <summary>
+        /// Classify a batch of input strings, returning one result per input in input order.
+        /// Not all providers support classification; the default implementation throws NotSupportedException
+        /// without making a network call. Supported by Cohere and Text Embeddings Inference.
+        /// </summary>
+        /// <param name="inputs">The texts to classify. Cannot be null or empty, and no element can be null.</param>
+        /// <param name="options">Optional per-call overrides.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ClassificationResponse with one result per input.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the provider does not support classification.</exception>
+        /// <exception cref="ArgumentNullException">Thrown by supporting providers when inputs is null.</exception>
+        /// <exception cref="ArgumentException">Thrown by supporting providers when inputs is empty or contains a null element.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public virtual Task<ClassificationResponse> ClassifyAsync(
+            List<string> inputs,
+            ClassificationOptions? options = null,
+            CancellationToken token = default)
+        {
+            throw new NotSupportedException("This provider does not support classification.");
+        }
+
+        /// <summary>
+        /// Generate a sparse embedding for a single input string. Delegates to the batch overload.
+        /// Not all providers support sparse embeddings; the default batch implementation throws
+        /// NotSupportedException without making a network call. Supported by Text Embeddings Inference
+        /// when it serves a SPLADE-style model.
+        /// </summary>
+        /// <param name="input">The text to embed. Cannot be null.</param>
+        /// <param name="options">Optional per-call overrides.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A SparseEmbeddingResponse with one sparse vector.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the provider does not support sparse embeddings.</exception>
+        /// <exception cref="ArgumentException">Thrown by supporting providers when input is null.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public virtual Task<SparseEmbeddingResponse> EmbedSparseAsync(
+            string input,
+            SparseEmbeddingOptions? options = null,
+            CancellationToken token = default)
+        {
+            return EmbedSparseAsync(new List<string> { input }, options, token);
+        }
+
+        /// <summary>
+        /// Generate sparse embeddings for a batch of input strings, one per input in input order.
+        /// Not all providers support sparse embeddings; the default implementation throws
+        /// NotSupportedException without making a network call. Supported by Text Embeddings Inference
+        /// when it serves a SPLADE-style model.
+        /// </summary>
+        /// <param name="inputs">The texts to embed. Cannot be null or empty, and no element can be null.</param>
+        /// <param name="options">Optional per-call overrides.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A SparseEmbeddingResponse with one sparse vector per input.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the provider does not support sparse embeddings.</exception>
+        /// <exception cref="ArgumentNullException">Thrown by supporting providers when inputs is null.</exception>
+        /// <exception cref="ArgumentException">Thrown by supporting providers when inputs is empty or contains a null element.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled.</exception>
+        public virtual Task<SparseEmbeddingResponse> EmbedSparseAsync(
+            List<string> inputs,
+            SparseEmbeddingOptions? options = null,
+            CancellationToken token = default)
+        {
+            throw new NotSupportedException("This provider does not support sparse embeddings.");
+        }
+
+        /// <summary>
         /// Dispose of HTTP client resources.
         /// </summary>
         public void Dispose()
@@ -1239,6 +1349,113 @@ namespace PolyPrompt.Clients
         protected static string? NormalizeReasoning(string? value)
         {
             return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+
+        /// <summary>
+        /// Validate the arguments of a rerank request. Supporting providers call this before building a
+        /// request so every provider rejects bad input identically.
+        /// </summary>
+        /// <param name="query">The query.</param>
+        /// <param name="documents">The documents.</param>
+        /// <param name="options">Optional rerank options.</param>
+        /// <exception cref="ArgumentNullException">Thrown when query or documents is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when query is empty or whitespace, documents is empty, or a document is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when options.TopN exceeds the number of documents.</exception>
+        protected static void ValidateRerankArguments(string query, List<string> documents, RerankOptions? options)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (string.IsNullOrWhiteSpace(query))
+                throw new ArgumentException("Rerank query cannot be empty or whitespace.", nameof(query));
+
+            ValidateInputList(documents, nameof(documents), "Rerank requests require at least one document.");
+
+            if (options?.TopN != null && options.TopN.Value > documents.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(options),
+                    options.TopN.Value,
+                    "TopN (" + options.TopN.Value + ") cannot exceed the number of documents (" + documents.Count + ").");
+            }
+        }
+
+        /// <summary>
+        /// Validate a list of inputs for a batch request (classification, sparse embeddings, rerank documents).
+        /// </summary>
+        /// <param name="inputs">The input list.</param>
+        /// <param name="parameterName">Parameter name reported in exceptions.</param>
+        /// <param name="emptyMessage">Message used when the list is empty.</param>
+        /// <exception cref="ArgumentNullException">Thrown when inputs is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when inputs is empty or contains a null element.</exception>
+        protected static void ValidateInputList(List<string> inputs, string parameterName, string emptyMessage)
+        {
+            if (inputs == null) throw new ArgumentNullException(parameterName);
+            if (inputs.Count == 0) throw new ArgumentException(emptyMessage, parameterName);
+
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                if (inputs[i] == null)
+                    throw new ArgumentException(parameterName + "[" + i + "] cannot be null.", parameterName);
+            }
+        }
+
+        /// <summary>
+        /// Normalize rerank results: drop results whose index does not refer to an input document, sort by
+        /// score (highest first, ties broken by index), trim to TopN, and attach document text when
+        /// requested. Providers call this after parsing so ordering and trimming behave identically.
+        /// </summary>
+        /// <param name="response">The response whose Results are normalized in place.</param>
+        /// <param name="documents">The caller's documents.</param>
+        /// <param name="options">Optional rerank options.</param>
+        protected static void FinalizeRerankResults(RerankResponse response, List<string> documents, RerankOptions? options)
+        {
+            List<RerankResult> ordered = response.Results
+                .Where(r => r.Index >= 0 && r.Index < documents.Count)
+                .OrderByDescending(r => r.Score)
+                .ThenBy(r => r.Index)
+                .ToList();
+
+            if (options?.TopN != null && ordered.Count > options.TopN.Value)
+            {
+                ordered = ordered.Take(options.TopN.Value).ToList();
+            }
+
+            bool returnDocuments = options?.ReturnDocuments ?? false;
+            foreach (RerankResult result in ordered)
+            {
+                result.Document = returnDocuments ? documents[result.Index] : null;
+            }
+
+            response.Results = ordered;
+        }
+
+        /// <summary>
+        /// Try to parse a double from a dictionary value using the invariant culture.
+        /// </summary>
+        /// <param name="dict">The dictionary.</param>
+        /// <param name="key">The key to look up.</param>
+        /// <returns>The double value or null.</returns>
+        protected double? TryGetDouble(Dictionary<string, object> dict, string key)
+        {
+            if (dict == null || !dict.ContainsKey(key)) return null;
+            string? val = dict[key]?.ToString();
+            if (double.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double result))
+                return result;
+            return null;
+        }
+
+        /// <summary>
+        /// Try to parse an integer from a dictionary value that may be serialized as a floating point number
+        /// (for example <c>71.0</c>). The value is rounded to the nearest integer.
+        /// </summary>
+        /// <param name="dict">The dictionary.</param>
+        /// <param name="key">The key to look up.</param>
+        /// <returns>The rounded integer value or null.</returns>
+        protected int? TryGetRoundedInt(Dictionary<string, object> dict, string key)
+        {
+            double? value = TryGetDouble(dict, key);
+            if (!value.HasValue) return null;
+            if (value.Value > int.MaxValue || value.Value < int.MinValue) return null;
+            return (int)Math.Round(value.Value);
         }
 
         /// <summary>

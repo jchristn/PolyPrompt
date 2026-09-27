@@ -6,27 +6,31 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, and **VoyageAI** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, and **Hugging Face Text Embeddings Inference (TEI)** APIs. Write your LLM integration code once and swap providers without changing your application logic.
 
-| Provider | Client | Auth | Chat / Tools / Streaming | Reasoning | Embeddings |
-|---|---|---|---|---|---|
-| Ollama | `OllamaClient` | none / bearer | ✅ | ✅ | ✅ |
-| OpenAI (+ compatible) | `OpenAiClient` | bearer | ✅ | ✅ | ✅ |
-| Azure OpenAI | `AzureOpenAiClient` | `api-key` or Azure AD | ✅ | ✅ | ✅ |
-| Google Gemini (AI Studio) | `GeminiClient` | API key | ✅ | ✅ | ✅ |
-| Google Vertex AI | `VertexAiClient` | OAuth (ADC / service account) | ✅ | ✅ | ✅ (`:predict`) |
-| Anthropic Claude | `AnthropicClient` | `x-api-key` | ✅ | ✅ | ❌ |
-| AWS Bedrock | `BedrockClient` | SigV4 | ✅ (Converse) | ✅ | ✅ (Titan / Cohere) |
-| VoyageAI | `VoyageAiClient` | bearer | ❌ | ❌ | ✅ |
+| Provider | Client | Auth | Chat / Tools / Streaming | Reasoning | Embeddings | Rerank | Classify |
+|---|---|---|---|---|---|---|---|
+| Ollama | `OllamaClient` | none / bearer | ✅ | ✅ | ✅ | ❌ | ❌ |
+| OpenAI (+ compatible) | `OpenAiClient` | bearer | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Azure OpenAI | `AzureOpenAiClient` | `api-key` or Azure AD | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Google Gemini (AI Studio) | `GeminiClient` | API key | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Google Vertex AI | `VertexAiClient` | OAuth (ADC / service account) | ✅ | ✅ | ✅ (`:predict`) | ❌ | ❌ |
+| Anthropic Claude | `AnthropicClient` | `x-api-key` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| AWS Bedrock | `BedrockClient` | SigV4 | ✅ (Converse) | ✅ | ✅ (Titan / Cohere) | ✅ (Cohere / Amazon) | ❌ |
+| VoyageAI | `VoyageAiClient` | bearer | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Cohere | `CohereClient` | bearer | ✅ (v2 Chat) | ✅ | ✅ | ✅ | ✅ |
+| Hugging Face TEI | `TeiClient` | none / bearer | ❌ | ❌ | ✅ (+ sparse) | ✅ | ✅ |
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning eight different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability — VoyageAI is embeddings-only, and Anthropic has no embeddings API — so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library (two package dependencies total).
+PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning ten different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability (VoyageAI and TEI have no chat API, Anthropic has no embeddings API, and only Cohere, TEI, VoyageAI, and Bedrock can rerank), so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library (two package dependencies total).
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
 - **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
 - **Text Generation** - Streaming and non-streaming text generation (completion-style)
-- **Embeddings** - Single and batch embedding vector generation for semantic search and RAG
+- **Embeddings** - Single and batch embedding vector generation for semantic search and RAG, plus sparse (SPLADE) embeddings on TEI
+- **Reranking** - Score candidate documents against a query with a cross-encoder and get them back highest score first (Cohere, TEI, VoyageAI, Bedrock)
+- **Classification** - Label texts with a classification model or few-shot examples (Cohere, TEI)
 - **Model Management** - List models, check existence, get model details, pull, and delete
 - **Connectivity Validation** - Verify provider reachability before running workloads
 - **Timing & Usage Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput, plus provider-reported token usage (prompt/completion/total, and cached-prompt/cache-creation/reasoning tokens where reported) on both streaming and non-streaming responses when the provider returns it
@@ -41,7 +45,8 @@ PolyPrompt is a good fit when you need to:
 - **Add tool-backed workflows** - Let models request application functions while your code stays in charge of tool execution
 - **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, Gemini, and Anthropic to evaluate quality, latency, and cost
 - **Prototype rapidly** - Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
-- **Build RAG pipelines** - Generate embeddings for document chunks using Ollama, OpenAI, Gemini, or purpose-built VoyageAI embedding models (with retrieval-role `input_type` hints and Matryoshka output dimensions), then query with semantic search
+- **Build RAG pipelines** - Generate embeddings for document chunks using Ollama, OpenAI, Gemini, Cohere, a self-hosted TEI server, or purpose-built VoyageAI embedding models (with retrieval-role `input_type` hints and Matryoshka output dimensions), query with semantic search, then rerank the candidates with Cohere, TEI, VoyageAI, or Bedrock before sending the best ones to the model
+- **Self-host retrieval models** - Run embedding, reranker, and classifier models on your own hardware with Hugging Face Text Embeddings Inference and call them through the same interface as the hosted providers
 - **Create AI-powered CLI tools** - The simple API makes it easy to add LLM capabilities to command-line applications
 - **Manage local model infrastructure** - Pull, list, inspect, and delete Ollama models programmatically
 - **Monitor LLM performance** - Use built-in timing metrics and call recording to track latency, throughput, and errors in production
@@ -63,7 +68,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.5.0**.
+Current documented package version: **2.7.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -163,7 +168,53 @@ if (response.Success && response.Embeddings.Count > 0)
 }
 ```
 
-VoyageAI is an embeddings-only provider: chat, tool calling, generation, and model management throw `NotSupportedException`, and `ValidateConnectivityAsync` probes with a minimal embeddings request because VoyageAI has no model listing endpoint.
+VoyageAI is an embeddings and reranking provider: chat, tool calling, generation, and model management throw `NotSupportedException`, and `ValidateConnectivityAsync` probes with a minimal embeddings request because VoyageAI has no model listing endpoint. Reranking uses `client.RerankModel` (default `rerank-2.5`); see [Reranking](#reranking).
+
+### Cohere
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+using PolyPrompt.Options;
+
+using CohereClient client = new CohereClient("https://api.cohere.com", "your-cohere-key");
+client.Model = "command-a-03-2025";      // chat, tool chat, and generation
+client.EmbeddingModel = "embed-v4.0";    // EmbedAsync
+client.RerankModel = "rerank-v3.5";      // RerankAsync
+
+ChatResponse chat = await client.ChatAsync("What is the capital of France?");
+Console.WriteLine(chat.Text);
+
+CohereEmbeddingOptions embedOptions = new CohereEmbeddingOptions();
+embedOptions.InputType = "search_query";  // search_document (default), search_query, classification, clustering
+EmbeddingResponse embedding = await client.EmbedAsync("capital of France", embedOptions);
+```
+
+Cohere serves chat, embeddings, reranking, and classification from different model families, so `CohereClient` has a separate default model for each. Chat, tool chat, and streaming use the v2 Chat API; text generation is sent as a single-turn v2 chat because Cohere retired its legacy generate endpoint. Cohere requires `input_type` for its v3 and later embedding models, so `search_document` is sent when you do not set one.
+
+### Hugging Face Text Embeddings Inference (TEI)
+
+[Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference) is a self-hosted server for embedding, reranker, and classifier models. Each server hosts exactly one model:
+
+```bash
+docker run -p 8080:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id BAAI/bge-small-en-v1.5
+```
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using TeiClient client = new TeiClient("http://localhost:8080");   // API key only if the server uses --api-key
+
+EmbeddingResponse embedding = await client.EmbedAsync("The quick brown fox.");
+
+await foreach (ModelInformation model in client.ListModelsAsync())
+{
+    Console.WriteLine(model.Name + " (" + model.Metadata["model_type"] + ")");   // embedding, reranker, or classifier
+}
+```
+
+`TeiClient` supports dense embeddings (`/embed`), sparse embeddings (`/embed_sparse`), reranking (`/rerank`), classification (`/predict`), model information (`/info`), and connectivity validation (`/health`). Which operations succeed depends on the hosted model: for example, calling `EmbedAsync` against a reranker returns an unsuccessful response carrying TEI's HTTP 424 error. The `Model` property and per-request model overrides are informational because the server decides the model. Chat and generation belong to Hugging Face Text Generation Inference, which is OpenAI-compatible and works with `OpenAiClient`; on `TeiClient` they throw `NotSupportedException`.
 
 ### Azure OpenAI
 
@@ -238,13 +289,16 @@ Console.WriteLine(response.Text);
 // Embeddings (Amazon Titan or Cohere), selected by the model id:
 // var embed = await client.EmbedAsync("The quick brown fox.",
 //     new EmbeddingOptions { Model = "amazon.titan-embed-text-v2:0" });
+
+// Reranking through InvokeModel (default client.RerankModel is cohere.rerank-v3-5:0):
+// var ranked = await client.RerankAsync("capital of France", documents);
 ```
 
-Chat, tools, streaming (over the AWS binary event-stream), reasoning (Anthropic extended thinking), and embeddings are all supported; see the [feature matrix](#provider-feature-support).
+Chat, tools, streaming (over the AWS binary event-stream), reasoning (Anthropic extended thinking), embeddings, and reranking (Cohere Rerank or Amazon Rerank) are all supported; see the [feature matrix](#provider-feature-support).
 
 ## Authentication
 
-Most providers authenticate with a single static credential passed to the constructor (a bearer key for OpenAI/Ollama/VoyageAI, an `x-api-key` for Anthropic, an API key in the query string for Gemini). Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, all implemented in-library under `PolyPrompt.Auth` with no provider SDK:
+Most providers authenticate with a single static credential passed to the constructor (a bearer key for OpenAI/Ollama/VoyageAI/Cohere, an optional bearer key for TEI servers started with `--api-key`, an `x-api-key` for Anthropic, an API key in the query string for Gemini). Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, all implemented in-library under `PolyPrompt.Auth` with no provider SDK:
 
 - **Azure OpenAI** — an `api-key` header (pass the key string) or an Azure AD bearer token (pass an `ICredentialProvider`, e.g. `new StaticTokenCredential(token)`), refreshed per request.
 - **Vertex AI** — a short-lived OAuth token via `ICredentialProvider`: `AdcCredential` (Application Default Credentials: `GOOGLE_APPLICATION_CREDENTIALS` key file or the GCE/Cloud Run metadata server), `ServiceAccountCredential.FromJson(...)` (RS256 JWT assertion → token exchange), or `StaticTokenCredential` (e.g. `gcloud auth print-access-token`). Tokens are cached and refreshed ahead of expiry.
@@ -477,6 +531,7 @@ What each provider reports, and one **cross-provider semantic** that matters for
 | Anthropic | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
 | Bedrock | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
 | Ollama | — | — | — (thinking is text only) | n/a |
+| Cohere | yes (`cached_tokens`) | no | no (thinking billed as output) | subset of `PromptTokens` |
 
 On OpenAI, Azure, Gemini, and Vertex, `CachedPromptTokens` is already included in `PromptTokens`. On Anthropic and Bedrock, `PromptTokens` counts only the uncached input, and the cache buckets are additional — so full input is `PromptTokens + CachedPromptTokens + CacheCreationTokens`. `PromptTokens` keeps its provider-native meaning; no previously returned value changed with this addition.
 
@@ -551,6 +606,89 @@ if (response.Success)
     {
         Console.WriteLine("Document " + i + ": " + response.Embeddings[i].Embedding.Length + " dimensions");
     }
+}
+```
+
+### Reranking
+
+`RerankAsync` scores each document against a query and returns the results sorted by score, highest first. Each result's `Index` points back into the list you passed in. The same call works on every provider that supports reranking:
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using CompletionClientBase client = new CohereClient("https://api.cohere.com", "your-cohere-key");
+// or: new TeiClient("http://localhost:8080")   (a server hosting a reranker, e.g. BAAI/bge-reranker-base)
+// or: new VoyageAiClient("https://api.voyageai.com", "pa-your-key")
+// or: new BedrockClient(new EnvironmentAwsCredential(), "us-east-1")
+
+List<string> documents = new List<string>
+{
+    "The Great Wall of China is thousands of kilometers long.",
+    "Photosynthesis converts light into chemical energy in plants.",
+    "Paris is the capital and largest city of France."
+};
+
+RerankOptions options = new RerankOptions();
+options.TopN = 2;                 // optional; must not exceed documents.Count
+options.ReturnDocuments = true;   // attach each document's text to its result
+
+RerankResponse response = await client.RerankAsync("What is the capital of France?", documents, options);
+if (response.Success)
+{
+    foreach (RerankResult result in response.Results)
+    {
+        Console.WriteLine("[" + result.Index + "] " + result.Score.ToString("F4") + " " + result.Document);
+    }
+}
+```
+
+Things to know about reranking:
+
+- **Invalid arguments throw.** A null query or document list throws `ArgumentNullException`; an empty or whitespace query, an empty document list, or a null document throws `ArgumentException`; and `TopN` larger than the number of documents throws `ArgumentOutOfRangeException` (setting `TopN` below 1 throws immediately). This is checked before any request is sent and is identical on every provider.
+- **HTTP errors do not throw.** As with the other operations, a provider error returns `Success = false` with `StatusCode` and `Error` set.
+- **Scores are provider-specific.** Cohere, VoyageAI, and Bedrock return a normalized 0..1 relevance; TEI returns a sigmoid 0..1 score by default or raw logits with `TeiRerankOptions.RawScores = true`. Compare scores within one provider, not across providers.
+- **TopN.** Cohere and Bedrock send it as `top_n` and VoyageAI as `top_k`. TEI has no such parameter, so every document is scored and the list is trimmed client-side.
+- **Document text** is attached from your own list by index, so `ReturnDocuments` never requests extra data from the provider.
+- **Usage.** `RerankResponse.TotalTokens` is populated by Cohere (input tokens) and VoyageAI (total tokens); `SearchUnits` is populated by Cohere.
+
+### Classification
+
+`ClassifyAsync` returns one result per input, in input order, with the top label and every scored label (highest first):
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+using PolyPrompt.Options;
+
+// TEI: the server hosts a sequence classification model (or a reranker, which scores a single label).
+using TeiClient tei = new TeiClient("http://localhost:8080");
+ClassificationResponse teiResult = await tei.ClassifyAsync(new List<string> { "I love this!", "This is terrible." });
+
+// Cohere: few-shot examples (at least 2 per label), or set ClassificationModel to a fine-tuned model.
+using CohereClient cohere = new CohereClient("https://api.cohere.com", "your-cohere-key");
+CohereClassificationOptions options = new CohereClassificationOptions();
+options.Examples.Add(new ClassificationExample("I love it", "positive"));
+options.Examples.Add(new ClassificationExample("This is fantastic", "positive"));
+options.Examples.Add(new ClassificationExample("I hate it", "negative"));
+options.Examples.Add(new ClassificationExample("This is awful", "negative"));
+
+ClassificationResponse cohereResult = await cohere.ClassifyAsync("The service was great", options);
+Console.WriteLine(cohereResult.Classifications[0].Label + " " + cohereResult.Classifications[0].Score);
+```
+
+TEI inputs are always sent in its batch form (each input wrapped in its own array) so that two inputs are never interpreted as a single text pair.
+
+### Sparse Embeddings (TEI)
+
+A TEI server hosting a SPLADE-style model returns sparse vectors through `EmbedSparseAsync`:
+
+```csharp
+using TeiClient client = new TeiClient("http://localhost:8080");
+SparseEmbeddingResponse response = await client.EmbedSparseAsync(new List<string> { "sparse retrieval" });
+foreach (SparseValue value in response.Embeddings[0].Values)
+{
+    Console.WriteLine(value.Index + ": " + value.Value);
 }
 ```
 
@@ -800,7 +938,11 @@ CompletionClientBase CreateClient(string provider, string endpoint, string? apiK
         case "anthropic":
             return new AnthropicClient(endpoint, apiKey);
         case "voyageai":
-            return new VoyageAiClient(endpoint, apiKey); // embeddings only
+            return new VoyageAiClient(endpoint, apiKey); // embeddings and reranking
+        case "cohere":
+            return new CohereClient(endpoint, apiKey);
+        case "tei":
+            return new TeiClient(endpoint, apiKey);      // embeddings, reranking, classification
         default:
             throw new ArgumentException("Unknown provider: " + provider);
     }
@@ -823,7 +965,7 @@ await foreach (ModelInformation model in client.ListModelsAsync())
 
 ### Constructors
 
-The single-key clients (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`) share a constructor with the same optional parameters, all with provider-appropriate defaults:
+The single-key clients (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`, `CohereClient`, `TeiClient`) share a constructor with the same optional parameters, all with provider-appropriate defaults:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -860,6 +1002,8 @@ Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`Environme
 
 `AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000). `AzureOpenAiClient` adds `ApiVersion` (the `api-version` query value, default `2024-10-21`).
 
+`CohereClient` adds `EmbeddingModel` (default `embed-v4.0`), `RerankModel` (default `rerank-v3.5`), `ClassificationModel` (default null, which lets Cohere pick its default model for few-shot examples), and `ModelsPageSize` (1..1,000, default 1,000). `VoyageAiClient` adds `RerankModel` (default `rerank-2.5`), and `BedrockClient` adds `RerankModel` (default `cohere.rerank-v3-5:0`; `amazon.rerank-v1:0` also works). `TeiClient` has no extra properties because the server decides the model.
+
 ### Client Methods
 
 | Method | Description |
@@ -872,6 +1016,9 @@ Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`Environme
 | `EmbedAsync(List<string>)` | Generate embeddings for a batch of texts |
 | `GenerateAsync` | Non-streaming text generation |
 | `GenerateStreamingAsync` | Streaming text generation with timing metrics |
+| `RerankAsync(query, documents)` | Score documents against a query, highest score first (Cohere, TEI, VoyageAI, Bedrock) |
+| `ClassifyAsync(string)` / `ClassifyAsync(List<string>)` | Classify one or more texts (Cohere, TEI) |
+| `EmbedSparseAsync(string)` / `EmbedSparseAsync(List<string>)` | Generate sparse embeddings (TEI with a SPLADE model) |
 | `ListModelsAsync` | List available models (returns `IAsyncEnumerable<ModelInformation>`) |
 | `ModelExistsAsync` | Check if a specific model exists |
 | `GetModelInformationAsync` | Get detailed information about a model |
@@ -900,16 +1047,20 @@ Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`Environme
 
 Each provider exposes option classes that extend the base options with provider-specific parameters:
 
-| Provider | Chat Options | Embedding Options | Generation Options |
-|----------|-------------|-------------------|-------------------|
-| **Ollama** | `OllamaChatCompletionOptions` | `OllamaEmbeddingOptions` | `OllamaGenerationOptions` |
-| **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` |
-| **Azure OpenAI** | `AzureOpenAiChatCompletionOptions` | `AzureOpenAiEmbeddingOptions` | (OpenAI generation options) |
-| **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` |
-| **Vertex AI** | (Gemini chat options) | `VertexAiEmbeddingOptions` | (Gemini generation options) |
-| **Anthropic** | `AnthropicChatCompletionOptions` | — (embeddings unsupported) | `AnthropicGenerationOptions` |
-| **Bedrock** | (base chat options) | `BedrockEmbeddingOptions` | (base generation options) |
-| **VoyageAI** | — (chat unsupported) | `VoyageAiEmbeddingOptions` | — (generation unsupported) |
+| Provider | Chat Options | Embedding Options | Generation Options | Rerank / Classify / Sparse Options |
+|----------|-------------|-------------------|-------------------|------------------------------------|
+| **Ollama** | `OllamaChatCompletionOptions` | `OllamaEmbeddingOptions` | `OllamaGenerationOptions` | (unsupported) |
+| **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` | (unsupported) |
+| **Azure OpenAI** | `AzureOpenAiChatCompletionOptions` | `AzureOpenAiEmbeddingOptions` | (OpenAI generation options) | (unsupported) |
+| **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` | (unsupported) |
+| **Vertex AI** | (Gemini chat options) | `VertexAiEmbeddingOptions` | (Gemini generation options) | (unsupported) |
+| **Anthropic** | `AnthropicChatCompletionOptions` | (embeddings unsupported) | `AnthropicGenerationOptions` | (unsupported) |
+| **Bedrock** | (base chat options) | `BedrockEmbeddingOptions` | (base generation options) | `BedrockRerankOptions` |
+| **VoyageAI** | (chat unsupported) | `VoyageAiEmbeddingOptions` | (generation unsupported) | `VoyageAiRerankOptions` |
+| **Cohere** | `CohereChatCompletionOptions` | `CohereEmbeddingOptions` | `CohereGenerationOptions` | `CohereRerankOptions`, `CohereClassificationOptions` |
+| **TEI** | (chat unsupported) | `TeiEmbeddingOptions` | (generation unsupported) | `TeiRerankOptions`, `TeiClassificationOptions`, `TeiSparseEmbeddingOptions` |
+
+The base option types for the new operations are `RerankOptions` (`Model`, `TopN`, `ReturnDocuments`), `ClassificationOptions` (`Model`), and `SparseEmbeddingOptions` (`Model`).
 
 **Ollama-specific parameters:** `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`
 
@@ -921,38 +1072,53 @@ Each provider exposes option classes that extend the base options with provider-
 
 **Bedrock-specific parameters:** `BedrockEmbeddingOptions` exposes `InputType` (Cohere), `Dimensions` and `Normalize` (Amazon Titan v2). Reasoning maps to Converse extended thinking via `ReasoningEffort.BedrockThinkingBudget` / `ToBedrockThinkingBudget()`.
 
-**VoyageAI-specific parameters:** `InputType` (`query`/`document` retrieval-role hint), `Truncation`, `OutputDimension` (256/512/1024/2048 on Matryoshka-capable models), `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`)
+**VoyageAI-specific parameters:** `InputType` (`query`/`document` retrieval-role hint), `Truncation`, `OutputDimension` (256/512/1024/2048 on Matryoshka-capable models), `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`). `VoyageAiRerankOptions` adds `Truncation`.
+
+**Bedrock rerank parameters:** `BedrockRerankOptions.MaxTokensPerDoc` (Cohere rerank models).
+
+**Cohere-specific parameters:** chat and generation options add `TopK` (`k`, 0..500), `Seed`, `FrequencyPenalty` and `PresencePenalty` (0..1), and `StopSequences` (at most 5); `TopP` is sent as `p` and clamped to Cohere's 0.01..0.99. `CohereEmbeddingOptions` adds `InputType` (`search_document`/`search_query`/`classification`/`clustering`, default `search_document`), `EmbeddingType` (`float`/`int8`/`uint8`/`binary`/`ubinary`), `OutputDimension` (256/512/1024/1536 on embed-v4.0), and `Truncate` (`NONE`/`START`/`END`). `CohereRerankOptions` adds `MaxTokensPerDoc`; `CohereClassificationOptions` adds `Examples` and `Truncate`. Reasoning maps to `thinking.token_budget` via `ReasoningEffort.CohereThinkingBudget` / `ToCohereThinkingBudget()` (Minimal turns thinking off, Low 1024, Medium 4096, High 16384).
+
+**TEI-specific parameters:** `TeiEmbeddingOptions` adds `Normalize`, `Truncate`, `TruncationDirection` (`left`/`right`), `PromptName` (a sentence-transformers prompt such as `query`), and `Dimensions`. `TeiRerankOptions` and `TeiClassificationOptions` add `RawScores`, `Truncate`, and `TruncationDirection`; `TeiSparseEmbeddingOptions` adds `Truncate`, `TruncationDirection`, and `PromptName`.
 
 ### Default Models
 
-| Provider | Default Inference Model | Suggested Embedding Model |
-|----------|------------------------|--------------------------|
-| Ollama | `gemma3:4b` | `all-minilm` |
-| OpenAI | `gpt-4o-mini` | `text-embedding-3-small` |
-| Azure OpenAI | (deployment name; no default) | (deployment name) |
-| Gemini | `gemini-2.5-flash` | `gemini-embedding-001` |
-| Vertex AI | `gemini-2.5-flash` | `text-embedding-004` |
-| Anthropic | `claude-opus-4-8` | — (no embeddings API) |
-| Bedrock | `anthropic.claude-3-5-sonnet-20240620-v1:0` | `amazon.titan-embed-text-v2:0` |
-| VoyageAI | — (embeddings only) | `voyage-3.5` |
+| Provider | Default Inference Model | Suggested Embedding Model | Default Rerank Model |
+|----------|------------------------|--------------------------|----------------------|
+| Ollama | `gemma3:4b` | `all-minilm` | (none) |
+| OpenAI | `gpt-4o-mini` | `text-embedding-3-small` | (none) |
+| Azure OpenAI | (deployment name; no default) | (deployment name) | (none) |
+| Gemini | `gemini-2.5-flash` | `gemini-embedding-001` | (none) |
+| Vertex AI | `gemini-2.5-flash` | `text-embedding-004` | (none) |
+| Anthropic | `claude-opus-4-8` | (no embeddings API) | (none) |
+| Bedrock | `anthropic.claude-3-5-sonnet-20240620-v1:0` | `amazon.titan-embed-text-v2:0` | `cohere.rerank-v3-5:0` |
+| VoyageAI | (no chat API) | `voyage-3.5` | `rerank-2.5` |
+| Cohere | `command-a-03-2025` | `embed-v4.0` (`EmbeddingModel`) | `rerank-v3.5` |
+| TEI | (no chat API) | (whatever the server hosts) | (whatever the server hosts) |
 
 ### Provider Feature Support
 
-| Feature | Ollama | OpenAI | Azure OpenAI | Gemini | Vertex AI | Anthropic | Bedrock | VoyageAI |
-|---------|--------|--------|--------------|--------|-----------|-----------|---------|----------|
-| Chat (streaming + non-streaming) | Yes | Yes | Yes | Yes | Yes | Yes | Yes (Converse) | No |
-| Tool Chat (streaming + non-streaming) | Model-dependent | Yes | Yes | Yes | Yes | Yes | Yes | No |
-| Reasoning Effort | Via `think` | `reasoning_effort` | `reasoning_effort` | `thinkingConfig` budget | `thinkingConfig` budget | Adaptive `thinking` + effort | Converse thinking budget | No |
-| Reasoning Capture | `message.thinking` | `reasoning_content` | `reasoning_content` | `thought` parts | `thought` parts | `thinking` blocks | `reasoningContent` | No |
-| Text Generation | Yes | Legacy completions | Legacy completions | Yes | Yes | Via Messages API | Via Converse | No |
-| Embeddings (single + batch) | Yes | Yes | Yes | Yes | Yes (`:predict`) | No | Yes (Titan / Cohere) | Yes |
-| List / Exists / Get Model | Yes | Yes | Yes | Yes | No | Yes (paginated) | Yes (control-plane) | No |
-| Pull / Delete Model | Yes | No | No | No | No | No | No | No |
-| Validate Connectivity | Yes | Yes | Yes | Yes | Yes (via `:predict`) | Yes | Yes | Yes (via embeddings) |
+| Feature | Ollama | OpenAI | Azure OpenAI | Gemini | Vertex AI | Anthropic | Bedrock | VoyageAI | Cohere | TEI |
+|---------|--------|--------|--------------|--------|-----------|-----------|---------|----------|--------|-----|
+| Chat (streaming + non-streaming) | Yes | Yes | Yes | Yes | Yes | Yes | Yes (Converse) | No | Yes (v2 Chat) | No |
+| Tool Chat (streaming + non-streaming) | Model-dependent | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes | No |
+| Reasoning Effort | Via `think` | `reasoning_effort` | `reasoning_effort` | `thinkingConfig` budget | `thinkingConfig` budget | Adaptive `thinking` + effort | Converse thinking budget | No | `thinking.token_budget` | No |
+| Reasoning Capture | `message.thinking` | `reasoning_content` | `reasoning_content` | `thought` parts | `thought` parts | `thinking` blocks | `reasoningContent` | No | `thinking` content + tool plan | No |
+| Text Generation | Yes | Legacy completions | Legacy completions | Yes | Yes | Via Messages API | Via Converse | No | Via v2 Chat | No |
+| Embeddings (single + batch) | Yes | Yes | Yes | Yes | Yes (`:predict`) | No | Yes (Titan / Cohere) | Yes | Yes | Yes |
+| Sparse Embeddings | No | No | No | No | No | No | No | No | No | Yes (SPLADE models) |
+| Rerank | No | No | No | No | No | No | Yes (Cohere / Amazon) | Yes | Yes | Yes (reranker models) |
+| Classify | No | No | No | No | No | No | No | No | Yes | Yes (classifier / reranker models) |
+| List / Exists / Get Model | Yes | Yes | Yes | Yes | No | Yes (paginated) | Yes (control-plane) | No | Yes (paginated) | Yes (the hosted model, from `/info`) |
+| Pull / Delete Model | Yes | No | No | No | No | No | No | No | No | No |
+| Validate Connectivity | Yes | Yes | Yes | Yes | Yes (via `:predict`) | Yes | Yes | Yes (via embeddings) | Yes (via `/v1/models`) | Yes (via `/health`) |
 
-Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability — `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, model management on Vertex AI, and everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI.
+Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability: `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, model management on Vertex AI, everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI, chat and generation on TEI, and `RerankAsync`, `ClassifyAsync`, and `EmbedSparseAsync` wherever the provider has no such API. These are thrown before any request is sent.
 
 Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape. One VoyageAI-specific note: `ListModelsAsync` throws at call time (VoyageAI has no model listing endpoint), and `ValidateConnectivityAsync` therefore probes with a minimal one-word embeddings request instead.
+
+TEI is the one provider where support depends on the deployment rather than the client: a TEI server hosts one model, and its type (`embedding`, `reranker`, or `classifier`, reported in `ModelInformation.Metadata["model_type"]`) decides which of `EmbedAsync`, `RerankAsync`, `ClassifyAsync`, and `EmbedSparseAsync` succeed. The others return an unsuccessful response carrying TEI's HTTP 424 error rather than throwing, because the client cannot know the model type without asking the server.
+
+Cohere tool choice: Cohere accepts only `REQUIRED` and `NONE`. `auto` (or null) omits the field, `required`/`any` sends `REQUIRED`, `none` sends `NONE`, and a specific tool name sends only that tool with `REQUIRED` so the model must call it. Cohere's tool plan (the reasoning it emits before calling tools) is surfaced as `Reasoning` and, like all reasoning, is never sent back on follow-up turns.
 
 Ollama tool calling is model-dependent. For example, `gemma3:4b` is a valid Ollama chat, streaming chat, and generation model, but Ollama reports that it does not support tools. Use a tool-capable model such as `gpt-oss:20b` when you want the live suite to exercise actual Ollama tool-call and streaming tool-call paths.
 
@@ -962,14 +1128,18 @@ Ollama tool calling is model-dependent. For example, `gemma3:4b` is a valid Olla
 PolyPrompt/
 |-- src/
 |   |-- PolyPrompt/              # Core library (NuGet package)
-|   |   |-- Clients/             # CompletionClientBase, OllamaClient, OpenAiClient, GeminiClient
+|   |   |-- Auth/                # SigV4 signing and OAuth / AWS credential providers
+|   |   |-- Clients/             # CompletionClientBase and one client per provider
+|   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request/response data models
 |   |   `-- Options/             # Provider-specific option classes
 |   |-- OllamaConsole/           # Interactive Ollama test harness, including tc/toolchat
 |   |-- OpenAIConsole/           # Interactive OpenAI test harness, including tc/toolchat
 |   |-- GeminiConsole/           # Interactive Gemini test harness, including tc/toolchat
 |   |-- AnthropicConsole/        # Interactive Anthropic test harness, including tc/toolchat
-|   |-- VoyageAIConsole/         # Interactive VoyageAI embeddings test harness
+|   |-- VoyageAIConsole/         # Interactive VoyageAI embeddings and rerank test harness
+|   |-- CohereConsole/           # Interactive Cohere test harness, including tc/toolchat, rr/rerank, cl/classify
+|   |-- TeiConsole/              # Interactive TEI test harness: embed, sparse, rerank, classify, info
 |   |-- Test.Shared/             # Shared Touchstone test descriptors
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Xunit/              # xUnit adapter over Test.Shared
@@ -988,7 +1158,7 @@ dotnet build src/PolyPrompt.sln
 ## Running the Automated Tests
 
 ```bash
-# Local self-tests for request translation, timeout, cancellation, response disposal, CallDetails, chat, streaming chat, tool chat, streaming tool chat, generation, embeddings, and model management
+# Local self-tests for request translation, timeout, cancellation, response disposal, CallDetails, chat, streaming chat, tool chat, streaming tool chat, generation, embeddings, reranking, classification, sparse embeddings, and model management
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest
 
 # Local self-tests through xUnit and NUnit
@@ -1006,9 +1176,22 @@ dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --ant
 
 # Anthropic has no embeddings API; the live embedding cases are skipped for it.
 
-# VoyageAI is embeddings-only; chat, tool-chat, generation, and model-listing live cases
+# VoyageAI has no chat API; chat, tool-chat, generation, and model-listing live cases
 # are skipped, and model-management cases assert the unsupported behavior.
-dotnet run --project src/Test.Automated -- --voyageai-key pa-your-key --voyageai-embedding-model voyage-3.5
+dotnet run --project src/Test.Automated -- --voyageai-key pa-your-key --voyageai-embedding-model voyage-3.5 --voyageai-rerank-model rerank-2.5
+
+# Cohere runs every live case, including rerank and few-shot classification.
+dotnet run --project src/Test.Automated -- --cohere-key your-cohere-key --cohere-model command-a-03-2025 --cohere-rerank-model rerank-v3.5
+
+# TEI: chat and generation cases are skipped. The embed, rerank, and classify cases read the hosted
+# model type from /info and assert success for operations the model serves and a clean HTTP 424
+# failure for the rest, so run the suite once per model type you deploy.
+docker run -p 8081:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id BAAI/bge-reranker-base
+docker run -p 8082:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id BAAI/bge-small-en-v1.5
+dotnet run --project src/Test.Automated -- --tei-endpoint http://localhost:8081
+dotnet run --project src/Test.Automated -- --tei-endpoint http://localhost:8082
+
+# The live rerank and classify cases assert NotSupportedException on providers without those APIs.
 
 # Ollama can also be validated through its OpenAI-compatible /v1 API.
 dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11434/v1 --openai-model gpt-oss:20b --openai-embedding-model all-minilm
@@ -1016,7 +1199,7 @@ dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11
 # Live tool-chat cases verify successful tool use when the configured model supports tools,
 # and verify the provider's unsupported-model error when it does not.
 
-# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic | voyageai)
+# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic | voyageai | cohere | tei)
 dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b --embedding-model all-minilm
 dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
 
@@ -1029,7 +1212,9 @@ dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
 
 # Provider-specific environment variables can be used instead of POLYPROMPT_TEST_PROVIDER
-# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*, POLYPROMPT_TEST_VOYAGEAI_*)
+# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*, POLYPROMPT_TEST_VOYAGEAI_*,
+#  POLYPROMPT_TEST_COHERE_* including COHERE_RERANK_MODEL, and POLYPROMPT_TEST_TEI_API_KEY / TEI_ENDPOINT).
+# POLYPROMPT_TEST_RERANK_MODEL sets the rerank model for the generic POLYPROMPT_TEST_PROVIDER form.
 set POLYPROMPT_TEST_OPENAI_API_KEY=sk-your-key
 set POLYPROMPT_TEST_OPENAI_MODEL=gpt-4o-mini
 dotnet test src/Test.Xunit/Test.Xunit.csproj
