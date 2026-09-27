@@ -121,7 +121,7 @@ namespace PolyPrompt.Clients
                 SimpleUserMessage(prompt)
             };
             Dictionary<string, object> body = BuildConverseBody(
-                Model, messages, SystemBlocks(systemPrompt), maxTokens, temperature, topP, tools: null, toolChoice: null, reasoningEffort: null);
+                Model, messages, SystemBlocks(systemPrompt), maxTokens, temperature, topP, tools: null, toolChoice: null, reasoningEffort: options?.ReasoningEffort);
 
             string url = BuildConverseUrl(Model, streaming: false);
             string json = _Serializer.SerializeJson(body, false);
@@ -176,7 +176,7 @@ namespace PolyPrompt.Clients
 
             List<Dictionary<string, object>> messages = new List<Dictionary<string, object>> { SimpleUserMessage(prompt) };
             Dictionary<string, object> body = BuildConverseBody(
-                Model, messages, SystemBlocks(systemPrompt), maxTokens, temperature, topP, tools: null, toolChoice: null, reasoningEffort: null);
+                Model, messages, SystemBlocks(systemPrompt), maxTokens, temperature, topP, tools: null, toolChoice: null, reasoningEffort: options?.ReasoningEffort);
 
             string url = BuildConverseUrl(Model, streaming: true);
             string json = _Serializer.SerializeJson(body, false);

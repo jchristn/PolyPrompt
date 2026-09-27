@@ -140,6 +140,7 @@ namespace PolyPrompt.Clients
                 Model, prompt, systemPrompt, maxTokens, temperature, topP,
                 cohereOptions?.TopK, cohereOptions?.Seed, cohereOptions?.FrequencyPenalty,
                 cohereOptions?.PresencePenalty, cohereOptions?.StopSequences, false);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -200,6 +201,7 @@ namespace PolyPrompt.Clients
                 Model, prompt, systemPrompt, maxTokens, temperature, topP,
                 cohereOptions?.TopK, cohereOptions?.Seed, cohereOptions?.FrequencyPenalty,
                 cohereOptions?.PresencePenalty, cohereOptions?.StopSequences, true);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             Stopwatch sw = Stopwatch.StartNew();
 
@@ -1034,15 +1036,22 @@ namespace PolyPrompt.Clients
                 requestBody["tools"] = tools.Select(BuildCohereTool).ToList();
             }
 
-            if (reasoningEffort != null)
-            {
-                int budget = reasoningEffort.ToCohereThinkingBudget();
-                requestBody["thinking"] = budget > 0
-                    ? new Dictionary<string, object> { { "type", "enabled" }, { "token_budget", budget } }
-                    : new Dictionary<string, object> { { "type", "disabled" } };
-            }
+            ApplyReasoning(requestBody, reasoningEffort);
 
             return requestBody;
+        }
+
+        /// <summary>
+        /// Adds the Cohere <c>thinking</c> field for a reasoning effort (disabled at a budget of 0); null leaves the
+        /// request unchanged.
+        /// </summary>
+        private static void ApplyReasoning(Dictionary<string, object> requestBody, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            int budget = reasoningEffort.ToCohereThinkingBudget();
+            requestBody["thinking"] = budget > 0
+                ? new Dictionary<string, object> { { "type", "enabled" }, { "token_budget", budget } }
+                : new Dictionary<string, object> { { "type", "disabled" } };
         }
 
         private static Dictionary<string, object> BuildCohereTool(ToolDefinition tool)

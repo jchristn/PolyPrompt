@@ -61,6 +61,7 @@ namespace Test.Shared
         {
             List<TestCaseDescriptor> cases = CreateCoreCases();
             cases.AddRange(LocalExtendedBehaviorCases.Create(SuiteId));
+            cases.AddRange(LocalChatReasoningCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

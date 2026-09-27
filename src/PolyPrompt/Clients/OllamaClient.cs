@@ -86,6 +86,7 @@ namespace PolyPrompt.Clients
             string url = _Endpoint.TrimEnd('/') + "/api/chat";
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OllamaChatCompletionOptions, false);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -162,6 +163,7 @@ namespace PolyPrompt.Clients
             string url = _Endpoint.TrimEnd('/') + "/api/chat";
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OllamaChatCompletionOptions, true);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -881,6 +883,15 @@ namespace PolyPrompt.Clients
             return requestBody;
         }
 
+        /// <summary>
+        /// Adds the Ollama <c>think</c> field for a reasoning effort; null leaves the request unchanged.
+        /// </summary>
+        private static void ApplyReasoning(Dictionary<string, object> requestBody, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            requestBody["think"] = reasoningEffort.ToOllamaThink();
+        }
+
         private Dictionary<string, object> BuildToolChatRequestBody(
             ToolChatRequest request,
             string model,
@@ -906,10 +917,7 @@ namespace PolyPrompt.Clients
                 { "options", modelOptions }
             };
 
-            if (reasoningEffort != null)
-            {
-                requestBody["think"] = reasoningEffort.ToOllamaThink();
-            }
+            ApplyReasoning(requestBody, reasoningEffort);
 
             if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
             {

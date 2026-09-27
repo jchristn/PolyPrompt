@@ -61,6 +61,7 @@ namespace PolyPrompt.Clients
             string url = BuildGenerateContentUrl(Model, streaming: false);
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as GeminiChatCompletionOptions);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -116,6 +117,7 @@ namespace PolyPrompt.Clients
             string url = BuildGenerateContentUrl(Model, streaming: true);
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as GeminiChatCompletionOptions);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -833,6 +835,30 @@ namespace PolyPrompt.Clients
             return requestBody;
         }
 
+        /// <summary>
+        /// Adds <c>generationConfig.thinkingConfig</c> for a reasoning effort; null leaves the request unchanged.
+        /// </summary>
+        private static void ApplyReasoning(Dictionary<string, object> requestBody, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            if (!(requestBody.TryGetValue("generationConfig", out object? existing) && existing is Dictionary<string, object> generationConfig))
+            {
+                generationConfig = new Dictionary<string, object>();
+                requestBody["generationConfig"] = generationConfig;
+            }
+
+            ApplyThinkingConfig(generationConfig, reasoningEffort);
+        }
+
+        private static void ApplyThinkingConfig(Dictionary<string, object> generationConfig, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            generationConfig["thinkingConfig"] = new Dictionary<string, object>
+            {
+                { "thinkingBudget", reasoningEffort.ToGeminiThinkingBudget() }
+            };
+        }
+
         private Dictionary<string, object> BuildToolChatRequestBody(
             ToolChatRequest request,
             int maxTokens,
@@ -848,13 +874,7 @@ namespace PolyPrompt.Clients
             if (temperature.HasValue) generationConfig["temperature"] = temperature.Value;
             if (topP.HasValue) generationConfig["topP"] = topP.Value;
 
-            if (reasoningEffort != null)
-            {
-                generationConfig["thinkingConfig"] = new Dictionary<string, object>
-                {
-                    { "thinkingBudget", reasoningEffort.ToGeminiThinkingBudget() }
-                };
-            }
+            ApplyThinkingConfig(generationConfig, reasoningEffort);
 
             Dictionary<string, object> requestBody = new Dictionary<string, object>
             {

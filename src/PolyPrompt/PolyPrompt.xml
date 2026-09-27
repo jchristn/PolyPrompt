@@ -362,6 +362,12 @@
         <member name="M:PolyPrompt.Clients.AnthropicClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ApplyReasoning(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ReasoningEffort)">
+            <summary>
+            Adds <c>output_config.effort</c> and, above Minimal, adaptive <c>thinking</c> for a reasoning effort;
+            null leaves the request unchanged.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.AzureOpenAiClient">
             <summary>
             Client for Azure OpenAI. Azure OpenAI is wire-compatible with OpenAI for request and response bodies,
@@ -674,6 +680,12 @@
         </member>
         <member name="M:PolyPrompt.Clients.CohereClient.GetModelInformationAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ApplyReasoning(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ReasoningEffort)">
+            <summary>
+            Adds the Cohere <c>thinking</c> field for a reasoning effort (disabled at a budget of 0); null leaves the
+            request unchanged.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
             <summary>
@@ -1349,6 +1361,11 @@
             <param name="url">The full request URL.</param>
             <returns>The URL without its query string.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ApplyReasoning(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ReasoningEffort)">
+            <summary>
+            Adds <c>generationConfig.thinkingConfig</c> for a reasoning effort; null leaves the request unchanged.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.OllamaClient">
             <summary>
             Client for the Ollama API supporting chat completions, embeddings, and text generation.
@@ -1404,6 +1421,11 @@
         <member name="M:PolyPrompt.Clients.OllamaClient.DeleteModelAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.ApplyReasoning(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ReasoningEffort)">
+            <summary>
+            Adds the Ollama <c>think</c> field for a reasoning effort; null leaves the request unchanged.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.OpenAiClient">
             <summary>
             Client for the OpenAI-compatible API supporting chat completions, embeddings, and text generation.
@@ -1456,6 +1478,11 @@
             </summary>
             <param name="path">The operation path, e.g. <c>chat/completions</c>, <c>embeddings</c>, <c>models</c>.</param>
             <returns>The absolute request URL.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ApplyReasoning(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ReasoningEffort)">
+            <summary>
+            Adds the OpenAI <c>reasoning_effort</c> field for a reasoning effort; null leaves the request unchanged.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.TeiClient">
             <summary>
@@ -1876,6 +1903,16 @@
         <member name="P:PolyPrompt.Models.ChatCompletionOptions.SystemPrompt">
             <summary>
             System prompt override. Null uses client default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatCompletionOptions.ReasoningEffort">
+            <summary>
+            Reasoning ("thinking") effort for this chat call on reasoning-capable models. Null (the default) sends no
+            reasoning field, so the provider's own default applies, exactly as before this option existed; the
+            client's <see cref="P:PolyPrompt.Clients.CompletionClientBase.ReasoningEffort"/> default applies to tool chat
+            only. <see cref="F:PolyPrompt.Models.ReasoningEffortLevel.Minimal"/> turns thinking off where the provider allows it (Ollama
+            <c>think: false</c>, a Gemini thinking budget of 0, Cohere and Bedrock thinking disabled); other levels
+            map to each provider's effort or budget as described on <see cref="T:PolyPrompt.Models.ReasoningEffort"/>.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ChatMessage">

@@ -67,6 +67,16 @@ namespace PolyPrompt.Models
         /// </summary>
         public string? SystemPrompt { get; set; } = null;
 
+        /// <summary>
+        /// Reasoning ("thinking") effort for this chat call on reasoning-capable models. Null (the default) sends no
+        /// reasoning field, so the provider's own default applies, exactly as before this option existed; the
+        /// client's <see cref="PolyPrompt.Clients.CompletionClientBase.ReasoningEffort"/> default applies to tool chat
+        /// only. <see cref="ReasoningEffortLevel.Minimal"/> turns thinking off where the provider allows it (Ollama
+        /// <c>think: false</c>, a Gemini thinking budget of 0, Cohere and Bedrock thinking disabled); other levels
+        /// map to each provider's effort or budget as described on <see cref="Models.ReasoningEffort"/>.
+        /// </summary>
+        public ReasoningEffort? ReasoningEffort { get; set; } = null;
+
         #endregion
     }
 }

@@ -68,7 +68,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.7.0**.
+Current documented package version: **2.7.1**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -453,7 +453,7 @@ Provider protocol shapes differ:
 
 ### Reasoning Effort
 
-Reasoning-capable models can trade latency and cost against depth of reasoning. `ReasoningEffort` is a provider-neutral value object: a semantic `ReasoningEffortLevel` (`Minimal`, `Low`, `Medium`, `High`) supplies per-provider defaults, and PolyPrompt projects it onto whatever each provider expects. Set it on the `ToolChatRequest` (or as a client-wide default via `client.ReasoningEffort`); the request value wins over the client default. When neither is set, no reasoning field is sent and the request body is unchanged.
+Reasoning-capable models can trade latency and cost against depth of reasoning. `ReasoningEffort` is a provider-neutral value object: a semantic `ReasoningEffortLevel` (`Minimal`, `Low`, `Medium`, `High`) supplies per-provider defaults, and PolyPrompt projects it onto whatever each provider expects. Set it on the `ToolChatRequest` (or as a client-wide default via `client.ReasoningEffort`); the request value wins over the client default. For plain chat (`ChatAsync` and `ChatStreamingAsync`), set it on `ChatCompletionOptions.ReasoningEffort`; the client-wide default applies to tool chat only, so existing plain chat calls are unchanged. When nothing is set, no reasoning field is sent and the request body is unchanged.
 
 ```csharp
 // Common case: a preset (or the level enum, via implicit conversion).
@@ -463,6 +463,11 @@ ToolChatResponse response = await client.ToolChatAsync(request);
 
 // Tuned case: keep the semantic level, override just one provider's parameter.
 request.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+
+// Plain chat: turn thinking off for a quick, structured answer (Ollama think:false, Gemini budget 0,
+// Cohere and Bedrock thinking disabled; OpenAI "minimal"; Anthropic "low" with no thinking field).
+ChatResponse quick = await client.ChatAsync("Rate each passage 0 to 10 as JSON.",
+    new ChatCompletionOptions { Temperature = 0, ReasoningEffort = ReasoningEffort.Minimal });
 ```
 
 Each level's default projection per provider (every value is individually overridable, and each override setter clamps/validates its input):

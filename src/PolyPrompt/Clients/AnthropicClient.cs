@@ -145,6 +145,7 @@ namespace PolyPrompt.Clients
                 (options as AnthropicChatCompletionOptions)?.TopK,
                 (options as AnthropicChatCompletionOptions)?.StopSequences,
                 false);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -204,6 +205,7 @@ namespace PolyPrompt.Clients
                 (options as AnthropicChatCompletionOptions)?.TopK,
                 (options as AnthropicChatCompletionOptions)?.StopSequences,
                 true);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -639,6 +641,28 @@ namespace PolyPrompt.Clients
             return requestBody;
         }
 
+        /// <summary>
+        /// Adds <c>output_config.effort</c> and, above Minimal, adaptive <c>thinking</c> for a reasoning effort;
+        /// null leaves the request unchanged.
+        /// </summary>
+        private static void ApplyReasoning(Dictionary<string, object> requestBody, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            requestBody["output_config"] = new Dictionary<string, object>
+            {
+                { "effort", reasoningEffort.ToAnthropicEffort() }
+            };
+
+            if (reasoningEffort.SendsAnthropicThinking())
+            {
+                requestBody["thinking"] = new Dictionary<string, object>
+                {
+                    { "type", "adaptive" },
+                    { "display", "summarized" }
+                };
+            }
+        }
+
         private Dictionary<string, object> BuildToolChatRequestBody(
             ToolChatRequest request,
             string model,
@@ -667,22 +691,7 @@ namespace PolyPrompt.Clients
                 requestBody["tool_choice"] = BuildAnthropicToolChoice(request.ToolChoice);
             }
 
-            if (reasoningEffort != null)
-            {
-                requestBody["output_config"] = new Dictionary<string, object>
-                {
-                    { "effort", reasoningEffort.ToAnthropicEffort() }
-                };
-
-                if (reasoningEffort.SendsAnthropicThinking())
-                {
-                    requestBody["thinking"] = new Dictionary<string, object>
-                    {
-                        { "type", "adaptive" },
-                        { "display", "summarized" }
-                    };
-                }
-            }
+            ApplyReasoning(requestBody, reasoningEffort);
 
             if (stream) requestBody["stream"] = true;
 

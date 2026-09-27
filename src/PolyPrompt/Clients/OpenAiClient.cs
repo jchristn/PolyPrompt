@@ -66,6 +66,7 @@ namespace PolyPrompt.Clients
             string url = BuildApiUrl("chat/completions");
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, false);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -161,6 +162,7 @@ namespace PolyPrompt.Clients
             string url = BuildApiUrl("chat/completions");
 
             Dictionary<string, object> requestBody = BuildChatRequestBody(prompt, maxTokens, systemPrompt, temperature, topP, options as OpenAiChatCompletionOptions, true);
+            ApplyReasoning(requestBody, options?.ReasoningEffort);
 
             string json = _Serializer.SerializeJson(requestBody, false);
             StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -711,6 +713,15 @@ namespace PolyPrompt.Clients
             return requestBody;
         }
 
+        /// <summary>
+        /// Adds the OpenAI <c>reasoning_effort</c> field for a reasoning effort; null leaves the request unchanged.
+        /// </summary>
+        private static void ApplyReasoning(Dictionary<string, object> requestBody, ReasoningEffort? reasoningEffort)
+        {
+            if (reasoningEffort == null) return;
+            requestBody["reasoning_effort"] = reasoningEffort.ToOpenAiWireValue();
+        }
+
         private Dictionary<string, object> BuildToolChatRequestBody(
             ToolChatRequest request,
             string model,
@@ -740,10 +751,7 @@ namespace PolyPrompt.Clients
                 requestBody["tool_choice"] = request.ToolChoice;
             }
 
-            if (reasoningEffort != null)
-            {
-                requestBody["reasoning_effort"] = reasoningEffort.ToOpenAiWireValue();
-            }
+            ApplyReasoning(requestBody, reasoningEffort);
 
             if (stream)
             {

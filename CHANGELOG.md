@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.7.1 (2026-09-27)
+
+### Added
+
+- `ChatCompletionOptions.ReasoningEffort` sets the reasoning ("thinking") effort for a single plain chat call (`ChatAsync` and `ChatStreamingAsync`), which previously could only be set on tool chat. It uses the existing `ReasoningEffort` value object and its per-provider projections: Ollama `think`, OpenAI and Azure OpenAI `reasoning_effort`, Gemini and Vertex AI `thinkingConfig.thinkingBudget`, Anthropic `output_config.effort` and `thinking`, Cohere `thinking`, and Bedrock's thinking budget. `ReasoningEffortLevel.Minimal` turns thinking off where the provider allows it, which keeps short structured calls (ratings, classifications, rewrites) fast on thinking models.
+- The property defaults to null, which sends no reasoning field, so existing calls send exactly the same requests. The client-level `CompletionClientBase.ReasoningEffort` default still applies to tool chat only. The change is additive: no public member was changed or removed.
+
+### Tests
+
+- Added 7 hermetic cases (170 local cases in total, all green in `Test.Automated`, `Test.Xunit`, and `Test.Nunit` on net8.0 and net10.0) covering plain chat and streaming for each provider, thinking turned off at `Minimal`, the Gemini thinking budget sitting beside the sampling settings, and that no reasoning field is sent when the option is unset, even with a client-level default.
+
 ## v2.7.0 (2026-09-27)
 
 ### Added
