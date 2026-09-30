@@ -7,7 +7,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Deterministic local cases for <see cref="ChatCompletionOptions.ReasoningEffort"/> on plain (non-tool) chat:
+    /// Deterministic local cases for <see cref="CompletionOptions.ReasoningEffort"/> on plain (non-tool) chat:
     /// each provider sends its reasoning field only when the option is set, including turning thinking off at
     /// <see cref="ReasoningEffortLevel.Minimal"/>. Registered into the local behavior suite.
     /// </summary>
@@ -17,7 +17,7 @@ namespace Test.Shared
         {
             return new List<TestCaseDescriptor>
             {
-                Case(suiteId, "chat_reasoning_absent_by_default", "Plain chat sends no reasoning field unless the option is set, and ignores the tool-chat client default", RunAbsentByDefaultAsync),
+                Case(suiteId, "chat_reasoning_absent_by_default", "Plain chat sends no reasoning field unless set; the client default applies and a per-call value overrides it", RunAbsentByDefaultAsync),
                 Case(suiteId, "chat_reasoning_ollama", "Plain chat reasoning effort maps to Ollama think (off at Minimal), chat and streaming", RunOllamaAsync),
                 Case(suiteId, "chat_reasoning_openai", "Plain chat reasoning effort maps to OpenAI reasoning_effort, chat and streaming", RunOpenAiAsync),
                 Case(suiteId, "chat_reasoning_gemini", "Plain chat reasoning effort maps to Gemini thinkingConfig beside the sampling settings", RunGeminiAsync),
@@ -36,45 +36,48 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using (OpenAiClient openAi = new OpenAiClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (OpenAiCompletionClient openAi = new OpenAiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
             {
-                openAi.ReasoningEffort = ReasoningEffort.High;
-                ChatResponse response = await openAi.ChatAsync("hello", new ChatCompletionOptions { Temperature = 0 }, token).ConfigureAwait(false);
-                SharedAssert.True(response.Success, "OpenAI chat should succeed.");
+                SharedAssert.True((await openAi.ChatAsync("hello", token: token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
+                openAi.Defaults.ReasoningEffort = ReasoningEffort.High;
+                SharedAssert.True((await openAi.ChatAsync("hello", new CompletionOptions { Temperature = 0 }, token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
+                SharedAssert.True((await openAi.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Low }, token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
             }
 
-            using (OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
             {
                 await ollama.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
 
-            using (GeminiClient gemini = new GeminiClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
             {
                 await gemini.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
 
-            using (AnthropicClient anthropic = new AnthropicClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (AnthropicCompletionClient anthropic = new AnthropicCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
             {
                 await anthropic.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
 
             List<string> bodies = server.RequestBodies;
-            SharedAssert.Equal(4, bodies.Count, "Each client should have sent one request.");
-            SharedAssert.False(Has(bodies[0], "reasoning_effort"), "The client-level default is for tool chat; plain chat should not send reasoning_effort.");
-            SharedAssert.False(Has(bodies[1], "think"), "Ollama chat without the option should not send think.");
-            SharedAssert.False(Has(bodies[2], "generationConfig", "thinkingConfig"), "Gemini chat without the option should not send thinkingConfig.");
-            SharedAssert.False(Has(bodies[3], "output_config") || Has(bodies[3], "thinking"), "Anthropic chat without the option should not send effort or thinking.");
+            SharedAssert.Equal(6, bodies.Count, "Each call should have sent one request.");
+            SharedAssert.False(Has(bodies[0], "reasoning_effort"), "OpenAI chat with no default and no per-call value should not send reasoning_effort.");
+            SharedAssert.Equal("high", Get(bodies[1], "reasoning_effort").GetString(), "The client default should apply to plain chat when the per-call options leave it unset.");
+            SharedAssert.Equal("low", Get(bodies[2], "reasoning_effort").GetString(), "A per-call reasoning effort should override the client default.");
+            SharedAssert.False(Has(bodies[3], "think"), "Ollama chat without the option should not send think.");
+            SharedAssert.False(Has(bodies[4], "generationConfig", "thinkingConfig"), "Gemini chat without the option should not send thinkingConfig.");
+            SharedAssert.False(Has(bodies[5], "output_config") || Has(bodies[5], "thinking"), "Anthropic chat without the option should not send effort or thinking.");
         }
 
         private static async Task RunOllamaAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
 
-            ChatResponse off = await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
+            ChatResponse off = await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             SharedAssert.True(off.Success, "Ollama chat with thinking off should succeed.");
 
-            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new ChatCompletionOptions { ReasoningEffort = ReasoningEffortLevel.Medium }, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new CompletionOptions { ReasoningEffort = ReasoningEffortLevel.Medium }, token).ConfigureAwait(false);
             await ConsumeAsync(stream, token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Ollama streaming chat with reasoning effort should succeed.");
 
@@ -87,12 +90,12 @@ namespace Test.Shared
         private static async Task RunOpenAiAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiClient client = new OpenAiClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
 
-            ChatResponse high = await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
+            ChatResponse high = await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
             SharedAssert.True(high.Success, "OpenAI chat with reasoning effort should succeed.");
 
-            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Low }, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new CompletionOptions { ReasoningEffort = ReasoningEffort.Low }, token).ConfigureAwait(false);
             await ConsumeAsync(stream, token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "OpenAI streaming chat with reasoning effort should succeed.");
 
@@ -104,12 +107,12 @@ namespace Test.Shared
         private static async Task RunGeminiAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
 
-            ChatResponse off = await client.ChatAsync("hello", new ChatCompletionOptions { Temperature = 0.3, ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
+            ChatResponse off = await client.ChatAsync("hello", new CompletionOptions { Temperature = 0.3, ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             SharedAssert.True(off.Success, "Gemini chat with thinking off should succeed.");
 
-            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", new CompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
             await ConsumeAsync(stream, token).ConfigureAwait(false);
 
             List<string> bodies = server.RequestBodies;
@@ -121,10 +124,10 @@ namespace Test.Shared
         private static async Task RunAnthropicAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicClient client = new AnthropicClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using AnthropicCompletionClient client = new AnthropicCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
 
-            await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
-            await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
+            await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
+            await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
 
             List<string> bodies = server.RequestBodies;
             SharedAssert.Equal("low", Get(bodies[0], "output_config", "effort").GetString(), "Minimal should send effort low.");
@@ -136,10 +139,10 @@ namespace Test.Shared
         private static async Task RunCohereAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereClient client = new CohereClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey) { Model = "cohere-test-model", TimeoutMs = 2000 };
+            using CohereCompletionClient client = new CohereCompletionClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey) { Model = "cohere-test-model", TimeoutMs = 2000 };
 
-            await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
-            await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Medium }, token).ConfigureAwait(false);
+            await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
+            await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Medium }, token).ConfigureAwait(false);
 
             List<string> bodies = server.RequestBodies;
             SharedAssert.Equal("disabled", Get(bodies[0], "thinking", "type").GetString(), "Minimal should disable Cohere thinking.");
@@ -150,7 +153,7 @@ namespace Test.Shared
         private static async Task RunBedrockAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockClient client = new BedrockClient(
+            using BedrockCompletionClient client = new BedrockCompletionClient(
                 new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
                 "us-east-1",
                 endpoint: server.Endpoint);
@@ -158,7 +161,7 @@ namespace Test.Shared
 
             ChatResponse plain = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(plain.Success, "Bedrock chat should succeed.");
-            ChatResponse reasoned = await client.ChatAsync("hello", new ChatCompletionOptions { ReasoningEffort = ReasoningEffort.Medium }, token).ConfigureAwait(false);
+            ChatResponse reasoned = await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Medium }, token).ConfigureAwait(false);
             SharedAssert.True(reasoned.Success, "Bedrock chat with reasoning effort should succeed.");
 
             List<string> bodies = server.RequestBodies;

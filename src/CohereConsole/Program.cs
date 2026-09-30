@@ -11,7 +11,11 @@ namespace CohereConsole
 
         private static bool _RunForever = true;
         private static bool _Streaming = true;
-        private static CohereClient _Client = null!;
+        private static CohereCompletionClient _Client = null!;
+        private static CohereEmbeddingClient _EmbeddingClient = null!;
+        private static CohereRerankClient _RerankClient = null!;
+        private static CohereClassificationClient _ClassificationClient = null!;
+        private static CohereModelClient _ModelClient = null!;
 
         #endregion
 
@@ -31,12 +35,24 @@ namespace CohereConsole
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new CohereClient(endpoint, apiKey);
-            _Client.EmbeddingModel = embeddingModel;
-            _Client.RerankModel = rerankModel;
+            _Client = new CohereCompletionClient(endpoint, apiKey);
             _Client.Model = model;
-            _Client.MaxTokens = maxTokens;
+            _Client.Defaults.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
+
+            _EmbeddingClient = new CohereEmbeddingClient(endpoint, apiKey);
+            _EmbeddingClient.Model = embeddingModel;
+            _EmbeddingClient.TimeoutMs = timeoutMs;
+
+            _RerankClient = new CohereRerankClient(endpoint, apiKey);
+            _RerankClient.Model = rerankModel;
+            _RerankClient.TimeoutMs = timeoutMs;
+
+            _ClassificationClient = new CohereClassificationClient(endpoint, apiKey);
+            _ClassificationClient.TimeoutMs = timeoutMs;
+
+            _ModelClient = new CohereModelClient(endpoint, apiKey);
+            _ModelClient.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -47,6 +63,12 @@ namespace CohereConsole
                 string userInput = Inputty.GetString("Command [?/help]:", null, false);
                 await ProcessCommand(userInput).ConfigureAwait(false);
             }
+
+            _Client.Dispose();
+            _EmbeddingClient.Dispose();
+            _RerankClient.Dispose();
+            _ClassificationClient.Dispose();
+            _ModelClient.Dispose();
         }
 
         #endregion
@@ -174,27 +196,27 @@ namespace CohereConsole
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
             Console.WriteLine("  Chat model    : " + _Client.Model);
-            Console.WriteLine("  Embed model   : " + _Client.EmbeddingModel);
-            Console.WriteLine("  Rerank model  : " + _Client.RerankModel);
-            Console.WriteLine("  Max tokens    : " + _Client.MaxTokens);
+            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Model);
+            Console.WriteLine("  Rerank model  : " + _RerankClient.Model);
+            Console.WriteLine("  Max tokens    : " + _Client.Defaults.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
-            Console.WriteLine("  Temperature   : " + (_Client.Temperature.HasValue ? _Client.Temperature.Value.ToString("F1") : "(default)"));
-            Console.WriteLine("  Top-P         : " + (_Client.TopP.HasValue ? _Client.TopP.Value.ToString("F2") : "(default)"));
+            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Temperature.HasValue ? _Client.Defaults.Temperature.Value.ToString("F1") : "(default)"));
+            Console.WriteLine("  Top-P         : " + (_Client.Defaults.TopP.HasValue ? _Client.Defaults.TopP.Value.ToString("F2") : "(default)"));
             Console.WriteLine("  Streaming     : " + (_Streaming ? "on" : "off"));
-            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.SystemPrompt) ? "(none)" : _Client.SystemPrompt));
+            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "(none)" : _Client.Defaults.SystemPrompt));
             Console.WriteLine("");
         }
 
         private static void SetSystemPrompt()
         {
             Console.WriteLine("");
-            if (!string.IsNullOrEmpty(_Client.SystemPrompt))
+            if (!string.IsNullOrEmpty(_Client.Defaults.SystemPrompt))
             {
-                Console.WriteLine("Current system prompt: " + _Client.SystemPrompt);
+                Console.WriteLine("Current system prompt: " + _Client.Defaults.SystemPrompt);
             }
             string? newPrompt = Inputty.GetString("System prompt [Enter to clear]:", null, true);
-            _Client.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
-            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.SystemPrompt) ? "cleared" : "set") + ".");
+            _Client.Defaults.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
+            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "cleared" : "set") + ".");
             Console.WriteLine("");
         }
 
@@ -407,9 +429,9 @@ namespace CohereConsole
         {
             ToolChatRequest request = new ToolChatRequest();
 
-            if (!string.IsNullOrWhiteSpace(_Client.SystemPrompt))
+            if (!string.IsNullOrWhiteSpace(_Client.Defaults.SystemPrompt))
             {
-                request.Messages.Add(ChatMessage.System(_Client.SystemPrompt));
+                request.Messages.Add(ChatMessage.System(_Client.Defaults.SystemPrompt));
             }
 
             request.Messages.Add(ChatMessage.User(prompt));
@@ -540,7 +562,7 @@ namespace CohereConsole
 
             try
             {
-                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
+                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -550,10 +572,6 @@ namespace CohereConsole
                 {
                     Console.WriteLine("Embeddings returned: " + response.Embeddings.Count);
                 }
-            }
-            catch (NotSupportedException ex)
-            {
-                Console.WriteLine("Not supported: " + ex.Message);
             }
             catch (Exception ex)
             {
@@ -584,7 +602,7 @@ namespace CohereConsole
 
             try
             {
-                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
+                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -594,10 +612,6 @@ namespace CohereConsole
                 {
                     Console.WriteLine("Embeddings returned: " + response.Embeddings.Count);
                 }
-            }
-            catch (NotSupportedException ex)
-            {
-                Console.WriteLine("Not supported: " + ex.Message);
             }
             catch (Exception ex)
             {
@@ -691,7 +705,7 @@ namespace CohereConsole
 
             try
             {
-                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -710,8 +724,20 @@ namespace CohereConsole
 
             try
             {
-                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
+
+                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
+
+                bool rerankOk = await _RerankClient.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(rerankOk ? "Connectivity (rerank): OK" : "Connectivity (rerank): FAILED");
+
+                bool classificationOk = await _ClassificationClient.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(classificationOk ? "Connectivity (classification): OK" : "Connectivity (classification): FAILED");
+
+                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
             }
             catch (Exception ex)
             {
@@ -753,7 +779,7 @@ namespace CohereConsole
 
             try
             {
-                RerankResponse response = await _Client.RerankAsync(query, documents, options).ConfigureAwait(false);
+                RerankResponse response = await _RerankClient.RerankAsync(query, documents, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -809,7 +835,7 @@ namespace CohereConsole
 
             try
             {
-                ClassificationResponse response = await _Client.ClassifyAsync(inputs, options).ConfigureAwait(false);
+                ClassificationResponse response = await _ClassificationClient.ClassifyAsync(inputs, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);

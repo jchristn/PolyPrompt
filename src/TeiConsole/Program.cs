@@ -10,7 +10,11 @@ namespace TeiConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static TeiClient _Client = null!;
+        private static TeiEmbeddingClient _EmbeddingClient = null!;
+        private static TeiSparseEmbeddingClient _SparseClient = null!;
+        private static TeiRerankClient _RerankClient = null!;
+        private static TeiClassificationClient _ClassificationClient = null!;
+        private static TeiModelClient _ModelClient = null!;
 
         #endregion
 
@@ -26,8 +30,18 @@ namespace TeiConsole
             string? apiKey = Inputty.GetString("API key (only if the server uses --api-key) [none]:", null, true);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new TeiClient(endpoint, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey);
-            _Client.TimeoutMs = timeoutMs;
+            string? key = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
+
+            _EmbeddingClient = new TeiEmbeddingClient(endpoint, key);
+            _SparseClient = new TeiSparseEmbeddingClient(endpoint, key);
+            _RerankClient = new TeiRerankClient(endpoint, key);
+            _ClassificationClient = new TeiClassificationClient(endpoint, key);
+            _ModelClient = new TeiModelClient(endpoint, key);
+
+            foreach (ClientBase client in AllClients())
+            {
+                client.TimeoutMs = timeoutMs;
+            }
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. A TEI server hosts one model; use 'info' to see its type. Type ? for help.");
@@ -38,11 +52,21 @@ namespace TeiConsole
                 string userInput = Inputty.GetString("Command [?/help]:", null, false);
                 await ProcessCommand(userInput).ConfigureAwait(false);
             }
+
+            foreach (ClientBase client in AllClients())
+            {
+                client.Dispose();
+            }
         }
 
         #endregion
 
         #region Private-Methods
+
+        private static List<ClientBase> AllClients()
+        {
+            return new List<ClientBase> { _EmbeddingClient, _SparseClient, _RerankClient, _ClassificationClient, _ModelClient };
+        }
 
         private static async Task ProcessCommand(string input)
         {
@@ -138,9 +162,9 @@ namespace TeiConsole
         private static void PrintSettings()
         {
             Console.WriteLine("");
-            Console.WriteLine("  Endpoint   : " + _Client.Endpoint);
-            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Timeout ms : " + _Client.TimeoutMs);
+            Console.WriteLine("  Endpoint   : " + _EmbeddingClient.Endpoint);
+            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_EmbeddingClient.ApiKey) ? "(none)" : "(set)"));
+            Console.WriteLine("  Timeout ms : " + _EmbeddingClient.TimeoutMs);
             Console.WriteLine("");
         }
 
@@ -176,7 +200,7 @@ namespace TeiConsole
 
             try
             {
-                EmbeddingResponse response = await _Client.EmbedAsync(inputs, options).ConfigureAwait(false);
+                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -217,7 +241,7 @@ namespace TeiConsole
 
             try
             {
-                SparseEmbeddingResponse response = await _Client.EmbedSparseAsync(inputs).ConfigureAwait(false);
+                SparseEmbeddingResponse response = await _SparseClient.EmbedSparseAsync(inputs).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -261,7 +285,7 @@ namespace TeiConsole
 
             try
             {
-                RerankResponse response = await _Client.RerankAsync(query, documents, options).ConfigureAwait(false);
+                RerankResponse response = await _RerankClient.RerankAsync(query, documents, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -297,7 +321,7 @@ namespace TeiConsole
 
             try
             {
-                ClassificationResponse response = await _Client.ClassifyAsync(inputs).ConfigureAwait(false);
+                ClassificationResponse response = await _ClassificationClient.ClassifyAsync(inputs).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -327,7 +351,7 @@ namespace TeiConsole
             try
             {
                 bool found = false;
-                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
                 {
                     found = true;
                     Console.WriteLine("  Model id     : " + model.Name);
@@ -355,8 +379,11 @@ namespace TeiConsole
 
             try
             {
-                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                foreach (ClientBase client in AllClients())
+                {
+                    bool ok = await client.ValidateConnectivityAsync().ConfigureAwait(false);
+                    Console.WriteLine("Connectivity (" + client.GetType().Name + "): " + (ok ? "OK" : "FAILED"));
+                }
             }
             catch (Exception ex)
             {

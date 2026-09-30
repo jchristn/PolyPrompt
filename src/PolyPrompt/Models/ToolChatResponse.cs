@@ -4,7 +4,7 @@ namespace PolyPrompt.Models
     /// Response from a tool-capable chat completion request.
     /// A response may contain text, tool calls, or both depending on the provider and model.
     /// </summary>
-    public class ToolChatResponse
+    public class ToolChatResponse : ResponseBase
     {
         #region Public-Members
 
@@ -26,11 +26,6 @@ namespace PolyPrompt.Models
         public List<ToolCall> ToolCalls { get; set; } = new List<ToolCall>();
 
         /// <summary>
-        /// The model name used for this completion.
-        /// </summary>
-        public string Model { get; set; } = string.Empty;
-
-        /// <summary>
         /// Provider response identifier for correlation. May be null when the provider does not emit one.
         /// </summary>
         public string? ResponseId { get; set; } = null;
@@ -41,31 +36,11 @@ namespace PolyPrompt.Models
         public string? FinishReason { get; set; } = null;
 
         /// <summary>
-        /// Whether the request succeeded.
-        /// </summary>
-        public bool Success { get; set; }
-
-        /// <summary>
-        /// HTTP status code from the request.
-        /// </summary>
-        public int? StatusCode { get; set; } = null;
-
-        /// <summary>
-        /// Error message when Success is false.
-        /// </summary>
-        public string? Error { get; set; } = null;
-
-        /// <summary>
         /// Token usage for this completion, when the provider reported it. Populated on both the streaming
         /// and non-streaming paths so cost and cache accounting is identical regardless of which was used.
         /// Null when the provider returned no usage data.
         /// </summary>
-        public ChatStreamingUsage? Usage { get; set; } = null;
-
-        /// <summary>
-        /// Overall runtime of the request in milliseconds.
-        /// </summary>
-        public long OverallRuntimeMs { get; set; }
+        public TokenUsage? Usage { get; set; } = null;
 
         #endregion
 

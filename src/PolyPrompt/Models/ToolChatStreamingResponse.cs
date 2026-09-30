@@ -5,7 +5,7 @@ namespace PolyPrompt.Models
     /// Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
     /// Timing and accumulated output fields are populated as chunks are consumed.
     /// </summary>
-    public class ToolChatStreamingResponse
+    public class ToolChatStreamingResponse : ResponseBase
     {
         /// <summary>
         /// Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
@@ -25,11 +25,6 @@ namespace PolyPrompt.Models
         public List<ToolCall> ToolCalls { get; set; } = new List<ToolCall>();
 
         /// <summary>
-        /// The model name used for this completion.
-        /// </summary>
-        public string Model { get; set; } = string.Empty;
-
-        /// <summary>
         /// Provider response identifier for correlation. May be null when the provider does not emit one.
         /// </summary>
         public string? ResponseId { get; set; } = null;
@@ -40,32 +35,10 @@ namespace PolyPrompt.Models
         public string? FinishReason { get; set; } = null;
 
         /// <summary>
-        /// Whether the streaming request was initiated successfully.
-        /// If false, check Error for details.
-        /// </summary>
-        public bool Success { get; set; }
-
-        /// <summary>
-        /// HTTP status code from the streaming request.
-        /// </summary>
-        public int? StatusCode { get; set; } = null;
-
-        /// <summary>
-        /// Error message if the request failed.
-        /// </summary>
-        public string? Error { get; set; } = null;
-
-        /// <summary>
         /// The async enumerable of streaming chunks.
         /// Enumerate this to receive text and tool-call deltas as they arrive.
         /// </summary>
         public IAsyncEnumerable<ToolChatStreamingChunk> Chunks { get; set; } = EmptyChunks();
-
-        /// <summary>
-        /// Overall runtime in milliseconds from request start to last chunk received.
-        /// Updated after all chunks have been consumed.
-        /// </summary>
-        public long OverallRuntimeMs { get; set; }
 
         /// <summary>
         /// Time in milliseconds from request start to the first text or tool-call delta chunk.
@@ -100,7 +73,7 @@ namespace PolyPrompt.Models
         /// <summary>
         /// Final token usage from the stream.
         /// </summary>
-        public ChatStreamingUsage? Usage { get; set; } = null;
+        public TokenUsage? Usage { get; set; } = null;
 
         /// <summary>
         /// Convert this response into an assistant message that can be appended to the next ToolChatRequest.

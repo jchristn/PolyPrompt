@@ -37,7 +37,7 @@ namespace PolyPrompt.Models
         /// Token usage and timing statistics. Typically only populated on the final chunk.
         /// Gemini provides cumulative usage on every chunk.
         /// </summary>
-        public ChatStreamingUsage? Usage { get; set; }
+        public TokenUsage? Usage { get; set; }
 
         /// <summary>
         /// Response identifier for correlation. Present in OpenAI (id) and Gemini (responseId).

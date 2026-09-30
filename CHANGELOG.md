@@ -1,5 +1,52 @@
 # Changelog
 
+## v3.0.0 (2026-09-30)
+
+A breaking release. Each provider client is split into one client per capability, settings move into reusable options classes, decision models are added, and a number of 2.x inconsistencies are fixed. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md) for a step-by-step guide.
+
+### Changed (breaking)
+
+- **One client per capability per provider.** `ClientBase` holds the transport (timeouts, per-request credentials, `CallDetails`, `ValidateConnectivityAsync`). Seven abstract capability bases derive from it: `CompletionClientBase` (chat, tool chat, and generation, streaming and not), `EmbeddingClientBase`, `SparseEmbeddingClientBase`, `RerankClientBase`, `ClassificationClientBase`, `DecisionClientBase` (new), and `ModelClientBase`. The ten 2.x clients become 32 capability clients (for example `CohereClient` becomes `CohereCompletionClient`, `CohereEmbeddingClient`, `CohereRerankClient`, `CohereClassificationClient`, and `CohereModelClient`), plus the new `TypeSafeDecisionClient`. A client has only the operations its provider supports, so every `NotSupportedException` path is gone and unsupported operations are compile errors.
+- **Settings live in options classes.** Each client has a get-only `Defaults` of its capability's options type, and every operation takes the same type per call. Settings merge field by field: a per-call value, else `Defaults`, else the provider default. `Model` reads and writes `Defaults.Model`. The client-level `MaxTokens`, `Temperature`, `TopP`, `SystemPrompt`, `ReasoningEffort`, `ContextLength`, `ToolSchemaMode`, `EmbeddingModel`, `RerankModel`, and `ClassificationModel` properties are removed.
+- **Chat, tool chat, and generation share one options type.** `ChatCompletionOptions` and `GenerationOptions` (and their ten provider variants) merge into `CompletionOptions` and `OllamaCompletionOptions`, `OpenAiCompletionOptions`, `GeminiCompletionOptions`, `AnthropicCompletionOptions`, and `CohereCompletionOptions`. `ToolChatRequest` loses its inline `Model`, `MaxTokens`, `Temperature`, `TopP`, and `ReasoningEffort` in favor of `ToolChatRequest.Options`. Provider options now also apply to tool chat.
+- **Public methods validate, then call a protected core.** Public operations are no longer virtual. The capability base validates arguments, merges settings, and calls a protected `...CoreAsync` method, so validation is identical on every provider.
+- Renamed `CompletionCallDetail` to `CallDetail`, `CompletionHttpResult` to `HttpCallResult`, and `ChatStreamingUsage` to `TokenUsage`. `GeminiToolSchemaMode` moves to `PolyPrompt.Options`. `AzureOpenAiClient.DefaultApiVersion` moves to `AzureOpenAiDefaults.ApiVersion`. `AzureOpenAiEmbeddingOptions` is removed (use `OpenAiEmbeddingOptions`). Responses share `ResponseBase` (`Success`, `StatusCode` as `int?`, `Error`, `Model`, `OverallRuntimeMs`).
+- Bedrock constructors take `(credentialProvider, region, endpoint, logging, httpClient)`; `endpoint` was last in 2.x.
+- `OllamaEmbeddingOptions.Truncate` is `bool?` (matching Ollama's API) and `RerankOptions.ReturnDocuments` is `bool?`.
+- Model-list page sizes are `PageSize` on `AnthropicModelClient` and `CohereModelClient` (were `ModelsPageLimit` and `ModelsPageSize`). `OllamaModelClient.PullTimeout` makes the pull timeout configurable (default 30 minutes).
+
+### Added
+
+- **Decision models.** `DecisionClientBase.DecideAsync` asks typed questions about a state and returns calibrated answers instead of generated text: binary (`BinaryQuestion` and `BinaryAnswer.Probability`), choice (`ChoiceQuestion`, and `ChoiceAnswer.Value` with `Probability`), and score (`ScoreQuestion`, and `ScoreAnswer.Value` with its nearest rubric `Level` and `LevelText`). Every answer carries `Confidence` and the `Probabilities` distribution, and `DecisionResponse.Choice`, `Binary`, and `Score` return typed answers. Requests are validated before sending: a state, 1 or more questions with unique ids and instructions, 2 to 255 unique choice options, and 2 to 10 score levels. The batch overload returns responses in input order, sending at most `MaxConcurrency` (default 4, 1 to 64) at once. Question text is a `DecisionContent`, which converts implicitly from `string`, so richer content can be added later without breaking callers.
+- **`TypeSafeDecisionClient`** for the TypeSafe System One API (`POST /v1/systemone`), served by TypeSafe's hosted Jev models (default `jev-latest`) and by Ollaya, the local runtime. Binary questions are sent as TypeSafe `noul` questions. HTTP 422, 429, and 529 are reported on the response. `ValidateConnectivityAsync` uses `/v1/models` and, on 404 (the hosted API), a one-question decision.
+- `CompletionOptions.Model` lets a single chat call use another model (2.x supported this for generation and tool chat only).
+- `DecisionOption.Of(value, description)`, and a `TypeSafeConsole` interactive harness.
+
+### Fixed
+
+- **The Gemini API key was sent in the URL**, so it appeared in `CallDetail.Url` and logs. It is now sent in the `x-goog-api-key` header.
+- **A Gemini tool result without `ToolName` was sent with the call id as the function name**, which Gemini rejects. The name is now recovered from the assistant tool call with the same id earlier in the conversation. If none exists, `ToolChatAsync` throws `ArgumentException` before sending, naming the message and the id. Callers should still set `ToolName` (`ChatMessage.ToolResult` does).
+- **Clients modified `HttpClient.DefaultRequestHeaders`**, so clients sharing an injected `HttpClient` could send each other's credentials. Credentials and provider headers are now attached to each request.
+- **Per-call models were ignored** on some paths: Ollama and OpenAI plain chat always used the client model, and Azure OpenAI always routed to the client's deployment.
+- **Embeddings used the chat model by default** on Ollama, OpenAI, Gemini, and Bedrock. Each embedding client now has its own default: `all-minilm`, `text-embedding-3-small`, `gemini-embedding-001`, and `amazon.titan-embed-text-v2:0` (Vertex AI: `text-embedding-005`).
+- **`ValidateConnectivityAsync` returned true on HTTP errors** for several providers. Every client now returns false on an HTTP error, an unreachable server, or a timeout, and rethrows only caller cancellation.
+- **Gemini responses without candidates were reported as successful** with null text. A blocked prompt now fails with `Error = "Prompt blocked: <reason>"`.
+- Gemini plain chat sends the system prompt as `systemInstruction` (2.x sent a fake user and model exchange), and assistant text beside tool calls is kept when replaying history.
+- OpenAI base64 embeddings (`EncodingFormat = "base64"`) are decoded; 2.x could not parse them.
+- The Ollama embedding `truncate` field was sent as an integer; Ollama expects a boolean.
+- `Defaults.SystemPrompt` and `Defaults.ReasoningEffort` now apply to both chat and tool chat. In 2.x the client-level reasoning default applied only to tool chat and the client-level system prompt never did. In tool chat the system prompt is sent only when the messages contain no system message.
+- `GeminiModelClient` follows `nextPageToken`; Ollama delete requests are recorded in `CallDetails` and pull requests carry credentials.
+- Streamed Gemini chunks no longer lose leading or trailing whitespace.
+
+### Tests
+
+- **215 local cases** (up from 185 in 2.8.0), all green in `Test.Automated`, `Test.Xunit`, and `Test.Nunit` on net8.0 and net10.0. Seven cases that only asserted `NotSupportedException` were removed, because those operations no longer exist. The new cases mostly loop over every client, so the number of assertions grew much more than the number of cases.
+- New architecture cases: a reflection check that each of the 33 clients derives from exactly one capability base, exposes only that capability's operations, and has its own get-only `Defaults`. Other cases cover argument validation on every client before any request; `InvalidOperationException` without a model; field-by-field merging of per-call options over `Defaults` on all 8 completion clients (checked on the wire); per-request credentials on a shared `HttpClient`; the Gemini key never appearing in a URL; and every client's connectivity probe returning true when reachable, false on HTTP 401 or an unreachable endpoint, and rethrowing cancellation.
+- New decision cases: `DecisionContent` conversions; the factories; 16 validation error paths plus the boundary sizes; the TypeSafe wire format (question types, criteria, structured state, model override, bearer key); parsing into typed answers; score-level clamping; HTTP 422, 429, and 529; malformed responses; typed accessors; batch ordering, concurrency limits, and partial failure; cancellation; the connectivity fallback; and call recording. The local server gains a TypeSafe route that computes answers from the request.
+- New provider cases: Gemini tool-name recovery (streaming, non-streaming, and Vertex AI; out-of-order parallel results; an explicit name winning; no write-back into the caller's messages) and its negative paths (unknown id, no id, and a call that appears only after its result); OpenAI base64 embeddings; and live configuration for Azure OpenAI, Vertex AI, Bedrock, and TypeSafe.
+- Verified that the merge and parsing cases fail when their behavior is broken (for example, reversing the per-call and default precedence).
+- The live suite is rebuilt around capability clients. A case whose capability a provider lacks is skipped with the reason instead of asserting an exception. New live cases: `embed_sparse`, `classify`, `decide`, `decide_batch`, `tool_result_shapes`, and connectivity and cancellation on every client. The runner accepts `--azure-*`, `--vertex-*`, `--bedrock-*`, and `--typesafe-*` groups (or `--provider` with `--region`, `--project`, `--credentials`, `--access-key-id`, `--secret-access-key`, `--session-token`, and `--api-version`) and the matching `POLYPROMPT_TEST_*` environment variables.
+
 ## v2.8.0 (2026-09-30)
 
 ### Fixed

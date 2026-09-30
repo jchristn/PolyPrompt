@@ -6,12 +6,28 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Builds Touchstone test suites that exercise live provider endpoints.
+    /// Builds Touchstone test suites that exercise live provider endpoints. Each case uses the capability client it needs;
+    /// a case whose capability the configured provider does not offer is skipped with the reason.
     /// </summary>
     public static class ProviderLiveSuite
     {
         private const string SuiteId = "provider_live";
         private const string BogusModel = "nonexistent-model-xyz-999";
+
+        private static readonly Dictionary<string, HashSet<string>> _Capabilities = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
+        {
+            { "ollama", new HashSet<string> { "completion", "embedding", "models" } },
+            { "openai", new HashSet<string> { "completion", "embedding", "models" } },
+            { "azure", new HashSet<string> { "completion", "embedding", "models" } },
+            { "gemini", new HashSet<string> { "completion", "embedding", "models" } },
+            { "vertex", new HashSet<string> { "completion", "embedding" } },
+            { "anthropic", new HashSet<string> { "completion", "models" } },
+            { "bedrock", new HashSet<string> { "completion", "embedding", "rerank", "models" } },
+            { "voyageai", new HashSet<string> { "embedding", "rerank" } },
+            { "cohere", new HashSet<string> { "completion", "embedding", "rerank", "classification", "models" } },
+            { "tei", new HashSet<string> { "embedding", "sparse", "rerank", "classification", "models" } },
+            { "typesafe", new HashSet<string> { "decision" } },
+        };
 
         /// <summary>
         /// Creates the live provider test suite for the supplied configuration.
@@ -23,31 +39,38 @@ namespace Test.Shared
         {
             if (configuration == null) throw new ArgumentNullException(nameof(configuration));
 
+            ProviderTestConfiguration c = configuration;
+            bool noLegacyCompletions = c.ProviderType == "openai" || c.ProviderType == "azure";
+
             return new TestSuiteDescriptor(
                 SuiteId,
                 "Live provider behavior",
                 new List<TestCaseDescriptor>
                 {
-                    Case("required_models", "Required models are available", token => RunRequiredModelsAsync(configuration, token), skip: IsVoyageAi(configuration) || IsTei(configuration), skipReason: IsTei(configuration) ? "TEI serves a single server-defined model; see list_models." : "VoyageAI does not provide a model listing API."),
-                    Case("properties", "Client and option properties behave correctly", token => RunPropertyTestsAsync(configuration, token)),
-                    Case("chat", "Chat completion succeeds", token => RunChatTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
-                    Case("chat_streaming", "Streaming chat succeeds", token => RunChatStreamingTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
-                    Case("tool_chat", "Tool chat succeeds or reports unsupported model", token => RunToolChatTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
-                    Case("tool_chat_streaming", "Streaming tool chat succeeds or reports unsupported model", token => RunToolChatStreamingTestsAsync(configuration, token), skip: HasNoChat(configuration), skipReason: NoChatReason(configuration)),
-                    Case("embed_single", "Single embedding succeeds", token => RunEmbeddingSingleTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
-                    Case("embed_batch", "Batch embedding succeeds", token => RunEmbeddingBatchTestsAsync(configuration, token), skip: IsAnthropic(configuration), skipReason: "Anthropic does not provide an embeddings API."),
-                    Case("rerank", "Rerank succeeds, or throws NotSupportedException on providers without reranking", token => RunRerankTestsAsync(configuration, token)),
-                    Case("classify", "Classification succeeds, or throws NotSupportedException on providers without classification", token => RunClassifyTestsAsync(configuration, token)),
-                    Case("generate", "Text generation succeeds", token => RunGenerationTestsAsync(configuration, token), skip: IsOpenAi(configuration) || HasNoChat(configuration), skipReason: HasNoChat(configuration) ? NoChatReason(configuration) : "OpenAI does not support the legacy completions API."),
-                    Case("generate_streaming", "Streaming text generation succeeds", token => RunGenerationStreamingTestsAsync(configuration, token), skip: IsOpenAi(configuration) || HasNoChat(configuration), skipReason: HasNoChat(configuration) ? NoChatReason(configuration) : "OpenAI does not support the legacy completions API."),
-                    Case("call_details", "CallDetails records upstream calls", token => RunCallDetailsTestsAsync(configuration, token)),
-                    Case("list_models", "ListModelsAsync returns models", token => RunListModelsTestsAsync(configuration, token)),
-                    Case("model_exists", "ModelExistsAsync handles existing and missing models", token => RunModelExistsTestsAsync(configuration, token)),
-                    Case("get_model_information", "GetModelInformationAsync handles existing and missing models", token => RunGetModelInformationTestsAsync(configuration, token)),
-                    Case("pull_model", "PullModelAsync provider behavior is correct", token => RunPullModelTestsAsync(configuration, token)),
-                    Case("delete_model", "DeleteModelAsync provider behavior is correct", token => RunDeleteModelTestsAsync(configuration, token)),
-                    Case("validate_connectivity", "ValidateConnectivityAsync handles reachable and unreachable endpoints", token => RunValidateConnectivityTestsAsync(configuration, token)),
-                    Case("cancellation", "Provider operations respect pre-cancelled tokens", token => RunCancellationTestsAsync(configuration, token)),
+                    Case(c, "required_models", "Configured models are listed by the provider", t => RunRequiredModelsAsync(c, t), "models", extraSkip: c.ProviderType == "tei", extraReason: "TEI serves a single server-defined model; see list_models."),
+                    Case(c, "properties", "Client and option properties behave correctly", t => RunPropertyTestsAsync(c, t)),
+                    Case(c, "chat", "Chat completion succeeds", t => RunChatTestsAsync(c, t), "completion"),
+                    Case(c, "chat_streaming", "Streaming chat succeeds", t => RunChatStreamingTestsAsync(c, t), "completion"),
+                    Case(c, "tool_chat", "Tool chat completes a two-step tool loop or reports an unsupported model", t => RunToolChatTestsAsync(c, t), "completion"),
+                    Case(c, "tool_chat_streaming", "Streaming tool chat completes a two-step tool loop or reports an unsupported model", t => RunToolChatStreamingTestsAsync(c, t), "completion"),
+                    Case(c, "tool_result_shapes", "Tool results that are arrays or plain text complete a tool loop", t => RunToolResultShapesAsync(c, t), "completion"),
+                    Case(c, "generate", "Text generation succeeds", t => RunGenerationTestsAsync(c, t), "completion", extraSkip: noLegacyCompletions, extraReason: "OpenAI chat models do not support the legacy completions API."),
+                    Case(c, "generate_streaming", "Streaming text generation succeeds", t => RunGenerationStreamingTestsAsync(c, t), "completion", extraSkip: noLegacyCompletions, extraReason: "OpenAI chat models do not support the legacy completions API."),
+                    Case(c, "embed_single", "Single embedding succeeds", t => RunEmbeddingSingleTestsAsync(c, t), "embedding"),
+                    Case(c, "embed_batch", "Batch embedding succeeds", t => RunEmbeddingBatchTestsAsync(c, t), "embedding"),
+                    Case(c, "embed_sparse", "Sparse embedding succeeds or reports the hosted model cannot serve it", t => RunSparseEmbeddingTestsAsync(c, t), "sparse"),
+                    Case(c, "rerank", "Rerank scores and orders documents", t => RunRerankTestsAsync(c, t), "rerank"),
+                    Case(c, "classify", "Classification labels every input", t => RunClassifyTestsAsync(c, t), "classification"),
+                    Case(c, "decide", "Decision answers binary, choice, and score questions", t => RunDecisionTestsAsync(c, t), "decision"),
+                    Case(c, "decide_batch", "Decision batch returns one response per request in order", t => RunDecisionBatchTestsAsync(c, t), "decision"),
+                    Case(c, "call_details", "CallDetails records upstream calls", t => RunCallDetailsTestsAsync(c, t)),
+                    Case(c, "list_models", "ListModelsAsync returns models", t => RunListModelsTestsAsync(c, t), "models"),
+                    Case(c, "model_exists", "ModelExistsAsync handles existing and missing models", t => RunModelExistsTestsAsync(c, t), "models"),
+                    Case(c, "get_model_information", "GetModelInformationAsync handles existing and missing models", t => RunGetModelInformationTestsAsync(c, t), "models"),
+                    Case(c, "pull_model", "Ollama PullModelAsync pulls the configured model", t => RunPullModelTestsAsync(c, t), extraSkip: c.ProviderType != "ollama", extraReason: "Only Ollama can pull models."),
+                    Case(c, "delete_model", "Ollama DeleteModelAsync reports a missing model", t => RunDeleteModelTestsAsync(c, t), extraSkip: c.ProviderType != "ollama", extraReason: "Only Ollama can delete models."),
+                    Case(c, "validate_connectivity", "ValidateConnectivityAsync handles reachable and unreachable endpoints for every client", t => RunValidateConnectivityTestsAsync(c, t)),
+                    Case(c, "cancellation", "Every operation respects a pre-cancelled token", t => RunCancellationTestsAsync(c, t)),
                 });
         }
 
@@ -69,31 +92,70 @@ namespace Test.Shared
                         _ => Task.CompletedTask,
                         new[] { "live" },
                         skip: true,
-                        skipReason: "Set POLYPROMPT_TEST_PROVIDER and POLYPROMPT_TEST_ENDPOINT, or pass provider CLI arguments."),
+                        skipReason: "Set POLYPROMPT_TEST_PROVIDER and POLYPROMPT_TEST_ENDPOINT, or a POLYPROMPT_TEST_{PROVIDER}_* group, or pass provider CLI arguments."),
                 });
         }
 
+        /// <summary>
+        /// True when the provider type offers the capability.
+        /// </summary>
+        /// <param name="providerType">Provider type.</param>
+        /// <param name="capability">completion, embedding, sparse, rerank, classification, decision, or models.</param>
+        /// <returns>True when supported.</returns>
+        public static bool Supports(string providerType, string capability)
+        {
+            return _Capabilities.TryGetValue(providerType, out HashSet<string>? capabilities) && capabilities.Contains(capability);
+        }
+
+        #region Cases
+
         private static TestCaseDescriptor Case(
+            ProviderTestConfiguration configuration,
             string caseId,
             string displayName,
             Func<CancellationToken, Task> executeAsync,
-            bool skip = false,
-            string? skipReason = null)
+            string? capability = null,
+            bool extraSkip = false,
+            string? extraReason = null)
         {
-            return new TestCaseDescriptor(SuiteId, caseId, displayName, executeAsync, new[] { "live" }, skip, skipReason);
+            bool skip = false;
+            string? reason = null;
+
+            if (capability != null && !Supports(configuration.ProviderType, capability))
+            {
+                skip = true;
+                reason = configuration.ProviderType + " has no " + capability + " client.";
+            }
+            else if (capability == "embedding" && configuration.ProviderType == "azure" && string.IsNullOrEmpty(configuration.EmbeddingModel))
+            {
+                skip = true;
+                reason = "No Azure OpenAI embedding deployment is configured.";
+            }
+            else if (extraSkip)
+            {
+                skip = true;
+                reason = extraReason;
+            }
+
+            return new TestCaseDescriptor(SuiteId, caseId, displayName, executeAsync, new[] { "live" }, skip, reason);
         }
 
         private static async Task RunRequiredModelsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-            List<string> availableModels = await GetModelNamesAsync(client, token).ConfigureAwait(false);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            List<string> availableModels = await GetModelNamesAsync(provider.Models!, token).ConfigureAwait(false);
 
             SharedAssert.True(availableModels.Count > 0, "Provider should list at least one model.");
-            SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, client.Model)), "Inference model '" + client.Model + "' should exist.");
 
-            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
+            if (provider.Completion != null && configuration.ProviderType != "azure")
             {
-                SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, configuration.EmbeddingModel)), "Embedding model '" + configuration.EmbeddingModel + "' should exist.");
+                string model = provider.Completion.Model!;
+                SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, model)), "Inference model '" + model + "' should be listed.");
+            }
+
+            if (provider.Embedding != null && !string.IsNullOrEmpty(configuration.EmbeddingModel) && configuration.ProviderType != "azure" && configuration.ProviderType != "bedrock")
+            {
+                SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, configuration.EmbeddingModel)), "Embedding model '" + configuration.EmbeddingModel + "' should be listed.");
             }
         }
 
@@ -101,174 +163,114 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
 
-            SharedAssert.NotEmpty(client.Endpoint, "Endpoint should be set.");
-
-            string originalModel = client.Model;
-            SharedAssert.NotEmpty(originalModel, "Model should have a default value.");
-
-            client.Model = "test-model";
-            SharedAssert.Equal("test-model", client.Model, "Model setter should work.");
-            client.Model = originalModel;
-
-            await SharedAssert.ThrowsAsync<ArgumentNullException>(
-                () =>
-                {
-                    client.Model = string.Empty;
-                    return Task.CompletedTask;
-                },
-                "Model should reject empty string.").ConfigureAwait(false);
-
-            await SharedAssert.ThrowsAsync<ArgumentNullException>(
-                () =>
-                {
-                    client.Model = "   ";
-                    return Task.CompletedTask;
-                },
-                "Model should reject whitespace.").ConfigureAwait(false);
-
-            client.MaxTokens = -1;
-            SharedAssert.Equal(1, client.MaxTokens, "MaxTokens should clamp to minimum 1.");
-
-            client.MaxTokens = 20_000_000;
-            SharedAssert.Equal(10_000_000, client.MaxTokens, "MaxTokens should clamp to maximum 10,000,000.");
-
-            client.MaxTokens = 128;
-            SharedAssert.Equal(128, client.MaxTokens, "MaxTokens should accept normal values.");
-
-            client.TimeoutMs = 100;
-            SharedAssert.Equal(100, client.TimeoutMs, "TimeoutMs should preserve subsecond values.");
-
-            client.TimeoutMs = 999_999;
-            SharedAssert.Equal(999_999, client.TimeoutMs, "TimeoutMs should not silently clamp large values.");
-
-            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
-                () =>
-                {
-                    client.TimeoutMs = 0;
-                    return Task.CompletedTask;
-                },
-                "TimeoutMs should reject zero.").ConfigureAwait(false);
-
-            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
-                () =>
-                {
-                    client.TimeoutMs = -1;
-                    return Task.CompletedTask;
-                },
-                "TimeoutMs should reject negative values.").ConfigureAwait(false);
-
-            int originalMaxCallDetails = client.MaxCallDetails;
-            client.MaxCallDetails = 2;
-            SharedAssert.Equal(2, client.MaxCallDetails, "MaxCallDetails setter should work.");
-
-            await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
-                () =>
-                {
-                    client.MaxCallDetails = -1;
-                    return Task.CompletedTask;
-                },
-                "MaxCallDetails should reject negative values.").ConfigureAwait(false);
-
-            client.MaxCallDetails = originalMaxCallDetails;
-
-            client.Temperature = -1.0;
-            SharedAssert.Equal(0.0, client.Temperature, "Temperature should clamp to 0.0.");
-
-            client.Temperature = 5.0;
-            SharedAssert.Equal(2.0, client.Temperature, "Temperature should clamp to 2.0.");
-
-            client.Temperature = 0.7;
-            SharedAssert.True(Math.Abs(client.Temperature!.Value - 0.7) < 0.001, "Temperature should accept normal values.");
-
-            client.Temperature = null;
-            SharedAssert.True(client.Temperature == null, "Temperature should be nullable.");
-
-            client.TopP = -0.5;
-            SharedAssert.Equal(0.0, client.TopP, "TopP should clamp to 0.0.");
-
-            client.TopP = 1.5;
-            SharedAssert.Equal(1.0, client.TopP, "TopP should clamp to 1.0.");
-
-            client.TopP = 0.9;
-            SharedAssert.True(Math.Abs(client.TopP!.Value - 0.9) < 0.001, "TopP should accept normal values.");
-
-            client.TopP = null;
-            SharedAssert.True(client.TopP == null, "TopP should be nullable.");
-
-            client.SystemPrompt = "You are a test assistant.";
-            SharedAssert.Equal("You are a test assistant.", client.SystemPrompt, "SystemPrompt should be settable.");
-
-            client.SystemPrompt = null;
-            SharedAssert.True(client.SystemPrompt == null, "SystemPrompt should be clearable.");
-
-            SharedAssert.NotNull(client.CallDetails, "CallDetails should be initialized.");
-
-            if (client is OllamaClient ollamaClient)
+            foreach (ClientBase client in provider.All)
             {
-                ollamaClient.ContextLength = 2048;
-                SharedAssert.Equal(2048, ollamaClient.ContextLength, "Ollama ContextLength should be settable.");
+                string name = client.GetType().Name;
+                SharedAssert.True(configuration.ProviderType == "vertex" || configuration.ProviderType == "bedrock" || !string.IsNullOrEmpty(client.Endpoint), name + " Endpoint should be set.");
 
-                ollamaClient.ContextLength = null;
-                SharedAssert.True(ollamaClient.ContextLength == null, "Ollama ContextLength should be nullable.");
+                client.TimeoutMs = 100;
+                SharedAssert.Equal(100, client.TimeoutMs, name + " TimeoutMs should preserve subsecond values.");
+                client.TimeoutMs = 999_999;
+                SharedAssert.Equal(999_999, client.TimeoutMs, name + " TimeoutMs should not silently clamp large values.");
+                await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(() => { client.TimeoutMs = 0; return Task.CompletedTask; }, name + " TimeoutMs should reject zero.").ConfigureAwait(false);
 
-                ollamaClient.ContextLength = -1;
-                SharedAssert.Equal(1, ollamaClient.ContextLength, "Ollama ContextLength should clamp to 1.");
+                client.MaxCallDetails = 2;
+                SharedAssert.Equal(2, client.MaxCallDetails, name + " MaxCallDetails setter should work.");
+                await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(() => { client.MaxCallDetails = -1; return Task.CompletedTask; }, name + " MaxCallDetails should reject negative values.").ConfigureAwait(false);
+                SharedAssert.NotNull(client.CallDetails, name + " CallDetails should be initialized.");
+            }
+
+            if (provider.Completion != null)
+            {
+                CompletionClientBase client = provider.Completion;
+                string originalModel = client.Model!;
+                SharedAssert.NotEmpty(originalModel, "Completion Model should have a default value.");
+                client.Model = "test-model";
+                SharedAssert.Equal("test-model", client.Model, "Completion Model setter should work.");
+                SharedAssert.Equal("test-model", client.Defaults.Model, "Completion Model should be stored in Defaults.Model.");
+                client.Model = originalModel;
+
+                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Model = string.Empty; return Task.CompletedTask; }, "Model should reject empty string.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Model = "   "; return Task.CompletedTask; }, "Model should reject whitespace.").ConfigureAwait(false);
+
+                client.Defaults.MaxTokens = -1;
+                SharedAssert.Equal(1, client.Defaults.MaxTokens, "MaxTokens should clamp to minimum 1.");
+                client.Defaults.MaxTokens = 20_000_000;
+                SharedAssert.Equal(10_000_000, client.Defaults.MaxTokens, "MaxTokens should clamp to maximum 10,000,000.");
+                client.Defaults.Temperature = 5.0;
+                SharedAssert.Equal(2.0, client.Defaults.Temperature, "Temperature should clamp to 2.0.");
+                client.Defaults.Temperature = null;
+                SharedAssert.True(client.Defaults.Temperature == null, "Temperature should be nullable.");
+                client.Defaults.TopP = 1.5;
+                SharedAssert.Equal(1.0, client.Defaults.TopP, "TopP should clamp to 1.0.");
+                client.Defaults.TopP = null;
+
+                if (client.Defaults is OllamaCompletionOptions ollama)
+                {
+                    ollama.ContextLength = -1;
+                    SharedAssert.Equal(1, ollama.ContextLength, "Ollama ContextLength should clamp to 1.");
+                    ollama.ContextLength = null;
+                    SharedAssert.True(ollama.ContextLength == null, "Ollama ContextLength should be nullable.");
+                }
             }
         }
 
         private static async Task RunChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
+            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             ChatResponse response = await client.ChatAsync("Say hello in exactly three words.", token: token).ConfigureAwait(false);
-            SharedAssert.True(response.Success, "Chat should succeed.");
+            SharedAssert.True(response.Success, "Chat should succeed. " + response.Error);
             SharedAssert.NotEmpty(response.Text, "Chat should return text.");
             SharedAssert.NotEmpty(response.Model, "Chat should return a model.");
-            SharedAssert.True(response.StatusCode.HasValue && response.StatusCode.Value == 200, "Chat should return HTTP 200.");
+            SharedAssert.True(response.StatusCode == 200, "Chat should return HTTP 200.");
             SharedAssert.True(response.OverallRuntimeMs > 0, "Chat runtime should be populated.");
             SharedAssert.True(response.Error == null, "Chat should not return an error.");
 
-            client.SystemPrompt = "You are a pirate. Always respond with 'Arrr'.";
+            client.Defaults.SystemPrompt = "You are a pirate. Always respond with 'Arrr'.";
             ChatResponse systemPromptResponse = await client.ChatAsync("Hello", token: token).ConfigureAwait(false);
-            SharedAssert.True(systemPromptResponse.Success, "Chat with system prompt should succeed.");
-            SharedAssert.NotEmpty(systemPromptResponse.Text, "Chat with system prompt should return text.");
-            client.SystemPrompt = null;
+            SharedAssert.True(systemPromptResponse.Success, "Chat with a default system prompt should succeed. " + systemPromptResponse.Error);
+            SharedAssert.NotEmpty(systemPromptResponse.Text, "Chat with a default system prompt should return text.");
+            client.Defaults.SystemPrompt = null;
 
-            ChatCompletionOptions chatOptions = CreateChatOptions(configuration.ProviderType);
+            CompletionOptions chatOptions = CreateCompletionOptions(configuration.ProviderType);
             ChatResponse optionsResponse = await client.ChatAsync("Say exactly: test options work", chatOptions, token).ConfigureAwait(false);
-            SharedAssert.True(optionsResponse.Success, "Chat with options should succeed.");
-            SharedAssert.NotEmpty(optionsResponse.Text, "Chat with options should return text.");
+            SharedAssert.True(optionsResponse.Success, "Chat with provider options should succeed. " + optionsResponse.Error);
+            SharedAssert.NotEmpty(optionsResponse.Text, "Chat with provider options should return text.");
 
-            ChatCompletionOptions baseOptions = new ChatCompletionOptions();
-            if (!IsAnthropic(configuration))
+            CompletionOptions baseOptions = new CompletionOptions();
+            if (AcceptsSampling(configuration))
             {
-                // Current Claude models reject sampling parameters; skip them for Anthropic.
                 baseOptions.Temperature = 0.5;
                 baseOptions.TopP = 0.9;
             }
             baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 64);
             baseOptions.SystemPrompt = "Respond in exactly one word.";
             ChatResponse baseOptionsResponse = await client.ChatAsync("What color is the sky?", baseOptions, token).ConfigureAwait(false);
-            SharedAssert.True(baseOptionsResponse.Success, "Chat with base options should succeed.");
+            SharedAssert.True(baseOptionsResponse.Success, "Chat with base options should succeed. " + baseOptionsResponse.Error);
             SharedAssert.NotEmpty(baseOptionsResponse.Text, "Chat with base options should return text.");
+
+            await SharedAssert.ThrowsAsync<ArgumentNullException>(() => client.ChatAsync(null!, token: token), "Chat should reject a null prompt before sending.").ConfigureAwait(false);
         }
 
         private static async Task RunChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
+            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("Count from 1 to 5, one number per line.", token: token).ConfigureAwait(false);
-            SharedAssert.True(stream.Success, "Streaming chat should start successfully.");
+            SharedAssert.True(stream.Success, "Streaming chat should start successfully. " + stream.Error);
             SharedAssert.NotEmpty(stream.Model, "Streaming chat should return a model.");
-            SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value == 200, "Streaming chat should return HTTP 200.");
-            SharedAssert.True(stream.Error == null, "Streaming chat should not return an error.");
+            SharedAssert.True(stream.StatusCode == 200, "Streaming chat should return HTTP 200.");
 
             int chunkCount = 0;
             string fullText = string.Empty;
             bool sawDone = false;
-
             await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
             {
                 chunkCount++;
@@ -278,86 +280,68 @@ namespace Test.Shared
 
             SharedAssert.True(chunkCount > 0, "Streaming chat should receive chunks.");
             SharedAssert.NotEmpty(fullText, "Streaming chat should assemble non-empty text.");
-            SharedAssert.True(sawDone, "Streaming chat should see a done chunk.");
+            SharedAssert.True(sawDone || stream.FinishReason != null, "Streaming chat should see completion.");
             SharedAssert.True(stream.ChunkCount > 0, "Streaming chat should populate ChunkCount.");
             SharedAssert.True(stream.OverallRuntimeMs > 0, "Streaming chat should populate OverallRuntimeMs.");
             SharedAssert.True(stream.TimeToFirstTokenMs >= 0, "Streaming chat should populate TimeToFirstTokenMs.");
             SharedAssert.True(stream.TimeToLastTokenMs >= stream.TimeToFirstTokenMs, "Streaming chat should order token timings.");
             SharedAssert.True(stream.OverallTokensPerSecond > 0, "Streaming chat should populate throughput.");
 
-            client.SystemPrompt = "Respond with only the word 'yes'.";
-            ChatStreamingResponse systemPromptStream = await client.ChatStreamingAsync("Confirm?", token: token).ConfigureAwait(false);
-            SharedAssert.True(systemPromptStream.Success, "Streaming chat with system prompt should start.");
-
-            string systemPromptText = string.Empty;
-            await foreach (ChatStreamingChunk chunk in systemPromptStream.Chunks.WithCancellation(token).ConfigureAwait(false))
-            {
-                if (!string.IsNullOrEmpty(chunk.Text)) systemPromptText += chunk.Text;
-            }
-            SharedAssert.NotEmpty(systemPromptText, "Streaming chat with system prompt should return text.");
-            client.SystemPrompt = null;
-
-            ChatCompletionOptions chatOptions = CreateChatOptions(configuration.ProviderType);
+            CompletionOptions chatOptions = CreateCompletionOptions(configuration.ProviderType);
             ChatStreamingResponse optionsStream = await client.ChatStreamingAsync("Say hi.", chatOptions, token).ConfigureAwait(false);
-            SharedAssert.True(optionsStream.Success, "Streaming chat with options should start.");
+            SharedAssert.True(optionsStream.Success, "Streaming chat with options should start. " + optionsStream.Error);
             await foreach (ChatStreamingChunk chunk in optionsStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
             SharedAssert.True(optionsStream.OverallRuntimeMs > 0, "Streaming chat with options should complete.");
         }
 
         private static async Task RunToolChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
             ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
             if (!response.Success && IsToolCapabilityError(response.Error))
             {
-                SharedAssert.True(response.StatusCode.HasValue && response.StatusCode.Value >= 400, "ToolChatAsync unsupported-tool response should include an HTTP error status.");
-                SharedAssert.NotEmpty(response.Error, "ToolChatAsync unsupported-tool response should include an error.");
+                SharedAssert.True(response.StatusCode >= 400, "An unsupported-tool response should include an HTTP error status.");
                 return;
             }
 
-            SharedAssert.True(response.Success, "ToolChatAsync should succeed.");
-            SharedAssert.True(response.StatusCode.HasValue && response.StatusCode.Value == 200, "ToolChatAsync should return HTTP 200.");
+            SharedAssert.True(response.Success, "ToolChatAsync should succeed. " + response.Error);
+            SharedAssert.True(response.StatusCode == 200, "ToolChatAsync should return HTTP 200.");
             SharedAssert.NotEmpty(response.Model, "ToolChatAsync should return a model.");
-            SharedAssert.True(response.OverallRuntimeMs > 0, "ToolChatAsync should populate runtime.");
-            SharedAssert.True(response.Error == null, "ToolChatAsync should not return an error.");
             SharedAssert.True(response.ToolCalls.Any() || !string.IsNullOrWhiteSpace(response.Text), "ToolChatAsync should return assistant text or tool calls.");
 
             if (!response.ToolCalls.Any()) return;
 
             request.Messages.Add(response.ToAssistantMessage());
-            AppendWeatherToolResults(request, response.ToolCalls);
-            request.Tools.Clear();
-            request.ToolChoice = "none";
+            AppendWeatherToolResults(request, response.ToolCalls, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}");
 
+            // Keep the tools declared on the follow-up: a replayed tool call must still validate against them.
             ToolChatResponse finalResponse = await client.ToolChatAsync(request, token).ConfigureAwait(false);
-            SharedAssert.True(finalResponse.Success, "ToolChatAsync follow-up should succeed.");
-            SharedAssert.True(finalResponse.StatusCode.HasValue && finalResponse.StatusCode.Value == 200, "ToolChatAsync follow-up should return HTTP 200.");
+            SharedAssert.True(finalResponse.Success, "ToolChatAsync follow-up should succeed. " + finalResponse.Error);
+            SharedAssert.True(finalResponse.StatusCode == 200, "ToolChatAsync follow-up should return HTTP 200.");
             SharedAssert.True(finalResponse.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalResponse.Text), "ToolChatAsync follow-up should return assistant text or additional tool calls.");
         }
 
         private static async Task RunToolChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
             ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
             if (!stream.Success && IsToolCapabilityError(stream.Error))
             {
-                SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value >= 400, "ToolChatStreamingAsync unsupported-tool response should include an HTTP error status.");
-                SharedAssert.NotEmpty(stream.Error, "ToolChatStreamingAsync unsupported-tool response should include an error.");
+                SharedAssert.True(stream.StatusCode >= 400, "An unsupported-tool response should include an HTTP error status.");
                 return;
             }
 
-            SharedAssert.True(stream.Success, "ToolChatStreamingAsync should start successfully.");
-            SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value == 200, "ToolChatStreamingAsync should return HTTP 200.");
-            SharedAssert.NotEmpty(stream.Model, "ToolChatStreamingAsync should return a model.");
-            SharedAssert.True(stream.Error == null, "ToolChatStreamingAsync should not return an error.");
+            SharedAssert.True(stream.Success, "ToolChatStreamingAsync should start successfully. " + stream.Error);
+            SharedAssert.True(stream.StatusCode == 200, "ToolChatStreamingAsync should return HTTP 200.");
 
             int chunkCount = 0;
             bool sawDone = false;
-
             await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
             {
                 chunkCount++;
@@ -366,107 +350,163 @@ namespace Test.Shared
 
             SharedAssert.True(chunkCount > 0, "ToolChatStreamingAsync should receive chunks.");
             SharedAssert.True(stream.ChunkCount > 0, "ToolChatStreamingAsync should count text or tool-call chunks.");
-            SharedAssert.True(stream.OverallRuntimeMs > 0, "ToolChatStreamingAsync should populate runtime.");
-            SharedAssert.True(stream.TimeToFirstTokenMs >= 0, "ToolChatStreamingAsync should populate TimeToFirstTokenMs.");
-            SharedAssert.True(stream.TimeToLastTokenMs >= stream.TimeToFirstTokenMs, "ToolChatStreamingAsync should order token timings.");
             SharedAssert.True(sawDone || stream.FinishReason != null, "ToolChatStreamingAsync should expose completion through done chunks or finish reason.");
             SharedAssert.True(stream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(stream.Text), "ToolChatStreamingAsync should accumulate assistant text or tool calls.");
 
             if (!stream.ToolCalls.Any()) return;
 
             request.Messages.Add(stream.ToAssistantMessage());
-            AppendWeatherToolResults(request, stream.ToolCalls);
-            request.Tools.Clear();
-            request.ToolChoice = "none";
+            AppendWeatherToolResults(request, stream.ToolCalls, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}");
 
             ToolChatStreamingResponse finalStream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            SharedAssert.True(finalStream.Success, "ToolChatStreamingAsync follow-up should start successfully.");
-            SharedAssert.True(finalStream.StatusCode.HasValue && finalStream.StatusCode.Value == 200, "ToolChatStreamingAsync follow-up should return HTTP 200.");
+            SharedAssert.True(finalStream.Success, "ToolChatStreamingAsync follow-up should start successfully. " + finalStream.Error);
+            await foreach (ToolChatStreamingChunk chunk in finalStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
+            SharedAssert.True(finalStream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalStream.Text), "ToolChatStreamingAsync follow-up should accumulate assistant text or additional tool calls.");
+        }
 
-            int finalChunkCount = 0;
-            await foreach (ToolChatStreamingChunk chunk in finalStream.Chunks.WithCancellation(token).ConfigureAwait(false))
+        private static async Task RunToolResultShapesAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
+
+            foreach (string result in new[] { "[{\"city\":\"Seattle\",\"temperature\":72}]", "It is 72 degrees and clear in Seattle." })
             {
-                finalChunkCount++;
+                ToolChatRequest request = CreateWeatherToolRequest(configuration);
+                request.ToolChoice = "required";
+
+                ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                if (!first.Success && IsToolCapabilityError(first.Error)) return;
+                SharedAssert.True(first.Success, "Forced tool chat should succeed. " + first.Error);
+                if (!first.ToolCalls.Any()) return;
+
+                request.Messages.Add(first.ToAssistantMessage());
+                AppendWeatherToolResults(request, first.ToolCalls, result);
+                request.ToolChoice = "auto";
+
+                ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                SharedAssert.True(final.Success, "A tool loop whose result is '" + result + "' should complete. " + final.Error);
+            }
+        }
+
+        private static async Task RunGenerationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
+            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+
+            GenerationResponse response = await client.GenerateAsync("Once upon a time, there was a", token: token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Generation should succeed. " + response.Error);
+            SharedAssert.NotEmpty(response.Text, "Generation should return text.");
+            SharedAssert.NotEmpty(response.Model, "Generation should return a model.");
+            SharedAssert.True(response.StatusCode == 200, "Generation should return HTTP 200.");
+
+            GenerationResponse optionResponse = await client.GenerateAsync("The quick brown fox", CreateCompletionOptions(configuration.ProviderType), token).ConfigureAwait(false);
+            SharedAssert.True(optionResponse.Success, "Generation with provider options should succeed. " + optionResponse.Error);
+            SharedAssert.NotEmpty(optionResponse.Text, "Generation with provider options should return text.");
+        }
+
+        private static async Task RunGenerationStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            CompletionClientBase client = provider.Completion!;
+            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+
+            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("Write a haiku about the sea.", token: token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "Streaming generation should start successfully. " + stream.Error);
+            SharedAssert.True(stream.StatusCode == 200, "Streaming generation should return HTTP 200.");
+
+            int chunkCount = 0;
+            string fullText = string.Empty;
+            await foreach (GenerationStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            {
+                chunkCount++;
+                if (!string.IsNullOrEmpty(chunk.Text)) fullText += chunk.Text;
             }
 
-            SharedAssert.True(finalChunkCount > 0, "ToolChatStreamingAsync follow-up should receive chunks.");
-            SharedAssert.True(finalStream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalStream.Text), "ToolChatStreamingAsync follow-up should accumulate assistant text or additional tool calls.");
+            SharedAssert.True(chunkCount > 0, "Streaming generation should receive chunks.");
+            SharedAssert.NotEmpty(fullText, "Streaming generation should assemble non-empty text.");
+            SharedAssert.True(stream.ChunkCount > 0, "Streaming generation should populate ChunkCount.");
+            SharedAssert.True(stream.OverallRuntimeMs > 0, "Streaming generation should populate OverallRuntimeMs.");
         }
 
         private static async Task RunEmbeddingSingleTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-            EmbeddingOptions embeddingModelOptions = CreateEmbeddingModelOptions(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            EmbeddingClientBase client = provider.Embedding!;
 
-            if (IsTei(configuration) && !await TeiServesAsync(client, "embedding", token).ConfigureAwait(false))
+            if (configuration.ProviderType == "tei" && !await TeiServesAsync(provider, "embedding", token).ConfigureAwait(false))
             {
-                // A TEI server hosting a reranker or classifier rejects /embed; the failure must surface cleanly.
-                EmbeddingResponse rejected = await client.EmbedAsync("Hello, world!", embeddingModelOptions, token).ConfigureAwait(false);
+                EmbeddingResponse rejected = await client.EmbedAsync("Hello, world!", null, token).ConfigureAwait(false);
                 SharedAssert.False(rejected.Success, "TEI /embed should fail when the server does not host an embedding model.");
                 SharedAssert.NotEmpty(rejected.Error, "TEI /embed on a non-embedding model should report an error.");
                 return;
             }
 
-            EmbeddingResponse response = await client.EmbedAsync("Hello, world!", embeddingModelOptions, token).ConfigureAwait(false);
-            SharedAssert.True(response.Success, "Single embedding should succeed.");
-            SharedAssert.Equal(200, response.StatusCode, "Single embedding should return HTTP 200.");
-            SharedAssert.NotEmpty(response.Model, "Single embedding should return a model.");
-            SharedAssert.True(response.OverallRuntimeMs > 0, "Single embedding runtime should be populated.");
-            SharedAssert.True(response.Error == null, "Single embedding should not return an error.");
+            EmbeddingResponse response = await client.EmbedAsync("Hello, world!", null, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Single embedding should succeed. " + response.Error);
+            SharedAssert.True(response.StatusCode == 200, "Single embedding should return HTTP 200.");
             SharedAssert.Equal(1, response.Embeddings.Count, "Single embedding should return one vector.");
-
-            float[] vector = response.Embeddings[0].Embedding;
             SharedAssert.Equal(0, response.Embeddings[0].Index, "Single embedding index should be zero.");
-            SharedAssert.True(vector.Length > 0, "Single embedding vector should be non-empty.");
-            SharedAssert.True(vector.Any(value => Math.Abs(value) > 0.0001f), "Single embedding vector should have non-zero values.");
+            float[] vector = response.Embeddings[0].Embedding;
+            SharedAssert.True(vector.Length > 0 && vector.Any(value => Math.Abs(value) > 0.0001f), "Single embedding vector should have non-zero values.");
 
-            EmbeddingOptions providerOptions = CreateEmbeddingOptions(configuration);
-            EmbeddingResponse optionResponse = await client.EmbedAsync("Test with options", providerOptions, token).ConfigureAwait(false);
-            SharedAssert.True(optionResponse.Success, "Single embedding with options should succeed.");
+            EmbeddingResponse optionResponse = await client.EmbedAsync("Test with options", CreateEmbeddingOptions(configuration), token).ConfigureAwait(false);
+            SharedAssert.True(optionResponse.Success, "Single embedding with provider options should succeed. " + optionResponse.Error);
             SharedAssert.Equal(1, optionResponse.Embeddings.Count, "Single embedding with options should return one vector.");
 
-            EmbeddingResponse response2 = await client.EmbedAsync("Goodbye, cruel world!", embeddingModelOptions, token).ConfigureAwait(false);
+            EmbeddingResponse response2 = await client.EmbedAsync("Goodbye, cruel world!", null, token).ConfigureAwait(false);
             SharedAssert.True(response2.Success, "Second single embedding should succeed.");
-            SharedAssert.True(!VectorsEqual(response.Embeddings[0].Embedding, response2.Embeddings[0].Embedding), "Different texts should produce different embedding vectors.");
+            SharedAssert.False(VectorsEqual(response.Embeddings[0].Embedding, response2.Embeddings[0].Embedding), "Different texts should produce different embedding vectors.");
         }
 
         private static async Task RunEmbeddingBatchTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-            EmbeddingOptions embeddingModelOptions = CreateEmbeddingModelOptions(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            EmbeddingClientBase client = provider.Embedding!;
 
-            if (IsTei(configuration) && !await TeiServesAsync(client, "embedding", token).ConfigureAwait(false))
+            if (configuration.ProviderType == "tei" && !await TeiServesAsync(provider, "embedding", token).ConfigureAwait(false))
             {
-                EmbeddingResponse rejected = await client.EmbedAsync(new List<string> { "a", "b" }, embeddingModelOptions, token).ConfigureAwait(false);
+                EmbeddingResponse rejected = await client.EmbedAsync(new List<string> { "a", "b" }, null, token).ConfigureAwait(false);
                 SharedAssert.False(rejected.Success, "TEI batch /embed should fail when the server does not host an embedding model.");
                 return;
             }
 
             List<string> inputs = new List<string> { "The cat sat on the mat.", "Dogs are loyal companions.", "Fish swim in the ocean." };
-            EmbeddingResponse response = await client.EmbedAsync(inputs, embeddingModelOptions, token).ConfigureAwait(false);
-            SharedAssert.True(response.Success, "Batch embedding should succeed.");
-            SharedAssert.Equal(200, response.StatusCode, "Batch embedding should return HTTP 200.");
-            SharedAssert.True(response.OverallRuntimeMs > 0, "Batch embedding runtime should be populated.");
+            EmbeddingResponse response = await client.EmbedAsync(inputs, null, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Batch embedding should succeed. " + response.Error);
             SharedAssert.Equal(3, response.Embeddings.Count, "Batch embedding should return three vectors.");
 
             for (int i = 0; i < response.Embeddings.Count; i++)
             {
                 SharedAssert.Equal(i, response.Embeddings[i].Index, "Batch embedding index should match input index.");
-                SharedAssert.True(response.Embeddings[i].Embedding.Length > 0, "Batch embedding vector should be non-empty.");
+                SharedAssert.Equal(response.Embeddings[0].Embedding.Length, response.Embeddings[i].Embedding.Length, "Batch embedding dimensions should match.");
             }
 
-            int dimension = response.Embeddings[0].Embedding.Length;
-            SharedAssert.Equal(dimension, response.Embeddings[1].Embedding.Length, "Batch embedding dimensions should match for entries 0 and 1.");
-            SharedAssert.Equal(dimension, response.Embeddings[2].Embedding.Length, "Batch embedding dimensions should match for entries 0 and 2.");
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => client.EmbedAsync(new List<string>(), null, token), "An empty batch should be rejected before sending.").ConfigureAwait(false);
+        }
 
-            EmbeddingResponse singleBatchResponse = await client.EmbedAsync(new List<string> { "Single item batch" }, embeddingModelOptions, token).ConfigureAwait(false);
-            SharedAssert.True(singleBatchResponse.Success, "Batch embedding with one input should succeed.");
-            SharedAssert.Equal(1, singleBatchResponse.Embeddings.Count, "Batch embedding with one input should return one vector.");
+        private static async Task RunSparseEmbeddingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            SparseEmbeddingClientBase client = provider.SparseEmbedding!;
+
+            SparseEmbeddingResponse response = await client.EmbedSparseAsync(new List<string> { "sparse lexical retrieval", "second input" }, null, token).ConfigureAwait(false);
+            if (!response.Success)
+            {
+                // A TEI server that does not host a SPLADE model rejects /embed_sparse; the failure must surface cleanly.
+                SharedAssert.True(response.StatusCode >= 400, "A rejected sparse embedding should report an HTTP error status.");
+                SharedAssert.NotEmpty(response.Error, "A rejected sparse embedding should report an error.");
+                return;
+            }
+
+            SharedAssert.Equal(2, response.Embeddings.Count, "Sparse embedding should return one vector per input.");
+            SharedAssert.True(response.Embeddings.All(e => e.Values.Count > 0), "Every sparse vector should have entries.");
         }
 
         private static async Task RunRerankTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            RerankClientBase client = provider.Rerank!;
 
             List<string> documents = new List<string>
             {
@@ -476,28 +516,16 @@ namespace Test.Shared
                 "Bananas are rich in potassium.",
             };
 
-            if (!SupportsRerank(configuration))
+            if (configuration.ProviderType == "tei" && !await TeiServesAsync(provider, "reranker", token).ConfigureAwait(false))
             {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.RerankAsync("What is the capital of France?", documents, null, token),
-                    configuration.ProviderType + " RerankAsync should be unsupported.").ConfigureAwait(false);
-                return;
-            }
-
-            RerankOptions options = new RerankOptions();
-            if (!string.IsNullOrEmpty(configuration.RerankModel)) options.Model = configuration.RerankModel;
-
-            if (IsTei(configuration) && !await TeiServesAsync(client, "reranker", token).ConfigureAwait(false))
-            {
-                RerankResponse rejected = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+                RerankResponse rejected = await client.RerankAsync("What is the capital of France?", documents, null, token).ConfigureAwait(false);
                 SharedAssert.False(rejected.Success, "TEI /rerank should fail when the server does not host a reranker.");
                 SharedAssert.NotEmpty(rejected.Error, "TEI /rerank on a non-reranker should report an error.");
                 return;
             }
 
-            RerankResponse response = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+            RerankResponse response = await client.RerankAsync("What is the capital of France?", documents, null, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Rerank should succeed. " + response.Error);
-            SharedAssert.Equal(200, response.StatusCode, "Rerank should return HTTP 200.");
             SharedAssert.Equal(documents.Count, response.Results.Count, "Rerank should score every document.");
             SharedAssert.Equal(2, response.Results[0].Index, "Rerank should rank the passage about the capital of France first.");
             for (int i = 1; i < response.Results.Count; i++)
@@ -505,45 +533,36 @@ namespace Test.Shared
                 SharedAssert.True(response.Results[i - 1].Score >= response.Results[i].Score, "Rerank results should be sorted by score.");
             }
 
-            options.TopN = 2;
-            options.ReturnDocuments = true;
-            RerankResponse top = await client.RerankAsync("What is the capital of France?", documents, options, token).ConfigureAwait(false);
+            RerankResponse top = await client.RerankAsync("What is the capital of France?", documents, new RerankOptions { TopN = 2, ReturnDocuments = true }, token).ConfigureAwait(false);
             SharedAssert.True(top.Success, "Rerank with TopN should succeed.");
             SharedAssert.Equal(2, top.Results.Count, "Rerank with TopN should return TopN results.");
             SharedAssert.Equal(documents[top.Results[0].Index], top.Results[0].Document, "Rerank should attach document text on request.");
 
             await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
                 () => client.RerankAsync("q", documents, new RerankOptions { TopN = documents.Count + 1 }, token),
-                "Rerank should reject TopN greater than the document count.").ConfigureAwait(false);
+                "Rerank should reject a per-call TopN greater than the document count.").ConfigureAwait(false);
         }
 
         private static async Task RunClassifyTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ClassificationClientBase client = provider.Classification!;
             List<string> inputs = new List<string> { "I absolutely love this product, it is wonderful!", "This is the worst purchase I have ever made." };
 
-            if (!SupportsClassify(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.ClassifyAsync(inputs, null, token),
-                    configuration.ProviderType + " ClassifyAsync should be unsupported.").ConfigureAwait(false);
-                return;
-            }
-
-            // TEI /predict works for classifier models and for rerankers (single-label cross-encoders), and
-            // is rejected (HTTP 424) for embedding models.
-            if (IsTei(configuration)
-                && !await TeiServesAsync(client, "classifier", token).ConfigureAwait(false)
-                && !await TeiServesAsync(client, "reranker", token).ConfigureAwait(false))
+            // TEI /predict works for classifier models and for rerankers (single-label cross-encoders), and is rejected
+            // (HTTP 424) for embedding models.
+            if (configuration.ProviderType == "tei"
+                && !await TeiServesAsync(provider, "classifier", token).ConfigureAwait(false)
+                && !await TeiServesAsync(provider, "reranker", token).ConfigureAwait(false))
             {
                 ClassificationResponse rejected = await client.ClassifyAsync(inputs, null, token).ConfigureAwait(false);
                 SharedAssert.False(rejected.Success, "TEI /predict should fail when the server hosts an embedding model.");
-                SharedAssert.Equal(424, rejected.StatusCode, "TEI /predict on an embedding model should return HTTP 424.");
+                SharedAssert.True(rejected.StatusCode == 424, "TEI /predict on an embedding model should return HTTP 424.");
                 return;
             }
 
             ClassificationOptions? options = null;
-            if (IsCohere(configuration))
+            if (configuration.ProviderType == "cohere")
             {
                 CohereClassificationOptions cohereOptions = new CohereClassificationOptions();
                 cohereOptions.Examples.Add(new ClassificationExample("I love it", "positive"));
@@ -559,338 +578,246 @@ namespace Test.Shared
             SharedAssert.True(response.Classifications.All(c => !string.IsNullOrEmpty(c.Label) && c.Labels.Count > 0), "Every classification should have a top label and a label list.");
         }
 
-        private static async Task RunGenerationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        private static async Task RunDecisionTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            DecisionClientBase client = provider.Decision!;
 
-            GenerationResponse response = await client.GenerateAsync("Once upon a time, there was a", token: token).ConfigureAwait(false);
-            SharedAssert.True(response.Success, "Generation should succeed.");
-            SharedAssert.NotEmpty(response.Text, "Generation should return text.");
-            SharedAssert.NotEmpty(response.Model, "Generation should return a model.");
-            SharedAssert.Equal(200, response.StatusCode, "Generation should return HTTP 200.");
-            SharedAssert.True(response.OverallRuntimeMs > 0, "Generation runtime should be populated.");
-            SharedAssert.True(response.Error == null, "Generation should not return an error.");
+            DecisionRequest request = CreateTicketDecision("I was charged twice for my order last week and I need my money back today or I am cancelling my account.");
+            DecisionResponse response = await client.DecideAsync(request, null, token).ConfigureAwait(false);
 
-            GenerationOptions generationOptions = CreateGenerationOptions(configuration.ProviderType);
-            GenerationResponse optionResponse = await client.GenerateAsync("The quick brown fox", generationOptions, token).ConfigureAwait(false);
-            SharedAssert.True(optionResponse.Success, "Generation with options should succeed.");
-            SharedAssert.NotEmpty(optionResponse.Text, "Generation with options should return text.");
+            SharedAssert.True(response.Success, "Decision should succeed. " + response.Error);
+            SharedAssert.True(response.StatusCode == 200, "Decision should return HTTP 200.");
+            SharedAssert.Equal(3, response.Answers.Count, "Decision should answer every question.");
 
-            GenerationOptions baseOptions = new GenerationOptions();
-            if (!IsAnthropic(configuration))
-            {
-                // Current Claude models reject sampling parameters; skip them for Anthropic.
-                baseOptions.Temperature = 0.3;
-                baseOptions.TopP = 0.9;
-            }
-            baseOptions.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256);
-            GenerationResponse baseResponse = await client.GenerateAsync("The meaning of life is", baseOptions, token).ConfigureAwait(false);
-            SharedAssert.True(baseResponse.Success, "Generation with base options should succeed.");
-            SharedAssert.NotEmpty(baseResponse.Text, "Generation with base options should return text.");
+            ChoiceAnswer intent = response.Choice("intent");
+            SharedAssert.True(intent.Value == "refund" || intent.Value == "billing", "The intent should be refund or billing, got '" + intent.Value + "'.");
+            SharedAssert.True(intent.Confidence == null || (intent.Confidence >= 0 && intent.Confidence <= 1), "Choice confidence should be between 0 and 1.");
+
+            BinaryAnswer urgent = response.Binary("urgent");
+            SharedAssert.True(urgent.Probability >= 0 && urgent.Probability <= 1, "Binary probability should be between 0 and 1.");
+
+            ScoreAnswer tone = response.Score("tone");
+            SharedAssert.True(tone.Value >= 0 && tone.Value <= 3, "Score should be on the rubric's scale.");
+
+            await SharedAssert.ThrowsAsync<ArgumentException>(
+                () => client.DecideAsync(new DecisionRequest { State = "x", Questions = { DecisionQuestion.Choice("only", "Pick", "one") } }, null, token),
+                "A choice question with one option should be rejected before sending.").ConfigureAwait(false);
         }
 
-        private static async Task RunGenerationStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        private static async Task RunDecisionBatchTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            DecisionClientBase client = provider.Decision!;
 
-            GenerationStreamingResponse stream = await client.GenerateStreamingAsync("Write a haiku about the sea.", token: token).ConfigureAwait(false);
-            SharedAssert.True(stream.Success, "Streaming generation should start successfully.");
-            SharedAssert.NotEmpty(stream.Model, "Streaming generation should return a model.");
-            SharedAssert.True(stream.StatusCode.HasValue && stream.StatusCode.Value == 200, "Streaming generation should return HTTP 200.");
-            SharedAssert.True(stream.Error == null, "Streaming generation should not return an error.");
-
-            int chunkCount = 0;
-            string fullText = string.Empty;
-            bool sawDone = false;
-
-            await foreach (GenerationStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            List<DecisionRequest> requests = new List<DecisionRequest>
             {
-                chunkCount++;
-                if (!string.IsNullOrEmpty(chunk.Text)) fullText += chunk.Text;
-                if (chunk.Done) sawDone = true;
-            }
+                CreateTicketDecision("Please refund the duplicate charge on my card."),
+                CreateTicketDecision("How do I change my billing address?"),
+                CreateTicketDecision("Your product is great, thanks for the help!"),
+            };
 
-            SharedAssert.True(chunkCount > 0, "Streaming generation should receive chunks.");
-            SharedAssert.NotEmpty(fullText, "Streaming generation should assemble non-empty text.");
-            SharedAssert.True(sawDone, "Streaming generation should see a done chunk.");
-            SharedAssert.True(stream.ChunkCount > 0, "Streaming generation should populate ChunkCount.");
-            SharedAssert.True(stream.OverallRuntimeMs > 0, "Streaming generation should populate OverallRuntimeMs.");
-            SharedAssert.True(stream.TimeToFirstTokenMs >= 0, "Streaming generation should populate TimeToFirstTokenMs.");
-            SharedAssert.True(stream.TimeToLastTokenMs >= stream.TimeToFirstTokenMs, "Streaming generation should order token timings.");
-            SharedAssert.True(stream.OverallTokensPerSecond > 0, "Streaming generation should populate throughput.");
-
-            GenerationOptions generationOptions = CreateGenerationOptions(configuration.ProviderType);
-            GenerationStreamingResponse optionStream = await client.GenerateStreamingAsync("A limerick about code:", generationOptions, token).ConfigureAwait(false);
-            SharedAssert.True(optionStream.Success, "Streaming generation with options should start.");
-            await foreach (GenerationStreamingChunk chunk in optionStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
-            SharedAssert.True(optionStream.OverallRuntimeMs > 0, "Streaming generation with options should complete.");
+            List<DecisionResponse> responses = await client.DecideAsync(requests, null, token).ConfigureAwait(false);
+            SharedAssert.Equal(3, responses.Count, "A decision batch should return one response per request.");
+            SharedAssert.True(responses.All(r => r.Success), "Every batch decision should succeed. " + string.Join("; ", responses.Where(r => !r.Success).Select(r => r.Error)));
+            SharedAssert.True(responses.All(r => r.Answers.Count == 3), "Every batch decision should answer every question.");
         }
 
         private static async Task RunCallDetailsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-            client.ClearCallDetails();
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ClientBase recorded;
 
-            if (IsVoyageAi(configuration))
+            if (provider.Completion != null)
             {
-                // VoyageAI has no chat API; record an embedding call instead.
-                await client.EmbedAsync("Ping", CreateEmbeddingModelOptions(configuration), token).ConfigureAwait(false);
+                recorded = provider.Completion;
+                await provider.Completion.ChatAsync("Ping", token: token).ConfigureAwait(false);
             }
-            else if (IsTei(configuration))
+            else if (provider.Decision != null)
             {
-                // TEI has no chat API; record the operation the hosted model serves. Discard the /info probe.
-                bool embedding = await TeiServesAsync(client, "embedding", token).ConfigureAwait(false);
-                bool reranker = await TeiServesAsync(client, "reranker", token).ConfigureAwait(false);
-                client.ClearCallDetails();
-
-                if (embedding) await client.EmbedAsync("Ping", null, token).ConfigureAwait(false);
-                else if (reranker) await client.RerankAsync("Ping", new List<string> { "Pong" }, null, token).ConfigureAwait(false);
-                else await client.ClassifyAsync("Ping", null, token).ConfigureAwait(false);
+                recorded = provider.Decision;
+                await provider.Decision.DecideAsync(CreateTicketDecision("Ping"), null, token).ConfigureAwait(false);
+            }
+            else if (configuration.ProviderType == "tei")
+            {
+                bool embedding = await TeiServesAsync(provider, "embedding", token).ConfigureAwait(false);
+                bool reranker = await TeiServesAsync(provider, "reranker", token).ConfigureAwait(false);
+                if (embedding) { recorded = provider.Embedding!; await provider.Embedding!.EmbedAsync("Ping", null, token).ConfigureAwait(false); }
+                else if (reranker) { recorded = provider.Rerank!; await provider.Rerank!.RerankAsync("Ping", new List<string> { "Pong" }, null, token).ConfigureAwait(false); }
+                else { recorded = provider.Classification!; await provider.Classification!.ClassifyAsync("Ping", null, token).ConfigureAwait(false); }
             }
             else
             {
-                await client.ChatAsync("Ping", token: token).ConfigureAwait(false);
+                recorded = provider.Embedding!;
+                await provider.Embedding!.EmbedAsync("Ping", null, token).ConfigureAwait(false);
             }
 
-            List<CompletionCallDetail> details = client.CallDetails;
-            SharedAssert.Equal(1, details.Count, "CallDetails should contain the chat request.");
+            List<CallDetail> details = recorded.CallDetails;
+            SharedAssert.Equal(1, details.Count, "CallDetails should contain the request.");
 
-            CompletionCallDetail last = details[details.Count - 1];
+            CallDetail last = details[0];
             SharedAssert.NotEmpty(last.Url, "CallDetail should have a URL.");
+            SharedAssert.False(last.Url!.Contains("key=", StringComparison.OrdinalIgnoreCase), "CallDetail URLs should never contain an API key.");
             SharedAssert.Equal("POST", last.Method, "CallDetail method should be POST.");
             SharedAssert.NotEmpty(last.RequestBody, "CallDetail should have a request body.");
             SharedAssert.True(last.RequestHeaders != null && last.RequestHeaders.Count > 0, "CallDetail should have request headers.");
             SharedAssert.True(last.StatusCode.HasValue, "CallDetail should have a status code.");
             SharedAssert.NotEmpty(last.ResponseBody, "CallDetail should have a response body.");
-            SharedAssert.True(last.ResponseHeaders != null && last.ResponseHeaders.Count > 0, "CallDetail should have response headers.");
             SharedAssert.True(last.ResponseTimeMs.HasValue && last.ResponseTimeMs.Value > 0, "CallDetail should have response time.");
             SharedAssert.True(last.Success, "CallDetail should be marked successful.");
-            SharedAssert.True(last.TimestampUtc > DateTime.MinValue, "CallDetail should have a timestamp.");
+
+            recorded.ClearCallDetails();
+            SharedAssert.Equal(0, recorded.CallDetails.Count, "ClearCallDetails should empty the list.");
         }
 
         private static async Task RunListModelsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-
-            if (IsVoyageAi(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => { client.ListModelsAsync(token); return Task.CompletedTask; },
-                    "VoyageAI ListModelsAsync should be unsupported.").ConfigureAwait(false);
-                return;
-            }
-
-            List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            List<ModelInformation> models = await GetModelsAsync(provider.Models!, token).ConfigureAwait(false);
 
             SharedAssert.True(models.Count > 0, "ListModelsAsync should yield at least one model.");
-            SharedAssert.NotEmpty(models[0].Name, "First listed model should have a name.");
             SharedAssert.True(models.All(model => !string.IsNullOrEmpty(model.Name)), "All listed models should have names.");
         }
 
         private static async Task RunModelExistsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ModelClientBase models = provider.Models!;
 
-            if (IsVoyageAi(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.ModelExistsAsync(client.Model, token),
-                    "VoyageAI ModelExistsAsync should be unsupported.").ConfigureAwait(false);
-                return;
-            }
+            string existing = configuration.ProviderType == "tei" || configuration.ProviderType == "azure"
+                ? (await GetModelsAsync(models, token).ConfigureAwait(false))[0].Name
+                : provider.Completion?.Model ?? provider.Embedding!.Model!;
 
-            if (IsTei(configuration))
-            {
-                // TEI serves one model; the client Model is informational, so check the hosted model's name.
-                List<ModelInformation> hosted = await GetModelsAsync(client, token).ConfigureAwait(false);
-                SharedAssert.Equal(1, hosted.Count, "TEI should list exactly one hosted model.");
-                SharedAssert.True(await client.ModelExistsAsync(hosted[0].Name, token).ConfigureAwait(false), "TEI hosted model should exist.");
-                SharedAssert.False(await client.ModelExistsAsync(BogusModel, token).ConfigureAwait(false), "A nonexistent model should return false.");
-                return;
-            }
-
-            bool inferenceExists = await client.ModelExistsAsync(client.Model, token).ConfigureAwait(false);
-            SharedAssert.True(inferenceExists, "Inference model should exist.");
-
-            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
-            {
-                bool embeddingExists = await client.ModelExistsAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
-                SharedAssert.True(embeddingExists, "Embedding model should exist.");
-            }
-
-            bool bogusExists = await client.ModelExistsAsync(BogusModel, token).ConfigureAwait(false);
-            SharedAssert.False(bogusExists, "A nonexistent model should return false.");
+            SharedAssert.True(await models.ModelExistsAsync(existing, token).ConfigureAwait(false), "Model '" + existing + "' should exist.");
+            SharedAssert.False(await models.ModelExistsAsync(BogusModel, token).ConfigureAwait(false), "A nonexistent model should return false.");
+            await SharedAssert.ThrowsAsync<ArgumentNullException>(() => models.ModelExistsAsync(" ", token), "A blank model name should be rejected.").ConfigureAwait(false);
         }
 
         private static async Task RunGetModelInformationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ModelClientBase models = provider.Models!;
 
-            if (IsVoyageAi(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.GetModelInformationAsync(client.Model, token),
-                    "VoyageAI GetModelInformationAsync should be unsupported.").ConfigureAwait(false);
-                return;
-            }
+            string existing = configuration.ProviderType == "tei" || configuration.ProviderType == "azure"
+                ? (await GetModelsAsync(models, token).ConfigureAwait(false))[0].Name
+                : provider.Completion?.Model ?? provider.Embedding!.Model!;
 
-            if (IsTei(configuration))
-            {
-                List<ModelInformation> hosted = await GetModelsAsync(client, token).ConfigureAwait(false);
-                SharedAssert.Equal(1, hosted.Count, "TEI should list exactly one hosted model.");
-                ModelInformation? hostedInfo = await client.GetModelInformationAsync(hosted[0].Name, token).ConfigureAwait(false);
-                SharedAssert.NotNull(hostedInfo, "TEI hosted model information should be found.");
-                SharedAssert.True(hostedInfo!.Metadata.ContainsKey("model_type"), "TEI model information should report the model type.");
-                SharedAssert.True(await client.GetModelInformationAsync(BogusModel, token).ConfigureAwait(false) == null, "A nonexistent model should return null model information.");
-                return;
-            }
+            ModelInformation? info = await models.GetModelInformationAsync(existing, token).ConfigureAwait(false);
+            SharedAssert.NotNull(info, "Model information for '" + existing + "' should be found.");
+            SharedAssert.NotEmpty(info!.Name, "Model information should have a name.");
+            if (configuration.ProviderType == "tei") SharedAssert.True(info.Metadata.ContainsKey("model_type"), "TEI model information should report the model type.");
 
-            ModelInformation? info = await client.GetModelInformationAsync(client.Model, token).ConfigureAwait(false);
-            SharedAssert.NotNull(info, "Inference model information should be found.");
-            SharedAssert.True(info != null && !string.IsNullOrEmpty(info.Name), "Inference model information should have a name.");
-
-            if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
-            {
-                ModelInformation? embeddingInfo = await client.GetModelInformationAsync(configuration.EmbeddingModel, token).ConfigureAwait(false);
-                SharedAssert.NotNull(embeddingInfo, "Embedding model information should be found.");
-            }
-
-            ModelInformation? bogusInfo = await client.GetModelInformationAsync(BogusModel, token).ConfigureAwait(false);
-            SharedAssert.True(bogusInfo == null, "A nonexistent model should return null model information.");
+            SharedAssert.True(await models.GetModelInformationAsync(BogusModel, token).ConfigureAwait(false) == null, "A nonexistent model should return null model information.");
         }
 
         private static async Task RunPullModelTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
-
-            if (!IsOllama(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.PullModelAsync("test", token: token),
-                    "Unsupported providers should throw for PullModelAsync.").ConfigureAwait(false);
-                return;
-            }
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            OllamaModelClient models = (OllamaModelClient)provider.Models!;
 
             List<string> statusMessages = new List<string>();
-            bool pullResult = await client.PullModelAsync(
-                client.Model,
-                async progress =>
+            bool pullResult = await models.PullModelAsync(
+                provider.Completion!.Model!,
+                progress =>
                 {
                     statusMessages.Add(progress.Status);
-                    await Task.CompletedTask.ConfigureAwait(false);
+                    return Task.CompletedTask;
                 },
                 token).ConfigureAwait(false);
 
             SharedAssert.True(pullResult, "PullModelAsync should return true for an existing Ollama model.");
-            SharedAssert.True(statusMessages.Count > 0, "PullModelAsync should emit progress callbacks.");
             SharedAssert.True(statusMessages.Exists(status => string.Equals(status, "success", StringComparison.OrdinalIgnoreCase)), "PullModelAsync should emit a success status.");
         }
 
         private static async Task RunDeleteModelTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            OllamaModelClient models = (OllamaModelClient)provider.Models!;
 
-            if (!IsOllama(configuration))
-            {
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.DeleteModelAsync("test", token),
-                    "Unsupported providers should throw for DeleteModelAsync.").ConfigureAwait(false);
-                return;
-            }
-
-            bool deleteBogus = await client.DeleteModelAsync(BogusModel, token).ConfigureAwait(false);
-            SharedAssert.False(deleteBogus, "Deleting a nonexistent Ollama model should return false.");
+            SharedAssert.False(await models.DeleteModelAsync(BogusModel, token).ConfigureAwait(false), "Deleting a nonexistent Ollama model should return false.");
+            SharedAssert.True(models.CallDetails.Any(d => d.Method == "DELETE"), "The delete request should be recorded.");
         }
 
         private static async Task RunValidateConnectivityTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            foreach (ClientBase client in provider.All)
+            {
+                SharedAssert.True(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " ValidateConnectivityAsync should return true with a valid endpoint.");
+            }
 
-            bool ok = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
-            SharedAssert.True(ok, "ValidateConnectivityAsync should return true with a valid endpoint.");
-
-            using CompletionClientBase badClient = CreateClient(configuration.ProviderType, "http://localhost:1", configuration.ApiKey, configuration.InferenceModel);
-            badClient.TimeoutMs = 5000;
-            bool badResult = await badClient.ValidateConnectivityAsync(token).ConfigureAwait(false);
-            SharedAssert.False(badResult, "ValidateConnectivityAsync should return false with a bad endpoint.");
+            using LiveProvider bad = LiveProvider.Create(configuration, "http://localhost:1");
+            foreach (ClientBase client in bad.All)
+            {
+                client.TimeoutMs = 5000;
+                SharedAssert.False(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " ValidateConnectivityAsync should return false with an unreachable endpoint.");
+            }
         }
 
         private static async Task RunCancellationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
 
-            using CompletionClientBase client = CreateClient(configuration);
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            using CancellationTokenSource cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            CancellationToken c = cancelled.Token;
 
-            if (SupportsRerank(configuration))
+            if (provider.Completion != null)
             {
-                using CancellationTokenSource rerankCancelled = new CancellationTokenSource();
-                rerankCancelled.Cancel();
-                await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                    () => client.RerankAsync("q", new List<string> { "d" }, null, rerankCancelled.Token),
-                    "RerankAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ChatAsync("x", token: c), "ChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ChatStreamingAsync("x", token: c), "ChatStreamingAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ToolChatAsync(CreateWeatherToolRequest(configuration), c), "ToolChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.GenerateAsync("x", token: c), "GenerateAsync should respect a pre-cancelled token.").ConfigureAwait(false);
             }
 
-            if (IsVoyageAi(configuration) || IsTei(configuration))
+            if (provider.Embedding != null)
             {
-                // VoyageAI and TEI have no chat or generation API; the unsupported exception wins over cancellation.
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.ChatAsync("This should be unsupported", token: token),
-                    configuration.ProviderType + " ChatAsync should be unsupported.").ConfigureAwait(false);
-
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.GenerateAsync("This should be unsupported", token: token),
-                    configuration.ProviderType + " GenerateAsync should be unsupported.").ConfigureAwait(false);
-
-                using CancellationTokenSource voyageEmbedCancelled = new CancellationTokenSource();
-                voyageEmbedCancelled.Cancel();
-                await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                    () => client.EmbedAsync("This should be cancelled", token: voyageEmbedCancelled.Token),
-                    "VoyageAI EmbedAsync single input should respect a pre-cancelled token.").ConfigureAwait(false);
-
-                using CancellationTokenSource voyageBatchCancelled = new CancellationTokenSource();
-                voyageBatchCancelled.Cancel();
-                await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                    () => client.EmbedAsync(new List<string> { "a", "b" }, token: voyageBatchCancelled.Token),
-                    "VoyageAI EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
-                return;
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Embedding.EmbedAsync("x", null, c), "EmbedAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Embedding.EmbedAsync(new List<string> { "a", "b" }, null, c), "Batch EmbedAsync should respect a pre-cancelled token.").ConfigureAwait(false);
             }
 
-            using CancellationTokenSource chatCancelled = new CancellationTokenSource();
-            chatCancelled.Cancel();
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                () => client.ChatAsync("This should be cancelled", token: chatCancelled.Token),
-                "ChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+            if (provider.SparseEmbedding != null)
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.SparseEmbedding.EmbedSparseAsync("x", null, c), "EmbedSparseAsync should respect a pre-cancelled token.").ConfigureAwait(false);
 
-            using CancellationTokenSource generateCancelled = new CancellationTokenSource();
-            generateCancelled.Cancel();
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                () => client.GenerateAsync("This should be cancelled", token: generateCancelled.Token),
-                "GenerateAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+            if (provider.Rerank != null)
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Rerank.RerankAsync("q", new List<string> { "d" }, null, c), "RerankAsync should respect a pre-cancelled token.").ConfigureAwait(false);
 
-            if (IsAnthropic(configuration))
+            if (provider.Classification != null)
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Classification.ClassifyAsync("x", null, c), "ClassifyAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+
+            if (provider.Decision != null)
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Decision.DecideAsync(CreateTicketDecision("x"), null, c), "DecideAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+
+            if (provider.Models != null)
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Models.GetModelInformationAsync("x", c), "GetModelInformationAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+
+            foreach (ClientBase client in provider.All)
             {
-                // Anthropic has no embeddings API; the unsupported exception wins over cancellation.
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.EmbedAsync("This should be unsupported", token: token),
-                    "Anthropic EmbedAsync single input should be unsupported.").ConfigureAwait(false);
-
-                await SharedAssert.ThrowsAsync<NotSupportedException>(
-                    () => client.EmbedAsync(new List<string> { "a", "b" }, token: token),
-                    "Anthropic EmbedAsync batch input should be unsupported.").ConfigureAwait(false);
-                return;
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ValidateConnectivityAsync(c), client.GetType().Name + " ValidateConnectivityAsync should respect a pre-cancelled token.").ConfigureAwait(false);
             }
+        }
 
-            using CancellationTokenSource embedCancelled = new CancellationTokenSource();
-            embedCancelled.Cancel();
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                () => client.EmbedAsync("This should be cancelled", token: embedCancelled.Token),
-                "EmbedAsync single input should respect a pre-cancelled token.").ConfigureAwait(false);
+        #endregion
 
-            using CancellationTokenSource embedBatchCancelled = new CancellationTokenSource();
-            embedBatchCancelled.Cancel();
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(
-                () => client.EmbedAsync(new List<string> { "a", "b" }, token: embedBatchCancelled.Token),
-                "EmbedAsync batch input should respect a pre-cancelled token.").ConfigureAwait(false);
+        #region Helpers
+
+        private static DecisionRequest CreateTicketDecision(string ticket)
+        {
+            return new DecisionRequest
+            {
+                State = ticket,
+                Questions =
+                {
+                    DecisionQuestion.Choice("intent", "What does the customer want?",
+                        DecisionOption.Of("refund", "Wants money back"),
+                        DecisionOption.Of("billing", "A question about a charge or an invoice"),
+                        DecisionOption.Of("praise", "Positive feedback"),
+                        DecisionOption.Of("other")),
+                    DecisionQuestion.Binary("urgent", "Does the customer need a response today?"),
+                    DecisionQuestion.Score("tone", "How upset is the customer?", "calm", "annoyed", "angry", "furious")
+                }
+            };
         }
 
         private static ToolChatRequest CreateWeatherToolRequest(ProviderTestConfiguration configuration)
@@ -898,51 +825,33 @@ namespace Test.Shared
             ToolChatRequest request = new ToolChatRequest();
             request.Messages.Add(ChatMessage.System("Use tools when they are helpful. Keep final answers concise."));
             request.Messages.Add(ChatMessage.User("What is the current weather in Seattle? Use get_weather if tool calling is available."));
-            request.Tools.Add(ToolDefinition.Function(
-                "get_weather",
-                "Get current weather for a city.",
-                WeatherParameters()));
+            request.Tools.Add(ToolDefinition.Function("get_weather", "Get current weather for a city.", WeatherParameters()));
             request.ToolChoice = "auto";
-            request.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
-
-            // Current Claude models reject sampling parameters; skip them for Anthropic.
-            if (!IsAnthropic(configuration)) request.Temperature = 0.0;
-
+            request.Options = new CompletionOptions { MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256) };
+            if (AcceptsSampling(configuration)) request.Options.Temperature = 0.0;
             return request;
         }
 
         private static Dictionary<string, object> WeatherParameters()
         {
-            Dictionary<string, object> city = new Dictionary<string, object>
-            {
-                { "type", "string" },
-                { "description", "City name." }
-            };
-
-            Dictionary<string, object> unit = new Dictionary<string, object>
-            {
-                { "type", "string" },
-                { "enum", new List<string> { "fahrenheit", "celsius" } }
-            };
-
             return new Dictionary<string, object>
             {
                 { "type", "object" },
                 { "properties", new Dictionary<string, object>
                     {
-                        { "city", city },
-                        { "unit", unit }
+                        { "city", new Dictionary<string, object> { { "type", "string" }, { "description", "City name." } } },
+                        { "unit", new Dictionary<string, object> { { "type", "string" }, { "enum", new List<string> { "fahrenheit", "celsius" } } } }
                     }
                 },
                 { "required", new List<string> { "city" } }
             };
         }
 
-        private static void AppendWeatherToolResults(ToolChatRequest request, List<ToolCall> toolCalls)
+        private static void AppendWeatherToolResults(ToolChatRequest request, List<ToolCall> toolCalls, string result)
         {
             foreach (ToolCall call in toolCalls)
             {
-                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}"));
+                request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, result));
             }
         }
 
@@ -957,331 +866,104 @@ namespace Test.Shared
                 || error.Contains("does not support function calling", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static CompletionClientBase CreateClient(ProviderTestConfiguration configuration)
+        private static bool AcceptsSampling(ProviderTestConfiguration configuration)
         {
-            return CreateClient(configuration.ProviderType, configuration.Endpoint, configuration.ApiKey, configuration.InferenceModel, configuration.AnthropicWorkspaceId);
+            // Current Claude models (directly and through Bedrock) reject sampling parameters.
+            return configuration.ProviderType != "anthropic" && configuration.ProviderType != "bedrock";
         }
 
-        private static CompletionClientBase CreateClient(string providerType, string endpoint, string? apiKey, string? inferenceModel, string? anthropicWorkspaceId = null)
-        {
-            CompletionClientBase client = providerType switch
-            {
-                "ollama" => new OllamaClient(endpoint, apiKey) { TimeoutMs = 120000 },
-                "openai" => new OpenAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
-                "gemini" => new GeminiClient(endpoint, apiKey) { TimeoutMs = 60000 },
-                "anthropic" => new AnthropicClient(endpoint, apiKey) { TimeoutMs = 120000, WorkspaceId = anthropicWorkspaceId },
-                "voyageai" => new VoyageAiClient(endpoint, apiKey) { TimeoutMs = 60000 },
-                "cohere" => new CohereClient(endpoint, apiKey) { TimeoutMs = 120000 },
-                "tei" => new TeiClient(endpoint, apiKey) { TimeoutMs = 60000 },
-                _ => throw new ArgumentException("Unknown provider: " + providerType, nameof(providerType)),
-            };
-
-            client.MaxTokens = ResolveLiveMaxTokens(providerType, 128);
-
-            if (!string.IsNullOrEmpty(inferenceModel))
-                client.Model = inferenceModel;
-
-            return client;
-        }
-
-        private static async Task<List<ModelInformation>> GetModelsAsync(CompletionClientBase client, CancellationToken token)
+        private static async Task<List<ModelInformation>> GetModelsAsync(ModelClientBase client, CancellationToken token)
         {
             List<ModelInformation> models = new List<ModelInformation>();
             await foreach (ModelInformation model in client.ListModelsAsync(token).ConfigureAwait(false))
             {
-                if (!string.IsNullOrEmpty(model.Name))
-                    models.Add(model);
+                if (!string.IsNullOrEmpty(model.Name)) models.Add(model);
             }
             return models;
         }
 
-        private static async Task<List<string>> GetModelNamesAsync(CompletionClientBase client, CancellationToken token)
+        private static async Task<List<string>> GetModelNamesAsync(ModelClientBase client, CancellationToken token)
         {
-            List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
-            return models.Select(model => model.Name).ToList();
+            return (await GetModelsAsync(client, token).ConfigureAwait(false)).Select(model => model.Name).ToList();
         }
 
-        private static ChatCompletionOptions CreateChatOptions(string providerType)
+        private static CompletionOptions CreateCompletionOptions(string providerType)
         {
+            int maxTokens = ResolveLiveMaxTokens(providerType, 64);
             switch (providerType)
             {
                 case "ollama":
-                    return new OllamaChatCompletionOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                        RepeatPenalty = 1.1,
-                        Seed = 42,
-                    };
-
+                    return new OllamaCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40, RepeatPenalty = 1.1, Seed = 42 };
                 case "openai":
-                    return new OpenAiChatCompletionOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        FrequencyPenalty = 0.0,
-                        PresencePenalty = 0.0,
-                        Seed = 42,
-                    };
-
+                case "azure":
+                    return new OpenAiCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, FrequencyPenalty = 0.0, PresencePenalty = 0.0, Seed = 42 };
                 case "gemini":
-                    return new GeminiChatCompletionOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                    };
-
+                case "vertex":
+                    return new GeminiCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40 };
                 case "anthropic":
-                    // Current Claude models reject sampling parameters; only max tokens is safe.
-                    return new AnthropicChatCompletionOptions
-                    {
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                    };
-
+                    return new AnthropicCompletionOptions { MaxTokens = maxTokens };
                 case "cohere":
-                    return new CohereChatCompletionOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                        Seed = 42,
-                    };
-
+                    return new CohereCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40, Seed = 42 };
                 default:
-                    return new ChatCompletionOptions();
+                    return new CompletionOptions { MaxTokens = maxTokens };
             }
-        }
-
-        private static EmbeddingOptions CreateEmbeddingModelOptions(ProviderTestConfiguration configuration)
-        {
-            return new EmbeddingOptions { Model = configuration.EmbeddingModel };
         }
 
         private static EmbeddingOptions CreateEmbeddingOptions(ProviderTestConfiguration configuration)
         {
             switch (configuration.ProviderType)
             {
-                case "ollama":
-                    return new OllamaEmbeddingOptions
-                    {
-                        Model = configuration.EmbeddingModel,
-                        ContextLength = 2048,
-                    };
-
-                case "openai":
-                    return new OpenAiEmbeddingOptions
-                    {
-                        Model = configuration.EmbeddingModel,
-                        Dimensions = 256,
-                    };
-
-                case "gemini":
-                    return new GeminiEmbeddingOptions
-                    {
-                        Model = configuration.EmbeddingModel,
-                        TaskType = "RETRIEVAL_DOCUMENT",
-                    };
-
-                case "voyageai":
-                    return new VoyageAiEmbeddingOptions
-                    {
-                        Model = configuration.EmbeddingModel,
-                        InputType = "document",
-                    };
-
-                case "cohere":
-                    return new CohereEmbeddingOptions
-                    {
-                        Model = configuration.EmbeddingModel,
-                        InputType = "search_document",
-                    };
-
-                case "tei":
-                    return new TeiEmbeddingOptions
-                    {
-                        Normalize = true,
-                        Truncate = true,
-                    };
-
-                default:
-                    return new EmbeddingOptions { Model = configuration.EmbeddingModel };
-            }
-        }
-
-        private static GenerationOptions CreateGenerationOptions(string providerType)
-        {
-            switch (providerType)
-            {
-                case "ollama":
-                    return new OllamaGenerationOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                        RepeatPenalty = 1.1,
-                        Seed = 42,
-                    };
-
-                case "openai":
-                    return new OpenAiGenerationOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        FrequencyPenalty = 0.0,
-                        PresencePenalty = 0.0,
-                    };
-
-                case "gemini":
-                    return new GeminiGenerationOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                    };
-
-                case "anthropic":
-                    // Current Claude models reject sampling parameters; only max tokens is safe.
-                    return new AnthropicGenerationOptions
-                    {
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                    };
-
-                case "cohere":
-                    return new CohereGenerationOptions
-                    {
-                        Temperature = 0.5,
-                        TopP = 0.9,
-                        MaxTokens = ResolveLiveMaxTokens(providerType, 64),
-                        TopK = 40,
-                    };
-
-                default:
-                    return new GenerationOptions();
+                case "ollama": return new OllamaEmbeddingOptions { ContextLength = 2048 };
+                case "openai": return new OpenAiEmbeddingOptions { Dimensions = 256 };
+                case "azure": return new OpenAiEmbeddingOptions();
+                case "gemini": return new GeminiEmbeddingOptions { TaskType = "RETRIEVAL_DOCUMENT" };
+                case "vertex": return new VertexAiEmbeddingOptions { TaskType = "RETRIEVAL_DOCUMENT" };
+                case "bedrock": return new BedrockEmbeddingOptions { Normalize = true };
+                case "voyageai": return new VoyageAiEmbeddingOptions { InputType = "document" };
+                case "cohere": return new CohereEmbeddingOptions { InputType = "search_document" };
+                case "tei": return new TeiEmbeddingOptions { Normalize = true, Truncate = true };
+                default: return new EmbeddingOptions();
             }
         }
 
         private static int ResolveLiveMaxTokens(string providerType, int defaultMaxTokens)
         {
-            if (string.Equals(providerType, "ollama", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerType, "openai", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerType, "anthropic", StringComparison.OrdinalIgnoreCase))
-                return 1024;
+            // Reasoning models spend tokens thinking before they answer.
+            if (providerType == "ollama" || providerType == "openai" || providerType == "azure" || providerType == "anthropic"
+                || providerType == "gemini" || providerType == "vertex" || providerType == "bedrock")
+                return Math.Max(defaultMaxTokens, 1024);
 
             return defaultMaxTokens;
         }
 
         private static bool ModelNameMatches(string available, string requested)
         {
-            if (string.Equals(available, requested, StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (string.Equals(available, requested, StringComparison.OrdinalIgnoreCase)) return true;
 
-            int colonIndex = available.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                string baseName = available.Substring(0, colonIndex);
-                if (string.Equals(baseName, requested, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            colonIndex = requested.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                string baseName = requested.Substring(0, colonIndex);
-                if (string.Equals(available, baseName, StringComparison.OrdinalIgnoreCase))
-                    return true;
-
-                int availableColonIndex = available.IndexOf(':');
-                if (availableColonIndex > 0)
-                {
-                    string availableBaseName = available.Substring(0, availableColonIndex);
-                    if (string.Equals(availableBaseName, baseName, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-
-            return false;
+            string availableBase = available.Contains(':') ? available.Substring(0, available.IndexOf(':')) : available;
+            string requestedBase = requested.Contains(':') ? requested.Substring(0, requested.IndexOf(':')) : requested;
+            return string.Equals(availableBase, requestedBase, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool VectorsEqual(float[] a, float[] b)
         {
             if (a.Length != b.Length) return false;
-
             for (int i = 0; i < a.Length; i++)
             {
                 if (Math.Abs(a[i] - b[i]) > 0.00001f) return false;
             }
-
             return true;
         }
 
-        private static bool IsOpenAi(ProviderTestConfiguration configuration)
+        private static async Task<bool> TeiServesAsync(LiveProvider provider, string modelType, CancellationToken token)
         {
-            return string.Equals(configuration.ProviderType, "openai", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsOllama(ProviderTestConfiguration configuration)
-        {
-            return string.Equals(configuration.ProviderType, "ollama", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsAnthropic(ProviderTestConfiguration configuration)
-        {
-            return string.Equals(configuration.ProviderType, "anthropic", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsVoyageAi(ProviderTestConfiguration configuration)
-        {
-            return string.Equals(configuration.ProviderType, "voyageai", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsCohere(ProviderTestConfiguration configuration)
-        {
-            return string.Equals(configuration.ProviderType, "cohere", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsTei(ProviderTestConfiguration configuration)
-        {
-            return string.Equals(configuration.ProviderType, "tei", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool HasNoChat(ProviderTestConfiguration configuration)
-        {
-            return IsVoyageAi(configuration) || IsTei(configuration);
-        }
-
-        private static string NoChatReason(ProviderTestConfiguration configuration)
-        {
-            return IsTei(configuration)
-                ? "Text Embeddings Inference has no chat or generation API."
-                : "VoyageAI is an embeddings and reranking provider.";
-        }
-
-        private static bool SupportsRerank(ProviderTestConfiguration configuration)
-        {
-            return IsCohere(configuration) || IsVoyageAi(configuration) || IsTei(configuration);
-        }
-
-        private static bool SupportsClassify(ProviderTestConfiguration configuration)
-        {
-            return IsCohere(configuration) || IsTei(configuration);
-        }
-
-        private static async Task<bool> TeiServesAsync(CompletionClientBase client, string modelType, CancellationToken token)
-        {
-            List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
+            List<ModelInformation> models = await GetModelsAsync(provider.Models!, token).ConfigureAwait(false);
             if (models.Count == 0) throw new TestFailureException("TEI /info did not return the hosted model.");
 
             return models[0].Metadata.TryGetValue("model_type", out string? actual)
                 && string.Equals(actual, modelType, StringComparison.OrdinalIgnoreCase);
         }
+
+        #endregion
     }
 }

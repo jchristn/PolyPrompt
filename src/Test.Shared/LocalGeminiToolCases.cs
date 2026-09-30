@@ -5,6 +5,7 @@ namespace Test.Shared
     using PolyPrompt.Clients;
     using PolyPrompt.Helpers;
     using PolyPrompt.Models;
+    using PolyPrompt.Options;
     using Touchstone.Core;
 
     /// <summary>
@@ -87,21 +88,21 @@ namespace Test.Shared
         private static async Task RunGeminiSignatureRoundTripAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
+            using GeminiCompletionClient client = CreateGeminiClient(server);
             await AssertNativeSignatureRoundTripAsync(client, server, streaming: false, "Gemini", token).ConfigureAwait(false);
         }
 
         private static async Task RunGeminiSignatureStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
+            using GeminiCompletionClient client = CreateGeminiClient(server);
             await AssertNativeSignatureRoundTripAsync(client, server, streaming: true, "Gemini streaming", token).ConfigureAwait(false);
         }
 
         private static async Task RunVertexSignatureRoundTripAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiClient client = new VertexAiClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
+            using VertexAiCompletionClient client = new VertexAiCompletionClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
             client.Model = LocalGeminiToolRoutes.Model;
             await AssertNativeSignatureRoundTripAsync(client, server, streaming: false, "Vertex", token).ConfigureAwait(false);
             await AssertNativeSignatureRoundTripAsync(client, server, streaming: true, "Vertex streaming", token).ConfigureAwait(false);
@@ -181,7 +182,7 @@ namespace Test.Shared
         private static async Task RunGeminiSignatureSentinelAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
+            using GeminiCompletionClient client = CreateGeminiClient(server);
 
             // History from another provider: OpenAI-style ids and no signatures.
             ToolChatRequest request = CreateWeatherRequest();
@@ -210,7 +211,7 @@ namespace Test.Shared
         private static async Task RunGeminiToolResultRoleAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
+            using GeminiCompletionClient client = CreateGeminiClient(server);
 
             ToolChatRequest request = CreateWeatherRequest();
             request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
@@ -243,7 +244,7 @@ namespace Test.Shared
         private static async Task RunGeminiToolResultShapesAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
+            using GeminiCompletionClient client = CreateGeminiClient(server);
 
             (string Content, string Check)[] cases =
             {
@@ -326,8 +327,8 @@ namespace Test.Shared
             List<(CompletionClientBase Client, string Path)> clients = new List<(CompletionClientBase, string)>
             {
                 (CreateGeminiClient(server), "contents.1.parts.0.functionCall.args"),
-                (new AnthropicClient(server.Endpoint, "test-key"), "messages.1.content.0.input"),
-                (new OllamaClient(server.Endpoint), "messages.1.tool_calls.0.function.arguments"),
+                (new AnthropicCompletionClient(server.Endpoint, "test-key"), "messages.1.content.0.input"),
+                (new OllamaCompletionClient(server.Endpoint), "messages.1.tool_calls.0.function.arguments"),
                 (CreateBedrockClient(server), "messages.1.content.0.toolUse.input"),
             };
 
@@ -377,8 +378,8 @@ namespace Test.Shared
         private static async Task RunGeminiSchemaJsonSchemaAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
-            SharedAssert.Equal(GeminiToolSchemaMode.JsonSchema, client.ToolSchemaMode, "JsonSchema should be the default mode.");
+            using GeminiCompletionClient client = CreateGeminiClient(server);
+            SharedAssert.True(client.Defaults.ToolSchemaMode == null, "No schema mode is set by default, which means JsonSchema.");
 
             ToolChatRequest request = CreateWeatherRequest();
             request.Tools.Add(ToolDefinition.Function("messy", "Schema with keywords outside the OpenAPI subset.", MessySchema()));
@@ -404,8 +405,8 @@ namespace Test.Shared
         private static async Task RunGeminiSchemaOpenApiSubsetAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = CreateGeminiClient(server);
-            client.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset;
+            using GeminiCompletionClient client = CreateGeminiClient(server);
+            client.Defaults.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset;
 
             ToolChatRequest request = CreateWeatherRequest();
             request.Tools.Add(ToolDefinition.Function("messy", "Schema with keywords outside the OpenAPI subset.", MessySchema()));
@@ -435,6 +436,15 @@ namespace Test.Shared
             SharedAssert.Equal(0, body.Int(p + ".properties.count.minimum"), "minimum should be kept.");
             SharedAssert.Equal("A", body.Str(p + ".properties.level.enum.0"), "String enums should be kept.");
             SharedAssert.Equal("2", body.Str(p + ".properties.level.enum.1"), "Non-string enum values should become strings.");
+
+            // A per-call mode overrides the client default in both directions.
+            ToolChatRequest perCall = CreateWeatherRequest();
+            perCall.Options = new GeminiCompletionOptions { ToolSchemaMode = GeminiToolSchemaMode.JsonSchema };
+            ToolChatResponse perCallResponse = await client.ToolChatAsync(perCall, token).ConfigureAwait(false);
+            SharedAssert.True(perCallResponse.Success, "A per-call JsonSchema mode should be accepted. " + perCallResponse.Error);
+            LocalJson perCallBody = LocalJson.Parse(server.RequestBodies[1]);
+            SharedAssert.True(perCallBody.Has("tools.0.functionDeclarations.0.parametersJsonSchema"), "A per-call JsonSchema mode should override an OpenApiSubset default.");
+            SharedAssert.False(perCallBody.Has("tools.0.functionDeclarations.0.parameters"), "A per-call JsonSchema mode should not also send parameters.");
         }
 
         private static Dictionary<string, object> MessySchema()
@@ -459,7 +469,7 @@ namespace Test.Shared
         private static async Task RunGeminiFunctionCallIdsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
             client.Model = "test-model";
 
             // The default route returns a functionCall without an id, so the client synthesizes one.
@@ -486,7 +496,7 @@ namespace Test.Shared
         private static async Task RunOpenAiCompatSignatureAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiClient client = new OpenAiClient(server.Endpoint, "test-key");
+            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key");
             client.Model = LocalGeminiToolRoutes.Model;
 
             ToolChatRequest request = CreateWeatherRequest();
@@ -512,7 +522,7 @@ namespace Test.Shared
         private static async Task RunOpenAiCompatSignatureStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiClient client = new OpenAiClient(server.Endpoint, "test-key");
+            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key");
             client.Model = LocalGeminiToolRoutes.Model;
 
             ToolChatRequest request = CreateWeatherRequest();
@@ -546,7 +556,7 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
             // OpenAI without a signature: the replayed tool call has exactly id, type, and function.
-            using (OpenAiClient openAi = new OpenAiClient(server.Endpoint, "test-key"))
+            using (OpenAiCompletionClient openAi = new OpenAiCompletionClient(server.Endpoint, "test-key"))
             {
                 openAi.Model = "test-model";
                 ToolChatRequest request = CreateWeatherRequest();
@@ -567,10 +577,10 @@ namespace Test.Shared
             // Providers that have no signature concept never send one, even when a ToolCall carries it.
             List<CompletionClientBase> others = new List<CompletionClientBase>
             {
-                new AnthropicClient(server.Endpoint, "test-key"),
-                new OllamaClient(server.Endpoint),
+                new AnthropicCompletionClient(server.Endpoint, "test-key"),
+                new OllamaCompletionClient(server.Endpoint),
                 CreateBedrockClient(server),
-                new CohereClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey),
+                new CohereCompletionClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey),
             };
 
             try
@@ -643,16 +653,16 @@ namespace Test.Shared
 
         #region Helpers
 
-        private static GeminiClient CreateGeminiClient(LocalOpenAiTestServer server)
+        private static GeminiCompletionClient CreateGeminiClient(LocalOpenAiTestServer server)
         {
-            GeminiClient client = new GeminiClient(server.Endpoint, "test-key");
+            GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
             client.Model = LocalGeminiToolRoutes.Model;
             return client;
         }
 
-        private static BedrockClient CreateBedrockClient(LocalOpenAiTestServer server)
+        private static BedrockCompletionClient CreateBedrockClient(LocalOpenAiTestServer server)
         {
-            BedrockClient client = new BedrockClient(
+            BedrockCompletionClient client = new BedrockCompletionClient(
                 new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
                 "us-east-1",
                 endpoint: server.Endpoint);

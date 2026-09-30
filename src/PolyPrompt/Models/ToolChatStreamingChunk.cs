@@ -41,7 +41,7 @@ namespace PolyPrompt.Models
         /// <summary>
         /// Token usage and timing statistics. Typically only populated on the final chunk.
         /// </summary>
-        public ChatStreamingUsage? Usage { get; set; } = null;
+        public TokenUsage? Usage { get; set; } = null;
 
         /// <summary>
         /// Response identifier for correlation.

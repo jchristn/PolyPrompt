@@ -6,61 +6,63 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, and **Hugging Face Text Embeddings Inference (TEI)** APIs. Write your LLM integration code once and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
 
-| Provider | Client | Auth | Chat / Tools / Streaming | Reasoning | Embeddings | Rerank | Classify |
+> **Upgrading from 2.x?** Version 3.0 splits each provider client into one client per capability. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md).
+
+| Provider | Completion | Embedding | Rerank | Classification | Decision | Models | Auth |
 |---|---|---|---|---|---|---|---|
-| Ollama | `OllamaClient` | none / bearer | ✅ | ✅ | ✅ | ❌ | ❌ |
-| OpenAI (+ compatible) | `OpenAiClient` | bearer | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Azure OpenAI | `AzureOpenAiClient` | `api-key` or Azure AD | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Google Gemini (AI Studio) | `GeminiClient` | API key | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Google Vertex AI | `VertexAiClient` | OAuth (ADC / service account) | ✅ | ✅ | ✅ (`:predict`) | ❌ | ❌ |
-| Anthropic Claude | `AnthropicClient` | `x-api-key` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| AWS Bedrock | `BedrockClient` | SigV4 | ✅ (Converse) | ✅ | ✅ (Titan / Cohere) | ✅ (Cohere / Amazon) | ❌ |
-| VoyageAI | `VoyageAiClient` | bearer | ❌ | ❌ | ✅ | ✅ | ❌ |
-| Cohere | `CohereClient` | bearer | ✅ (v2 Chat) | ✅ | ✅ | ✅ | ✅ |
-| Hugging Face TEI | `TeiClient` | none / bearer | ❌ | ❌ | ✅ (+ sparse) | ✅ | ✅ |
+| Ollama | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer |
+| OpenAI (+ compatible) | `OpenAiCompletionClient` | `OpenAiEmbeddingClient` | | | | `OpenAiModelClient` | bearer |
+| Azure OpenAI | `AzureOpenAiCompletionClient` | `AzureOpenAiEmbeddingClient` | | | | `AzureOpenAiModelClient` | `api-key` or Azure AD |
+| Google Gemini | `GeminiCompletionClient` | `GeminiEmbeddingClient` | | | | `GeminiModelClient` | `x-goog-api-key` |
+| Google Vertex AI | `VertexAiCompletionClient` | `VertexAiEmbeddingClient` | | | | | OAuth (ADC / service account) |
+| Anthropic Claude | `AnthropicCompletionClient` | | | | | `AnthropicModelClient` | `x-api-key` |
+| AWS Bedrock | `BedrockCompletionClient` | `BedrockEmbeddingClient` | `BedrockRerankClient` | | | `BedrockModelClient` | SigV4 |
+| VoyageAI | | `VoyageAiEmbeddingClient` | `VoyageAiRerankClient` | | | | bearer |
+| Cohere | `CohereCompletionClient` | `CohereEmbeddingClient` | `CohereRerankClient` | `CohereClassificationClient` | | `CohereModelClient` | bearer |
+| Hugging Face TEI | | `TeiEmbeddingClient`, `TeiSparseEmbeddingClient` | `TeiRerankClient` | `TeiClassificationClient` | | `TeiModelClient` | none / bearer |
+| TypeSafe (Jev, Ollaya) | | | | | `TypeSafeDecisionClient` | | bearer |
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning ten different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability (VoyageAI and TEI have no chat API, Anthropic has no embeddings API, and only Cohere, TEI, VoyageAI, and Bedrock can rerank), so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library, and JSON handling uses the built-in `System.Text.Json` (one package dependency total, for logging).
+PolyPrompt gives you one consistent API per capability. A chat call looks the same on Ollama, OpenAI, Gemini, Claude, Bedrock, and Cohere; an embedding call looks the same on nine providers; a rerank call looks the same on four. Each client exposes only what its provider supports, so a missing capability is a compile error rather than a runtime surprise. PolyPrompt takes **no provider SDK dependencies**: AWS SigV4 signing and Google service-account token exchange are implemented in-library, and JSON handling uses the built-in `System.Text.Json` (one package dependency, for logging).
 
-- **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
-- **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
-- **Text Generation** - Streaming and non-streaming text generation (completion-style)
-- **Embeddings** - Single and batch embedding vector generation for semantic search and RAG, plus sparse (SPLADE) embeddings on TEI
-- **Reranking** - Score candidate documents against a query with a cross-encoder and get them back highest score first (Cohere, TEI, VoyageAI, Bedrock)
-- **Classification** - Label texts with a classification model or few-shot examples (Cohere, TEI)
-- **Model Management** - List models, check existence, get model details, pull, and delete
-- **Connectivity Validation** - Verify provider reachability before running workloads
-- **Timing & Usage Metrics** - Built-in performance tracking including time-to-first-token, tokens/sec, and overall throughput, plus provider-reported token usage (prompt/completion/total, and cached-prompt/cache-creation/reasoning tokens where reported) on both streaming and non-streaming responses when the provider returns it
-- **Call Recording** - Every HTTP call is recorded with full request/response details for debugging and auditing
-- **Provider-Specific Options** - Fine-tune each provider's unique parameters without losing portability
+- **Chat completions**: streaming and non-streaming conversational AI with system prompts
+- **Tool calling**: provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
+- **Text generation**: streaming and non-streaming completion-style generation
+- **Embeddings**: single and batch dense vectors for semantic search and RAG, plus sparse (SPLADE) vectors on TEI
+- **Reranking**: score candidate documents against a query and get them back highest score first
+- **Classification**: label texts with a classifier model or few-shot examples
+- **Decision models**: ask typed questions (yes/no, pick one, rate on a rubric) about a state and get calibrated probabilities instead of generated text
+- **Model management**: list models, check existence, get details, and pull or delete (Ollama)
+- **Connectivity validation**: verify each client's endpoint and credentials before running workloads
+- **Timing and usage metrics**: time-to-first-token, tokens per second, and provider-reported token usage, including cached, cache-write, and reasoning tokens where reported
+- **Call recording**: every HTTP call is recorded with full request and response details for debugging and auditing
+- **Settings that compose**: client-wide `Defaults` plus per-call options, merged field by field, with provider-specific options that extend the common ones
 
 ## Use Cases
 
 PolyPrompt is a good fit when you need to:
 
-- **Build provider-agnostic applications** - Let users choose their preferred LLM provider (local Ollama, cloud OpenAI, Google Gemini, Anthropic Claude, or VoyageAI for embeddings) without rewriting integration code
-- **Add tool-backed workflows** - Let models request application functions while your code stays in charge of tool execution
-- **Compare providers side-by-side** - Benchmark the same prompts across Ollama, OpenAI, Gemini, and Anthropic to evaluate quality, latency, and cost
-- **Prototype rapidly** - Get a chat completion, embedding, or text generation working in a few lines of code without studying provider-specific SDKs
-- **Build RAG pipelines** - Generate embeddings for document chunks using Ollama, OpenAI, Gemini, Cohere, a self-hosted TEI server, or purpose-built VoyageAI embedding models (with retrieval-role `input_type` hints and Matryoshka output dimensions), query with semantic search, then rerank the candidates with Cohere, TEI, VoyageAI, or Bedrock before sending the best ones to the model
-- **Self-host retrieval models** - Run embedding, reranker, and classifier models on your own hardware with Hugging Face Text Embeddings Inference and call them through the same interface as the hosted providers
-- **Create AI-powered CLI tools** - The simple API makes it easy to add LLM capabilities to command-line applications
-- **Manage local model infrastructure** - Pull, list, inspect, and delete Ollama models programmatically
-- **Monitor LLM performance** - Use built-in timing metrics and call recording to track latency, throughput, and errors in production
-- **Build multi-model workflows** - Use different providers for different tasks (e.g., Ollama for embeddings, OpenAI for chat) through the same interface
+- **Build provider-agnostic applications**: let users choose local Ollama, OpenAI, Gemini, Claude, or Bedrock without rewriting integration code
+- **Add tool-backed workflows**: let models request application functions while your code stays in charge of running them
+- **Build RAG pipelines**: embed document chunks with any of nine providers, retrieve, then rerank the candidates with Cohere, TEI, VoyageAI, or Bedrock before sending the best ones to a model
+- **Route and triage with decision models**: classify intent, flag urgency, and score severity in one call, with calibrated confidence you can threshold on
+- **Self-host retrieval models**: run embedding, reranker, and classifier models on your own hardware with TEI, or decision models with Ollaya, through the same interfaces as the hosted providers
+- **Compare providers side by side**: benchmark the same prompts across providers for quality, latency, and cost
+- **Manage local model infrastructure**: pull, list, inspect, and delete Ollama models programmatically
+- **Monitor LLM performance**: use the built-in timing metrics and call recording to track latency, throughput, and errors
 
 ## When Not to Use It
 
 PolyPrompt may not be the right choice if you need:
 
-- **Advanced multimodal or lifecycle APIs** - Vision/image inputs, structured outputs, fine-tuning APIs, batch APIs, and provider-specific agent runtimes are not currently supported
-- **Automatic agent execution** - PolyPrompt returns requested tool calls, but your application executes tools and appends tool results
-- **Conversation storage** - PolyPrompt sends the messages you provide; it does not persist conversation history or manage context windows
-- **Token counting or cost estimation** - While some providers return token usage in responses, PolyPrompt does not provide pre-request token counting
-- **Official SDK parity** - If you need every feature of a specific provider's API, use their official SDK instead
+- **Advanced multimodal or lifecycle APIs**: vision inputs, structured outputs, fine-tuning, provider batch APIs, and agent runtimes are not supported
+- **Automatic agent execution**: PolyPrompt returns requested tool calls; your application runs the tools and appends the results
+- **Conversation storage**: PolyPrompt sends the messages you provide; it does not persist history or manage context windows
+- **Token counting or cost estimation** before a request
+- **Official SDK parity**: if you need every feature of one provider's API, use its official SDK
 
 ## Installation
 
@@ -68,9 +70,54 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.8.0**.
+Current documented package version: **3.0.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
-PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
+## Architecture
+
+Every client derives from `ClientBase`, which owns the HTTP transport, per-request credentials, `TimeoutMs`, `CallDetails`, and `ValidateConnectivityAsync`. Each client then derives from exactly one capability base:
+
+```
+ClientBase                     HTTP transport, timeouts, credentials, CallDetails, ValidateConnectivityAsync
+├── CompletionClientBase       ChatAsync, ChatStreamingAsync, ToolChatAsync, ToolChatStreamingAsync,
+│                              GenerateAsync, GenerateStreamingAsync
+├── EmbeddingClientBase        EmbedAsync(string), EmbedAsync(List<string>)
+├── SparseEmbeddingClientBase  EmbedSparseAsync(string), EmbedSparseAsync(List<string>)
+├── RerankClientBase           RerankAsync(query, documents)
+├── ClassificationClientBase   ClassifyAsync(string), ClassifyAsync(List<string>)
+├── DecisionClientBase         DecideAsync(DecisionRequest), DecideAsync(List<DecisionRequest>)
+└── ModelClientBase            ListModelsAsync, ModelExistsAsync, GetModelInformationAsync
+```
+
+Three rules hold for every client:
+
+1. **Arguments are validated before any request**, identically on every provider. Null prompts or inputs throw `ArgumentNullException`; empty lists, null list elements, empty tool-chat messages, and invalid decision questions throw `ArgumentException`; an operation that needs a model throws `InvalidOperationException` when neither the call nor `Defaults` sets one.
+2. **HTTP errors do not throw.** A provider error returns `Success = false` with `StatusCode` and `Error` set. Cancellation and `TimeoutMs` timeouts propagate as `OperationCanceledException`.
+3. **Credentials are attached per request.** No client modifies `HttpClient.DefaultRequestHeaders`, so clients for different providers can share one `HttpClient`.
+
+### Settings: Defaults and per-call options
+
+Each client has a get-only `Defaults` object of its capability's options type (for example `OllamaCompletionOptions` on `OllamaCompletionClient`), and every operation accepts the same type per call. For each setting, a non-null per-call value wins, otherwise `Defaults`, otherwise the provider's own default (the field is not sent). `Model` is shorthand for `Defaults.Model`.
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+using PolyPrompt.Options;
+
+using OllamaCompletionClient chat = new OllamaCompletionClient("http://localhost:11434");
+chat.Model = "gemma3:4b";
+chat.Defaults.MaxTokens = 512;
+chat.Defaults.Temperature = 0.2;
+chat.Defaults.ContextLength = 8192;          // Ollama-specific
+chat.Defaults.SystemPrompt = "Be concise.";
+
+// Sends max tokens 512 and context length 8192 from Defaults, and temperature 0.9 from this call.
+ChatResponse reply = await chat.ChatAsync("Explain dependency injection.", new CompletionOptions { Temperature = 0.9 });
+
+// A per-call model does not change the client's model.
+ChatResponse other = await chat.ChatAsync("Hi", new CompletionOptions { Model = "gpt-oss:20b" });
+```
+
+The same options object is used by `ChatAsync`, `GenerateAsync`, and `ToolChatAsync` (through `ToolChatRequest.Options`). When nothing sets `MaxTokens`, 4096 is sent.
 
 ## Quick Start
 
@@ -80,7 +127,7 @@ PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 using PolyPrompt.Clients;
 using PolyPrompt.Models;
 
-using OllamaClient client = new OllamaClient("http://localhost:11434");
+using OllamaCompletionClient client = new OllamaCompletionClient("http://localhost:11434");
 client.Model = "gemma3:4b";
 
 ChatResponse response = await client.ChatAsync("What is the capital of France?");
@@ -90,107 +137,77 @@ Console.WriteLine(response.Text);
 ### OpenAI
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OpenAiClient client = new OpenAiClient("https://api.openai.com", "sk-your-api-key");
+using OpenAiCompletionClient client = new OpenAiCompletionClient("https://api.openai.com", "sk-your-api-key");
 client.Model = "gpt-4o";
 
 ChatResponse response = await client.ChatAsync("What is the capital of France?");
 Console.WriteLine(response.Text);
 ```
 
-OpenAI-compatible endpoints may be supplied either as the API root or as a versioned `/v1` base URL. For example, an Ollama instance exposing the OpenAI API can be used as:
+OpenAI-compatible endpoints may be given as the API root or as a versioned `/v1` base URL. For example, Ollama's OpenAI-compatible API:
 
 ```csharp
-using PolyPrompt.Clients;
-
-using OpenAiClient client = new OpenAiClient("http://localhost:11434/v1");
+using OpenAiCompletionClient client = new OpenAiCompletionClient("http://localhost:11434/v1");
 client.Model = "gpt-oss:20b";
 ```
 
 ### Gemini
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using GeminiClient client = new GeminiClient(
-    "https://generativelanguage.googleapis.com",
-    "your-api-key");
+using GeminiCompletionClient client = new GeminiCompletionClient(apiKey: "your-api-key");
 client.Model = "gemini-2.5-flash";
 
 ChatResponse response = await client.ChatAsync("What is the capital of France?");
 Console.WriteLine(response.Text);
 ```
 
+The key is sent in the `x-goog-api-key` header, never in the URL.
+
 ### Anthropic
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using AnthropicClient client = new AnthropicClient(
-    "https://api.anthropic.com",
-    "sk-ant-your-api-key");
+using AnthropicCompletionClient client = new AnthropicCompletionClient(apiKey: "sk-ant-your-api-key");
 client.Model = "claude-opus-4-8";
 
 ChatResponse response = await client.ChatAsync("What is the capital of France?");
 Console.WriteLine(response.Text);
 ```
 
-Anthropic authenticates with the `x-api-key` and `anthropic-version` headers rather than bearer authorization; both are set automatically. The version value is configurable via `client.AnthropicVersion` (default `2023-06-01`). Identity-linked API keys additionally require a workspace:
+Anthropic authenticates with the `x-api-key` and `anthropic-version` headers, both set automatically. `AnthropicVersion` (default `2023-06-01`) and `WorkspaceId` (the `anthropic-workspace-id` header, required for identity-linked keys) exist on both `AnthropicCompletionClient` and `AnthropicModelClient`.
+
+### Cohere
+
+Cohere serves chat, embeddings, reranking, and classification from different model families, so each is its own client with its own default model:
 
 ```csharp
-client.WorkspaceId = "wrkspc_your-workspace-id"; // sends the anthropic-workspace-id header
-```
-
-### VoyageAI (embeddings only)
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
 using PolyPrompt.Options;
 
-using VoyageAiClient client = new VoyageAiClient(
-    "https://api.voyageai.com",
-    "pa-your-api-key");
-client.Model = "voyage-3.5";
+using CohereCompletionClient chat = new CohereCompletionClient(apiKey: "your-cohere-key");        // command-a-03-2025
+using CohereEmbeddingClient embed = new CohereEmbeddingClient(apiKey: "your-cohere-key");         // embed-v4.0
+using CohereRerankClient rerank = new CohereRerankClient(apiKey: "your-cohere-key");              // rerank-v3.5
+
+ChatResponse reply = await chat.ChatAsync("What is the capital of France?");
+
+CohereEmbeddingOptions options = new CohereEmbeddingOptions { InputType = "search_query" };
+EmbeddingResponse vector = await embed.EmbedAsync("capital of France", options);
+```
+
+Chat, tool chat, and streaming use the v2 Chat API; text generation is sent as a single-turn v2 chat because Cohere retired its generate endpoint. Cohere requires `input_type` for its v3 and later embedding models, so `search_document` is sent when you do not set one.
+
+### VoyageAI
+
+```csharp
+using VoyageAiEmbeddingClient client = new VoyageAiEmbeddingClient(apiKey: "pa-your-api-key");   // voyage-3.5
 
 VoyageAiEmbeddingOptions options = new VoyageAiEmbeddingOptions();
 options.InputType = "document";      // or "query" at retrieval time
 options.OutputDimension = 1024;      // Matryoshka dimensions: 256, 512, 1024, 2048
 
 EmbeddingResponse response = await client.EmbedAsync("The quick brown fox.", options);
-if (response.Success && response.Embeddings.Count > 0)
-{
-    Console.WriteLine("Dimensions: " + response.Embeddings[0].Embedding.Length);
-}
+Console.WriteLine("Dimensions: " + response.Embeddings[0].Embedding.Length);
 ```
 
-VoyageAI is an embeddings and reranking provider: chat, tool calling, generation, and model management throw `NotSupportedException`, and `ValidateConnectivityAsync` probes with a minimal embeddings request because VoyageAI has no model listing endpoint. Reranking uses `client.RerankModel` (default `rerank-2.5`); see [Reranking](#reranking).
-
-### Cohere
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-using PolyPrompt.Options;
-
-using CohereClient client = new CohereClient("https://api.cohere.com", "your-cohere-key");
-client.Model = "command-a-03-2025";      // chat, tool chat, and generation
-client.EmbeddingModel = "embed-v4.0";    // EmbedAsync
-client.RerankModel = "rerank-v3.5";      // RerankAsync
-
-ChatResponse chat = await client.ChatAsync("What is the capital of France?");
-Console.WriteLine(chat.Text);
-
-CohereEmbeddingOptions embedOptions = new CohereEmbeddingOptions();
-embedOptions.InputType = "search_query";  // search_document (default), search_query, classification, clustering
-EmbeddingResponse embedding = await client.EmbedAsync("capital of France", embedOptions);
-```
-
-Cohere serves chat, embeddings, reranking, and classification from different model families, so `CohereClient` has a separate default model for each. Chat, tool chat, and streaming use the v2 Chat API; text generation is sent as a single-turn v2 chat because Cohere retired its legacy generate endpoint. Cohere requires `input_type` for its v3 and later embedding models, so `search_document` is sent when you do not set one.
+VoyageAI has embeddings and reranking only (`VoyageAiRerankClient`, default `rerank-2.5`), and no model listing API.
 
 ### Hugging Face Text Embeddings Inference (TEI)
 
@@ -201,124 +218,126 @@ docker run -p 8080:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest -
 ```
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
+using TeiEmbeddingClient embed = new TeiEmbeddingClient("http://localhost:8080");   // API key only if the server uses --api-key
+using TeiModelClient models = new TeiModelClient("http://localhost:8080");
 
-using TeiClient client = new TeiClient("http://localhost:8080");   // API key only if the server uses --api-key
+EmbeddingResponse embedding = await embed.EmbedAsync("The quick brown fox.");
 
-EmbeddingResponse embedding = await client.EmbedAsync("The quick brown fox.");
-
-await foreach (ModelInformation model in client.ListModelsAsync())
+await foreach (ModelInformation model in models.ListModelsAsync())
 {
     Console.WriteLine(model.Name + " (" + model.Metadata["model_type"] + ")");   // embedding, reranker, or classifier
 }
 ```
 
-`TeiClient` supports dense embeddings (`/embed`), sparse embeddings (`/embed_sparse`), reranking (`/rerank`), classification (`/predict`), model information (`/info`), and connectivity validation (`/health`). Which operations succeed depends on the hosted model: for example, calling `EmbedAsync` against a reranker returns an unsuccessful response carrying TEI's HTTP 424 error. The `Model` property and per-request model overrides are informational because the server decides the model. Chat and generation belong to Hugging Face Text Generation Inference, which is OpenAI-compatible and works with `OpenAiClient`; on `TeiClient` they throw `NotSupportedException`.
+The TEI clients cover dense embeddings (`/embed`), sparse embeddings (`/embed_sparse`), reranking (`/rerank`), classification (`/predict`), model information (`/info`), and connectivity (`/health`). The server decides the model, so the TEI clients need no model name. Which operations succeed depends on the hosted model: calling `EmbedAsync` against a reranker returns an unsuccessful response carrying TEI's HTTP 424 error. Chat and generation belong to Hugging Face Text Generation Inference, which is OpenAI-compatible and works with `OpenAiCompletionClient`.
 
 ### Azure OpenAI
 
-Azure OpenAI is wire-compatible with OpenAI; the model **is** the deployment name, and requests carry an `api-version`. Authenticate with an `api-key` header or an Azure AD bearer token.
+Azure OpenAI is wire-compatible with OpenAI; the model **is** the deployment name, and requests carry an `api-version`.
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-// API-key auth. The deployment name is the model.
-using AzureOpenAiClient client = new AzureOpenAiClient(
-    "https://my-resource.openai.azure.com",  // resource endpoint
-    "gpt-4o",                                  // deployment name
+using AzureOpenAiCompletionClient chat = new AzureOpenAiCompletionClient(
+    "https://my-resource.openai.azure.com",   // resource endpoint
+    "gpt-4o",                                  // chat deployment
     "your-azure-api-key",
-    apiVersion: "2024-10-21");                 // optional; sensible GA default
+    apiVersion: "2024-10-21");                 // optional; default AzureOpenAiDefaults.ApiVersion
 
-ChatResponse response = await client.ChatAsync("Hello from Azure!");
-Console.WriteLine(response.Text);
+using AzureOpenAiEmbeddingClient embed = new AzureOpenAiEmbeddingClient(
+    "https://my-resource.openai.azure.com", "text-embedding-3-small", "your-azure-api-key");
 
-// Azure AD (Entra ID) auth instead of an api-key:
-// using var aad = new AzureOpenAiClient(endpoint, "gpt-4o", new StaticTokenCredential(token));
+ChatResponse response = await chat.ChatAsync("Hello from Azure!");
+
+// A per-call model routes that call to another deployment.
+ChatResponse mini = await chat.ChatAsync("Hi", new CompletionOptions { Model = "gpt-4o-mini" });
+
+// Azure AD (Entra ID) instead of an api-key:
+// new AzureOpenAiCompletionClient(endpoint, "gpt-4o", new StaticTokenCredential(token));
 ```
-
-Everything else — tools, streaming, `reasoning_effort`, embeddings, usage — is inherited from the OpenAI client unchanged.
 
 ### Google Vertex AI
 
-Vertex AI serves Gemini models under a project/region path and authenticates with a short-lived OAuth token (Application Default Credentials or a service account), refreshed automatically per request.
+Vertex AI serves Gemini models under a project and region, and authenticates with a short-lived OAuth token refreshed automatically.
 
 ```csharp
 using PolyPrompt.Auth;
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
 
 // Application Default Credentials (GOOGLE_APPLICATION_CREDENTIALS key file, or a GCE/Cloud Run metadata token).
-using VertexAiClient client = new VertexAiClient(
-    "my-gcp-project",
-    "us-central1",
-    new AdcCredential());
-client.Model = "gemini-2.5-flash";
+ICredentialProvider credential = new AdcCredential();
+// or: ServiceAccountCredential.FromJson(File.ReadAllText("sa.json"))
 
-ChatResponse response = await client.ChatAsync("Hello from Vertex!");
-Console.WriteLine(response.Text);
+using VertexAiCompletionClient chat = new VertexAiCompletionClient("my-gcp-project", "us-central1", credential);
+chat.Model = "gemini-2.5-flash";
+ChatResponse response = await chat.ChatAsync("Hello from Vertex!");
 
-// Service-account key JSON instead of ADC:
-// var cred = ServiceAccountCredential.FromJson(File.ReadAllText("sa.json"));
-// using var client = new VertexAiClient("my-gcp-project", "us-central1", cred);
-
-// Embeddings use the :predict endpoint:
-// client.Model = "text-embedding-004";
-// var embed = await client.EmbedAsync("The quick brown fox.");
+using VertexAiEmbeddingClient embed = new VertexAiEmbeddingClient("my-gcp-project", "us-central1", credential);   // text-embedding-005
+EmbeddingResponse vectors = await embed.EmbedAsync(new List<string> { "one", "two" });
 ```
 
 ### AWS Bedrock
 
-Bedrock uses the unified Converse API and signs every request with AWS Signature V4. Provide credentials through a provider (static keys or the standard `AWS_*` environment variables) and a region.
+Bedrock uses the Converse API for chat and InvokeModel for embeddings and reranking, and signs every request with AWS Signature V4.
 
 ```csharp
 using PolyPrompt.Auth;
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
 
-// Static credentials (or use new EnvironmentAwsCredential() to read AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY).
-using BedrockClient client = new BedrockClient(
-    new StaticAwsCredential("AKIA...", "secret...", "us-east-1"),
-    "us-east-1");
-client.Model = "anthropic.claude-3-5-sonnet-20240620-v1:0";
+IAwsCredentialProvider aws = new StaticAwsCredential("AKIA...", "secret...", "us-east-1");
+// or: new EnvironmentAwsCredential()   (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION)
 
-ChatResponse response = await client.ChatAsync("Hello from Bedrock!");
-Console.WriteLine(response.Text);
+using BedrockCompletionClient chat = new BedrockCompletionClient(aws, "us-east-1");
+chat.Model = "anthropic.claude-3-5-sonnet-20240620-v1:0";
+ChatResponse response = await chat.ChatAsync("Hello from Bedrock!");
 
-// Embeddings (Amazon Titan or Cohere), selected by the model id:
-// var embed = await client.EmbedAsync("The quick brown fox.",
-//     new EmbeddingOptions { Model = "amazon.titan-embed-text-v2:0" });
-
-// Reranking through InvokeModel (default client.RerankModel is cohere.rerank-v3-5:0):
-// var ranked = await client.RerankAsync("capital of France", documents);
+using BedrockEmbeddingClient embed = new BedrockEmbeddingClient(aws, "us-east-1");   // amazon.titan-embed-text-v2:0, or a Cohere model
+using BedrockRerankClient rerank = new BedrockRerankClient(aws, "us-east-1");        // cohere.rerank-v3-5:0, or amazon.rerank-v1:0
 ```
 
-Chat, tools, streaming (over the AWS binary event-stream), reasoning (Anthropic extended thinking), embeddings, and reranking (Cohere Rerank or Amazon Rerank) are all supported; see the [feature matrix](#provider-feature-support).
+Bedrock constructors take `(credentialProvider, region, endpoint = null, logging = null, httpClient = null)`.
+
+### TypeSafe decision models (Jev, Ollaya)
+
+```csharp
+using TypeSafeDecisionClient jev = new TypeSafeDecisionClient(apiKey: "your-typesafe-key");   // jev-latest
+// Local Ollaya server: new TypeSafeDecisionClient("http://localhost:<port>")
+
+DecisionResponse answer = await jev.DecideAsync(new DecisionRequest
+{
+    State = "I was charged twice for my order and need the money back today.",
+    Questions =
+    {
+        DecisionQuestion.Choice("intent", "What does the customer want?", "refund", "billing", "other"),
+        DecisionQuestion.Binary("urgent", "Does the customer need a response today?"),
+        DecisionQuestion.Score("tone", "How upset is the customer?", "calm", "annoyed", "angry", "furious")
+    }
+});
+
+ChoiceAnswer intent = answer.Choice("intent");
+if (intent.Confidence >= 0.9) Console.WriteLine("Route to " + intent.Value);
+Console.WriteLine("Urgent: " + answer.Binary("urgent").Probability);
+Console.WriteLine("Tone: " + answer.Score("tone").LevelText);
+```
+
+See [Decision Models](#decision-models) for details.
 
 ## Authentication
 
-Most providers authenticate with a single static credential passed to the constructor (a bearer key for OpenAI/Ollama/VoyageAI/Cohere, an optional bearer key for TEI servers started with `--api-key`, an `x-api-key` for Anthropic, an API key in the query string for Gemini). Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, all implemented in-library under `PolyPrompt.Auth` with no provider SDK:
+Most providers take one static credential in the constructor: a bearer key for OpenAI, Ollama, VoyageAI, Cohere, TypeSafe, and TEI servers started with `--api-key`; an `x-api-key` for Anthropic; and an `x-goog-api-key` for Gemini. Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, implemented in-library under `PolyPrompt.Auth` with no provider SDK:
 
-- **Azure OpenAI** — an `api-key` header (pass the key string) or an Azure AD bearer token (pass an `ICredentialProvider`, e.g. `new StaticTokenCredential(token)`), refreshed per request.
-- **Vertex AI** — a short-lived OAuth token via `ICredentialProvider`: `AdcCredential` (Application Default Credentials: `GOOGLE_APPLICATION_CREDENTIALS` key file or the GCE/Cloud Run metadata server), `ServiceAccountCredential.FromJson(...)` (RS256 JWT assertion → token exchange), or `StaticTokenCredential` (e.g. `gcloud auth print-access-token`). Tokens are cached and refreshed ahead of expiry.
-- **AWS Bedrock** — AWS Signature Version 4 on every request via `IAwsCredentialProvider`: `StaticAwsCredential(accessKey, secretKey, region, sessionToken?)` or `EnvironmentAwsCredential()` (reads `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, and `AWS_REGION`/`AWS_DEFAULT_REGION`). Temporary/role credentials with a session token are supported.
+- **Azure OpenAI**: an `api-key` header (pass the key string) or an Azure AD bearer token (pass an `ICredentialProvider`, such as `new StaticTokenCredential(token)`).
+- **Vertex AI**: a short-lived OAuth token from an `ICredentialProvider`: `AdcCredential` (Application Default Credentials: the `GOOGLE_APPLICATION_CREDENTIALS` key file or the GCE/Cloud Run metadata server), `ServiceAccountCredential.FromJson(...)` (an RS256 JWT assertion exchanged for a token), or `StaticTokenCredential` (for example from `gcloud auth print-access-token`). Tokens are cached and refreshed ahead of expiry.
+- **AWS Bedrock**: Signature Version 4 on every request from an `IAwsCredentialProvider`: `StaticAwsCredential(accessKey, secretKey, region, sessionToken?)` or `EnvironmentAwsCredential()`. Temporary credentials with a session token are supported.
 
-The per-request signing/token attachment is handled by the `PrepareRequestAsync` hook on `CompletionClientBase`; the other clients override nothing and keep their static-header auth.
+Every client attaches its credentials to each request in the `PrepareRequestAsync` hook, so credentials never leak between clients that share an `HttpClient`.
 
 ## Detailed Examples
 
-### Chat with System Prompt
+### Chat with a System Prompt
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
+using OllamaCompletionClient client = new OllamaCompletionClient("http://localhost:11434");
 client.Model = "gemma3:4b";
-client.SystemPrompt = "You are a helpful assistant that responds in haiku format.";
-client.Temperature = 0.7;
-client.MaxTokens = 256;
+client.Defaults.SystemPrompt = "You are a helpful assistant that responds in haiku format.";
+client.Defaults.Temperature = 0.7;
+client.Defaults.MaxTokens = 256;
 
 ChatResponse response = await client.ChatAsync("Tell me about the ocean.");
 if (response.Success)
@@ -328,21 +347,19 @@ if (response.Success)
 }
 else
 {
-    Console.WriteLine("Error: " + response.Error);
+    Console.WriteLine("Error " + response.StatusCode + ": " + response.Error);
 }
 ```
+
+`Defaults.SystemPrompt` applies to chat and tool chat. In tool chat it is prepended as a system message only when the request's messages contain none, so a conversation that already carries one is sent as-is.
 
 ### Chat with Provider-Specific Options
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-using PolyPrompt.Options;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
+using OllamaCompletionClient client = new OllamaCompletionClient("http://localhost:11434");
 client.Model = "gemma3:4b";
 
-OllamaChatCompletionOptions options = new OllamaChatCompletionOptions();
+OllamaCompletionOptions options = new OllamaCompletionOptions();
 options.Temperature = 0.5;
 options.TopP = 0.9;
 options.MaxTokens = 512;
@@ -355,15 +372,14 @@ ChatResponse response = await client.ChatAsync("Explain dependency injection.", 
 Console.WriteLine(response.Text);
 ```
 
+A client ignores options that belong to another provider; pass a base `CompletionOptions` in provider-agnostic code.
+
 ### Tool Calling
 
-Tool calling is explicit. Use `ToolChatAsync` or `ToolChatStreamingAsync` when a model may request application functions, then execute those functions in your code and send the result back as another message. PolyPrompt normalizes the provider protocol; it does not run your tools for you.
+Tool calling is explicit. Use `ToolChatAsync` or `ToolChatStreamingAsync` when a model may request application functions, run those functions in your code, and send the results back as messages. PolyPrompt normalizes the provider protocol; it does not run your tools.
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OpenAiClient client = new OpenAiClient("https://api.openai.com", "sk-your-api-key");
+using OpenAiCompletionClient client = new OpenAiCompletionClient("https://api.openai.com", "sk-your-api-key");
 client.Model = "gpt-4o-mini";
 
 ToolChatRequest request = new ToolChatRequest();
@@ -377,101 +393,85 @@ request.Tools.Add(ToolDefinition.Function(
         { "type", "object" },
         { "properties", new Dictionary<string, object>
             {
-                { "city", new Dictionary<string, object>
-                    {
-                        { "type", "string" },
-                        { "description", "City name." }
-                    }
-                },
-                { "unit", new Dictionary<string, object>
-                    {
-                        { "type", "string" },
-                        { "enum", new List<string> { "fahrenheit", "celsius" } }
-                    }
-                }
+                { "city", new Dictionary<string, object> { { "type", "string" }, { "description", "City name." } } },
+                { "unit", new Dictionary<string, object> { { "type", "string" }, { "enum", new List<string> { "fahrenheit", "celsius" } } } }
             }
         },
         { "required", new List<string> { "city" } }
     }));
+request.Options = new CompletionOptions { Temperature = 0 };   // optional per-request settings
 
 ToolChatResponse first = await client.ToolChatAsync(request);
 
 if (first.ToolCalls.Count > 0)
 {
     request.Messages.Add(first.ToAssistantMessage());
-}
 
-foreach (ToolCall call in first.ToolCalls)
-{
-    if (call.Name == "get_weather")
+    foreach (ToolCall call in first.ToolCalls)
     {
         string weatherJson = "{\"temperature\":72,\"conditions\":\"clear\"}";
         request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, weatherJson));
     }
 }
 
-request.Tools.Clear();
-request.ToolChoice = "none";
-
 ToolChatResponse final = await client.ToolChatAsync(request);
 Console.WriteLine(final.Text);
 ```
 
+Always give a tool result its tool name; `ChatMessage.ToolResult` does. Gemini requires it (see [Gemini Tool Calling Notes](#gemini-tool-calling-notes)).
+
 ### Streaming Tool Calling
 
-`ToolChatStreamingAsync` streams assistant text and tool-call deltas while accumulating final `Text` and `ToolCalls` on the response as you enumerate `Chunks`. OpenAI-compatible, Ollama, Gemini, and Anthropic clients support it.
+`ToolChatStreamingAsync` streams assistant text and tool-call deltas and accumulates the final `Text` and `ToolCalls` on the response as you enumerate `Chunks`.
 
 ```csharp
 ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
 
 await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 {
-    if (!string.IsNullOrEmpty(chunk.Text))
-    {
-        Console.Write(chunk.Text);
-    }
+    if (!string.IsNullOrEmpty(chunk.Text)) Console.Write(chunk.Text);
 }
 
 if (stream.ToolCalls.Count > 0)
 {
     request.Messages.Add(stream.ToAssistantMessage());
-
     foreach (ToolCall call in stream.ToolCalls)
     {
-        string resultJson = "{\"temperature\":72,\"conditions\":\"clear\"}";
-        request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, resultJson));
+        request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72}"));
     }
 }
 ```
 
 Provider protocol shapes differ:
 
-- **OpenAI-compatible** uses `/v1/chat/completions` SSE chunks and parses `delta.tool_calls` argument fragments.
-- **Ollama** uses `/api/chat` newline-delimited JSON chunks and parses streamed `message.tool_calls`.
-- **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same `GenerateContentRequest` body shape as `ToolChatAsync`: `contents`, optional `systemInstruction`, `tools.functionDeclarations`, and `toolConfig`. It parses streamed `GenerateContentResponse` chunks from `candidates[].content.parts[]`, including `text`, complete `functionCall` objects, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
-- **Anthropic** uses `/v1/messages` with `"stream": true` and parses the event-typed SSE stream: `message_start` (id, model, input tokens), `content_block_start` for `text`, `thinking`, and `tool_use` blocks, `content_block_delta` carrying `text_delta`, `thinking_delta`, and `input_json_delta` fragments, and `message_delta` (stop reason, output tokens). Tool declarations use `tools[].input_schema`, and tool results are sent back as user-role `tool_result` content blocks; consecutive tool results merge into a single user turn so parallel tool calls resolve together.
+- **OpenAI-compatible** streams `/v1/chat/completions` SSE chunks and assembles `delta.tool_calls` argument fragments.
+- **Ollama** streams `/api/chat` newline-delimited JSON and reads `message.tool_calls`.
+- **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same body as `ToolChatAsync` (`contents`, `systemInstruction`, `tools.functionDeclarations`, `toolConfig`) and reads complete `functionCall` parts, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
+- **Anthropic** streams `/v1/messages` event-typed SSE: `message_start`, `content_block_start` for `text`, `thinking`, and `tool_use`, `content_block_delta` with `text_delta`, `thinking_delta`, and `input_json_delta`, and `message_delta`. Tool results are sent as user-role `tool_result` blocks, and consecutive results merge into one user turn.
+- **Bedrock** streams ConverseStream over the AWS binary event-stream.
+- **Cohere** streams v2 Chat SSE events, including `tool-call-start` and `tool-call-delta`.
 
 ### Gemini Tool Calling Notes
 
-These rules apply to `GeminiClient` and `VertexAiClient`, and the thought-signature rule also applies to `OpenAiClient` when it points at Gemini's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`).
+These rules apply to `GeminiCompletionClient` and `VertexAiCompletionClient`. The thought-signature rule also applies to `OpenAiCompletionClient` pointed at Gemini's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`).
 
-- **Thought signatures.** Gemini 3 models attach an opaque `thoughtSignature` to the function calls they emit and reject the follow-up request (HTTP 400, "Function call is missing a thought_signature") if a replayed call has lost it. PolyPrompt captures the signature into `ToolCall.ThoughtSignature` (native `thoughtSignature` beside `functionCall`, or `extra_content.google.thought_signature` on the OpenAI-compatible endpoint, streaming and non-streaming) and sends it back unchanged. `ToAssistantMessage()` keeps it, so the loop above works as written.
-- **If you persist conversations, persist `ToolCall.ThoughtSignature` too.** Store it with each tool call and restore it when you rebuild the `ChatMessage` list, or the next Gemini 3 turn will fail.
-- **History without signatures.** When a replayed assistant turn has no signature at all (it came from another provider, an older PolyPrompt, or was built by hand), the Gemini clients put Google's documented `skip_thought_signature_validator` placeholder on the turn's first function call. Turns that carry a real signature are sent exactly as received; for parallel calls Gemini signs only the first, and PolyPrompt never invents signatures for the others. `OpenAiClient` never adds the placeholder and only emits `extra_content` when a signature exists, so requests to OpenAI and other compatible servers are unchanged.
-- **Tool results.** Tool results are sent as `functionResponse` parts in a `user` turn (Gemini accepts only `user` and `model` roles), and consecutive tool results merge into one turn. `functionResponse.id` carries the matching call id when Gemini issued one. Tool-result content can be anything: a JSON object is sent as the response; a JSON array or scalar is wrapped as `{"result": <value>}` with its structure kept; empty or non-JSON text is wrapped as `{"result": "<text>"}`. Tool-call arguments that are not a JSON object are sent as `{}`. None of these throw.
-- **Tool schemas.** By default (`ToolSchemaMode = GeminiToolSchemaMode.JsonSchema`) tool schemas go in `functionDeclarations[].parametersJsonSchema`, which accepts standard JSON Schema, so keywords such as `additionalProperties`, `const`, `$defs`, or vendor extensions no longer fail the whole request. Only a root `$schema` keyword is removed. For endpoints that only accept the older `parameters` field, set `ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset`: the schema is reduced to the OpenAPI subset that field accepts (unsupported keys are removed and logged at debug level, `"type": ["string", "null"]` becomes `"type": "string", "nullable": true`, `const` becomes a one-value `enum`, and `oneOf` becomes `anyOf`). A tool with an empty parameter dictionary is declared without parameters.
+- **Thought signatures.** Gemini 3 attaches an opaque `thoughtSignature` to each function call and rejects the follow-up request (HTTP 400, "Function call is missing a thought_signature") if a replayed call lost it. PolyPrompt captures it into `ToolCall.ThoughtSignature` (streaming and non-streaming) and sends it back unchanged; `ToAssistantMessage()` keeps it.
+- **If you persist conversations, persist `ToolCall.ThoughtSignature` too**, or the next Gemini 3 turn will fail.
+- **History without signatures.** When a replayed assistant turn has no signature at all (from another provider or built by hand), the Gemini clients put Google's documented `skip_thought_signature_validator` placeholder on the turn's first function call. Signed turns are sent exactly as received, and signatures are never invented. `OpenAiCompletionClient` never adds the placeholder and sends `extra_content` only when a signature exists.
+- **Tool result names.** Gemini requires the function name on every tool result. When `ChatMessage.ToolName` is missing, the name is taken from the assistant tool call with the same `ToolCallId` earlier in the conversation. If there is no such call, `ToolChatAsync` throws `ArgumentException` before sending, naming the message and the id. Set `ToolName` anyway; other callers of your history may need it.
+- **Tool results.** Results are sent as `functionResponse` parts in a `user` turn (Gemini accepts only `user` and `model` roles), and consecutive results merge into one turn. `functionResponse.id` carries the call id when Gemini issued one. A JSON object is sent as the response; an array or scalar is wrapped as `{"result": <value>}`; empty or non-JSON text is wrapped as `{"result": "<text>"}`. Tool-call arguments that are not a JSON object are sent as `{}`.
+- **Tool schemas.** By default (`GeminiCompletionOptions.ToolSchemaMode = GeminiToolSchemaMode.JsonSchema`) schemas go in `functionDeclarations[].parametersJsonSchema`, which accepts standard JSON Schema; only a root `$schema` keyword is removed. For endpoints that only accept `parameters`, set `ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset` in `Defaults` or per call; the schema is then reduced to the OpenAPI subset (unsupported keys are removed and logged, `"type": ["string", "null"]` becomes `"nullable": true`, `const` becomes a one-value `enum`, and `oneOf` becomes `anyOf`).
 
 ```csharp
-using GeminiClient gemini = new GeminiClient(apiKey: "your-google-api-key");
+using GeminiCompletionClient gemini = new GeminiCompletionClient(apiKey: "your-google-api-key");
 gemini.Model = "gemini-3.5-flash";
-// gemini.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset; // only for endpoints without parametersJsonSchema
+// gemini.Defaults.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset;   // only for endpoints without parametersJsonSchema
 
 ToolChatResponse turn = await gemini.ToolChatAsync(request);
 request.Messages.Add(turn.ToAssistantMessage());   // keeps ToolCall.ThoughtSignature
 
 foreach (ToolCall call in turn.ToolCalls)
 {
-    // Arrays, scalars, and plain text are all valid tool results.
     request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "[{\"city\":\"Seattle\",\"temperature\":72}]"));
 }
 
@@ -480,73 +480,59 @@ ToolChatResponse answer = await gemini.ToolChatAsync(request);
 
 ### Reasoning Effort
 
-Reasoning-capable models can trade latency and cost against depth of reasoning. `ReasoningEffort` is a provider-neutral value object: a semantic `ReasoningEffortLevel` (`Minimal`, `Low`, `Medium`, `High`) supplies per-provider defaults, and PolyPrompt projects it onto whatever each provider expects. Set it on the `ToolChatRequest` (or as a client-wide default via `client.ReasoningEffort`); the request value wins over the client default. For plain chat (`ChatAsync` and `ChatStreamingAsync`), set it on `ChatCompletionOptions.ReasoningEffort`; the client-wide default applies to tool chat only, so existing plain chat calls are unchanged. When nothing is set, no reasoning field is sent and the request body is unchanged.
+Reasoning-capable models trade latency and cost against depth of reasoning. `ReasoningEffort` is a provider-neutral value: a semantic `ReasoningEffortLevel` (`Minimal`, `Low`, `Medium`, `High`) with per-provider defaults that PolyPrompt projects onto each provider's parameter. Set it in `Defaults.ReasoningEffort` for every chat and tool chat call, or per call in `CompletionOptions.ReasoningEffort` (for tool chat, `ToolChatRequest.Options.ReasoningEffort`). When nothing sets it, no reasoning field is sent.
 
 ```csharp
-// Common case: a preset (or the level enum, via implicit conversion).
-ToolChatRequest request = new ToolChatRequest { ReasoningEffort = ReasoningEffort.High };
-request.Messages.Add(ChatMessage.User("Refactor this function and explain the tradeoffs."));
-ToolChatResponse response = await client.ToolChatAsync(request);
+// Client-wide default for chat and tool chat.
+client.Defaults.ReasoningEffort = ReasoningEffort.Medium;
 
-// Tuned case: keep the semantic level, override just one provider's parameter.
-request.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+// One tool chat at high effort.
+ToolChatRequest request = new ToolChatRequest { Options = new CompletionOptions { ReasoningEffort = ReasoningEffort.High } };
 
-// Plain chat: turn thinking off for a quick, structured answer (Ollama think:false, Gemini budget 0,
-// Cohere and Bedrock thinking disabled; OpenAI "minimal"; Anthropic "low" with no thinking field).
+// Keep the semantic level, override one provider's parameter.
+request.Options.ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
+
+// Turn thinking off for a quick structured answer.
 ChatResponse quick = await client.ChatAsync("Rate each passage 0 to 10 as JSON.",
-    new ChatCompletionOptions { Temperature = 0, ReasoningEffort = ReasoningEffort.Minimal });
+    new CompletionOptions { Temperature = 0, ReasoningEffort = ReasoningEffort.Minimal });
 ```
 
-Each level's default projection per provider (every value is individually overridable, and each override setter clamps/validates its input):
+| `ReasoningEffortLevel` | OpenAI `reasoning_effort` | Gemini `thinkingBudget` | Ollama `think` | Anthropic `output_config.effort` + `thinking` | Cohere `thinking` | Bedrock thinking budget |
+|---|---|---|---|---|---|---|
+| `Minimal` | `"minimal"` | `0` (off) | `false` | `"low"`, no thinking field | disabled | off |
+| `Low` | `"low"` | `1024` | `"low"` | `"low"` + adaptive thinking | 1024 | 1024 |
+| `Medium` | `"medium"` | `8192` | `"medium"` | `"medium"` + adaptive thinking | 4096 | 4096 |
+| `High` | `"high"` | `-1` (dynamic) | `"high"` | `"high"` + adaptive thinking | 16384 | 16384 |
+| _unset_ | omitted | omitted | omitted | omitted | omitted | omitted |
 
-| `ReasoningEffortLevel` | OpenAI `reasoning_effort` | Gemini `thinkingConfig.thinkingBudget` | Ollama `think` | Anthropic `output_config.effort` + `thinking` |
-|---|---|---|---|---|
-| `Minimal` | `"minimal"` | `0` (off) | `false` | `"low"`, no thinking field |
-| `Low` | `"low"` | `1024` | `"low"` | `"low"` + adaptive thinking |
-| `Medium` | `"medium"` | `8192` | `"medium"` | `"medium"` + adaptive thinking |
-| `High` | `"high"` | `-1` (dynamic) | `"high"` | `"high"` + adaptive thinking |
-| _unset_ | *(omitted)* | *(omitted)* | *(omitted)* | *(omitted)* |
+Overrides live on the value object and clamp or validate their input: `OpenAiValue`, `GeminiThinkingBudget` (-1 to 32768), `OllamaThink`, `AnthropicEffort` (`low`, `medium`, `high`, `xhigh`, `max`; the last two are reachable only through the override), `CohereThinkingBudget`, and `BedrockThinkingBudget`. An unrecognized string override reverts to null and falls back to the level default. Ollama support depends on the model (for example `gpt-oss`).
 
-For Anthropic, `Low` and above send `thinking: {"type": "adaptive", "display": "summarized"}` alongside the effort so current Claude models think adaptively and return readable thinking summaries; `Minimal` omits the thinking field entirely (an explicit disable is rejected by some current Claude models, while omission is accepted everywhere).
+### Reasoning Output
 
-Overrides live on the value object: `OpenAiValue` (clamped to `minimal`/`low`/`medium`/`high`), `GeminiThinkingBudget` (clamped to `-1..32768`), `OllamaThink` (clamped to `low`/`medium`/`high`/`true`/`false`), and `AnthropicEffort` (clamped to `low`/`medium`/`high`/`xhigh`/`max` — `xhigh` and `max` have no level preset and are reachable only through the override). An unrecognized string override reverts to null and falls back to the level default. Ollama support is model-dependent (for example `gpt-oss`); providers with no reasoning concept simply ignore an omitted field.
-
-### Reasoning / Thinking Output
-
-Where effort controls how hard a model thinks, this returns the thinking itself. A reasoning model emits its deliberation on a separate channel — OpenAI `reasoning_content`, Ollama `message.thinking`, Gemini `thought` parts, Anthropic `thinking` content blocks — and PolyPrompt surfaces it distinct from the answer text. Streamed chunks carry a `ReasoningText` delta; responses carry an accumulated `Reasoning`. Both are null when the model produced no reasoning, so responses without it are unchanged.
+A reasoning model emits its deliberation on a separate channel: OpenAI `reasoning_content`, Ollama `message.thinking`, Gemini `thought` parts, Anthropic `thinking` blocks, Bedrock `reasoningContent`, and Cohere thinking content and tool plans. PolyPrompt keeps it out of `Text`. Streamed chunks carry a `ReasoningText` delta, and responses carry the accumulated `Reasoning`. Both are null when there is none.
 
 ```csharp
 ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
 await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 {
-    if (chunk.ReasoningText != null) Console.Write(chunk.ReasoningText); // the thinking
-    if (chunk.Text != null) Console.Write(chunk.Text);                   // the answer
+    if (chunk.ReasoningText != null) Console.Write(chunk.ReasoningText);   // the thinking
+    if (chunk.Text != null) Console.Write(chunk.Text);                     // the answer
 }
-// After enumeration: stream.Reasoning holds the full thinking, stream.Text the full answer.
 ```
 
-`Reasoning` is available on `ChatResponse`, `ChatStreamingResponse`, `ToolChatResponse`, and `ToolChatStreamingResponse`; `ReasoningText` is on `ChatStreamingChunk` and `ToolChatStreamingChunk`. Reasoning is kept out of `Text`, normalized to null when empty, and is return-only: `ToAssistantMessage()` never carries it into a follow-up request, since providers do not want their own reasoning echoed back.
-
-| Provider | Reasoning source |
-|---|---|
-| OpenAI-compatible | `reasoning_content` (fallback `reasoning`) |
-| Ollama | `message.thinking` |
-| Gemini | `content.parts[]` with `thought: true` |
-| Anthropic | `thinking` content blocks and streamed `thinking_delta` events |
+Reasoning is return-only: `ToAssistantMessage()` never sends it back.
 
 ### Token Usage
 
-Provider-reported token usage is surfaced on `ChatStreamingUsage`, available as `Usage` on all four response types — `ChatResponse`, `ToolChatResponse`, `ChatStreamingResponse`, and `ToolChatStreamingResponse` — so the same telemetry is available whether you call the streaming or non-streaming API. `Usage` is `null` when the provider returns no usage data, and each field is nullable so "not reported" stays distinct from "reported as zero".
+Provider-reported usage is a `TokenUsage` on `Usage` of `ChatResponse`, `ChatStreamingResponse`, `ToolChatResponse`, `ToolChatStreamingResponse`, and `DecisionResponse`. `Usage` is null when the provider reports none, and each field is nullable so "not reported" differs from zero. Besides `PromptTokens`, `CompletionTokens`, and `TotalTokens`:
 
-Alongside `PromptTokens`, `CompletionTokens`, and `TotalTokens`, three fields carry cache and reasoning accounting:
-
-- **`CachedPromptTokens`** — prompt tokens served from the provider's prompt cache (a cache read), billed at a fraction of full input.
-- **`CacheCreationTokens`** — prompt tokens written into the cache (a cache-creation/write), billed at a premium by the providers that report it.
-- **`ReasoningTokens`** — tokens billed separately for reasoning/thinking.
+- **`CachedPromptTokens`**: prompt tokens read from the provider's cache.
+- **`CacheCreationTokens`**: prompt tokens written to the cache.
+- **`ReasoningTokens`**: tokens billed separately for reasoning.
 
 ```csharp
 ChatResponse response = await client.ChatAsync("Summarize the attached document.");
-ChatStreamingUsage? usage = response.Usage;
+TokenUsage? usage = response.Usage;
 if (usage != null)
 {
     Console.WriteLine($"Prompt: {usage.PromptTokens}, cached: {usage.CachedPromptTokens}, " +
@@ -554,36 +540,28 @@ if (usage != null)
 }
 ```
 
-What each provider reports, and one **cross-provider semantic** that matters for cost math — whether cached tokens are counted *inside* `PromptTokens` or *in addition to* it:
-
 | Provider | `CachedPromptTokens` | `CacheCreationTokens` | `ReasoningTokens` | Cached vs `PromptTokens` |
 |---|---|---|---|---|
-| OpenAI / Azure OpenAI | yes | — | yes | subset of `PromptTokens` |
-| Gemini / Vertex | yes | — | yes | subset of `PromptTokens` |
-| Anthropic | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
-| Bedrock | yes | yes | — (thinking billed as output) | additional to `PromptTokens` |
-| Ollama | — | — | — (thinking is text only) | n/a |
-| Cohere | yes (`cached_tokens`) | no | no (thinking billed as output) | subset of `PromptTokens` |
+| OpenAI / Azure OpenAI | yes | no | yes | included in `PromptTokens` |
+| Gemini / Vertex AI | yes | no | yes | included in `PromptTokens` |
+| Anthropic | yes | yes | no (billed as output) | in addition to `PromptTokens` |
+| Bedrock | yes | yes | no (billed as output) | in addition to `PromptTokens` |
+| Cohere | yes | no | no (billed as output) | included in `PromptTokens` |
+| Ollama | no | no | no | n/a |
 
-On OpenAI, Azure, Gemini, and Vertex, `CachedPromptTokens` is already included in `PromptTokens`. On Anthropic and Bedrock, `PromptTokens` counts only the uncached input, and the cache buckets are additional — so full input is `PromptTokens + CachedPromptTokens + CacheCreationTokens`. `PromptTokens` keeps its provider-native meaning; no previously returned value changed with this addition.
+On Anthropic and Bedrock, full input is `PromptTokens + CachedPromptTokens + CacheCreationTokens`.
 
 ### Streaming Chat
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OpenAiClient client = new OpenAiClient("https://api.openai.com", "sk-your-api-key");
+using OpenAiCompletionClient client = new OpenAiCompletionClient("https://api.openai.com", "sk-your-api-key");
 client.Model = "gpt-4o";
 
 ChatStreamingResponse stream = await client.ChatStreamingAsync("Write a short story about a robot.");
 
 await foreach (ChatStreamingChunk chunk in stream.Chunks)
 {
-    if (!string.IsNullOrEmpty(chunk.Text))
-    {
-        Console.Write(chunk.Text);
-    }
+    if (!string.IsNullOrEmpty(chunk.Text)) Console.Write(chunk.Text);
 }
 
 Console.WriteLine();
@@ -592,37 +570,15 @@ Console.WriteLine("Tokens/sec: " + stream.OverallTokensPerSecond.ToString("F1"))
 Console.WriteLine("Total chunks: " + stream.ChunkCount);
 ```
 
-### Single Embedding
+### Embeddings
+
+`EmbedAsync` has a single-input and a batch overload. The batch overload returns one vector per input, in input order (`EmbeddingResult.Index`).
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
+using OpenAiEmbeddingClient client = new OpenAiEmbeddingClient("https://api.openai.com", "sk-your-api-key");   // text-embedding-3-small
 
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-OllamaEmbeddingOptions options = new OllamaEmbeddingOptions();
-options.Model = "all-minilm";
-
-EmbeddingResponse response = await client.EmbedAsync("The quick brown fox jumps over the lazy dog.", options);
-if (response.Success && response.Embeddings.Count > 0)
-{
-    float[] vector = response.Embeddings[0].Embedding;
-    Console.WriteLine("Dimensions: " + vector.Length);
-    Console.WriteLine("First 5 values: " + string.Join(", ", vector.Take(5)));
-}
-```
-
-### Batch Embeddings
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OpenAiClient client = new OpenAiClient("https://api.openai.com", "sk-your-api-key");
-
-OpenAiEmbeddingOptions options = new OpenAiEmbeddingOptions();
-options.Model = "text-embedding-3-small";
-options.Dimensions = 256;
+EmbeddingResponse single = await client.EmbedAsync("The quick brown fox jumps over the lazy dog.");
+float[] vector = single.Embeddings[0].Embedding;
 
 List<string> documents = new List<string>
 {
@@ -631,28 +587,24 @@ List<string> documents = new List<string>
     "Deep learning uses multiple layers of neural networks."
 };
 
-EmbeddingResponse response = await client.EmbedAsync(documents, options);
-if (response.Success)
+EmbeddingResponse batch = await client.EmbedAsync(documents, new OpenAiEmbeddingOptions { Dimensions = 256 });
+for (int i = 0; i < batch.Embeddings.Count; i++)
 {
-    for (int i = 0; i < response.Embeddings.Count; i++)
-    {
-        Console.WriteLine("Document " + i + ": " + response.Embeddings[i].Embedding.Length + " dimensions");
-    }
+    Console.WriteLine("Document " + i + ": " + batch.Embeddings[i].Embedding.Length + " dimensions");
 }
 ```
 
+`OpenAiEmbeddingOptions.EncodingFormat = "base64"` requests base64 vectors, which are decoded to floats. Providers without a native batch endpoint (Bedrock Titan) send one request per input and assemble the results in order.
+
 ### Reranking
 
-`RerankAsync` scores each document against a query and returns the results sorted by score, highest first. Each result's `Index` points back into the list you passed in. The same call works on every provider that supports reranking:
+`RerankAsync` scores each document against a query and returns the results sorted by score, highest first. Each result's `Index` points into the list you passed.
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using CompletionClientBase client = new CohereClient("https://api.cohere.com", "your-cohere-key");
-// or: new TeiClient("http://localhost:8080")   (a server hosting a reranker, e.g. BAAI/bge-reranker-base)
-// or: new VoyageAiClient("https://api.voyageai.com", "pa-your-key")
-// or: new BedrockClient(new EnvironmentAwsCredential(), "us-east-1")
+RerankClientBase client = new CohereRerankClient(apiKey: "your-cohere-key");
+// or: new TeiRerankClient("http://localhost:8080")   (a server hosting a reranker such as BAAI/bge-reranker-base)
+// or: new VoyageAiRerankClient(apiKey: "pa-your-key")
+// or: new BedrockRerankClient(new EnvironmentAwsCredential(), "us-east-1")
 
 List<string> documents = new List<string>
 {
@@ -661,62 +613,49 @@ List<string> documents = new List<string>
     "Paris is the capital and largest city of France."
 };
 
-RerankOptions options = new RerankOptions();
-options.TopN = 2;                 // optional; must not exceed documents.Count
-options.ReturnDocuments = true;   // attach each document's text to its result
+RerankResponse response = await client.RerankAsync("What is the capital of France?", documents,
+    new RerankOptions { TopN = 2, ReturnDocuments = true });
 
-RerankResponse response = await client.RerankAsync("What is the capital of France?", documents, options);
-if (response.Success)
+foreach (RerankResult result in response.Results)
 {
-    foreach (RerankResult result in response.Results)
-    {
-        Console.WriteLine("[" + result.Index + "] " + result.Score.ToString("F4") + " " + result.Document);
-    }
+    Console.WriteLine("[" + result.Index + "] " + result.Score.ToString("F4") + " " + result.Document);
 }
 ```
 
-Things to know about reranking:
-
-- **Invalid arguments throw.** A null query or document list throws `ArgumentNullException`; an empty or whitespace query, an empty document list, or a null document throws `ArgumentException`; and `TopN` larger than the number of documents throws `ArgumentOutOfRangeException` (setting `TopN` below 1 throws immediately). This is checked before any request is sent and is identical on every provider.
-- **HTTP errors do not throw.** As with the other operations, a provider error returns `Success = false` with `StatusCode` and `Error` set.
-- **Scores are provider-specific.** Cohere, VoyageAI, and Bedrock return a normalized 0..1 relevance; TEI returns a sigmoid 0..1 score by default or raw logits with `TeiRerankOptions.RawScores = true`. Compare scores within one provider, not across providers.
-- **TopN.** Cohere and Bedrock send it as `top_n` and VoyageAI as `top_k`. TEI has no such parameter, so every document is scored and the list is trimmed client-side.
-- **Document text** is attached from your own list by index, so `ReturnDocuments` never requests extra data from the provider.
-- **Usage.** `RerankResponse.TotalTokens` is populated by Cohere (input tokens) and VoyageAI (total tokens); `SearchUnits` is populated by Cohere.
+- **Invalid arguments throw** before any request: a null query or document list throws `ArgumentNullException`; an empty or whitespace query, an empty list, or a null document throws `ArgumentException`; and a per-call `TopN` larger than the number of documents throws `ArgumentOutOfRangeException`. A `Defaults.TopN` larger than the number of documents is capped instead, so one default works for any batch size.
+- **Scores are provider-specific.** Cohere, VoyageAI, and Bedrock return a normalized 0..1 relevance; TEI returns a sigmoid score by default or raw logits with `TeiRerankOptions.RawScores = true`. Compare scores within one provider.
+- **TopN** is sent natively where supported (`top_n` on Cohere and Bedrock, `top_k` on VoyageAI); TEI scores every document and the list is trimmed client-side.
+- **Document text** is attached from your own list by index, so `ReturnDocuments` never requests extra data.
+- **Usage.** `RerankResponse.TotalTokens` is populated by Cohere and VoyageAI; `SearchUnits` by Cohere.
 
 ### Classification
 
 `ClassifyAsync` returns one result per input, in input order, with the top label and every scored label (highest first):
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-using PolyPrompt.Options;
-
 // TEI: the server hosts a sequence classification model (or a reranker, which scores a single label).
-using TeiClient tei = new TeiClient("http://localhost:8080");
+using TeiClassificationClient tei = new TeiClassificationClient("http://localhost:8080");
 ClassificationResponse teiResult = await tei.ClassifyAsync(new List<string> { "I love this!", "This is terrible." });
 
-// Cohere: few-shot examples (at least 2 per label), or set ClassificationModel to a fine-tuned model.
-using CohereClient cohere = new CohereClient("https://api.cohere.com", "your-cohere-key");
-CohereClassificationOptions options = new CohereClassificationOptions();
-options.Examples.Add(new ClassificationExample("I love it", "positive"));
-options.Examples.Add(new ClassificationExample("This is fantastic", "positive"));
-options.Examples.Add(new ClassificationExample("I hate it", "negative"));
-options.Examples.Add(new ClassificationExample("This is awful", "negative"));
+// Cohere: few-shot examples (at least 2 per label), or set Model to a fine-tuned classifier.
+using CohereClassificationClient cohere = new CohereClassificationClient(apiKey: "your-cohere-key");
+cohere.Defaults.Examples.Add(new ClassificationExample("I love it", "positive"));
+cohere.Defaults.Examples.Add(new ClassificationExample("This is fantastic", "positive"));
+cohere.Defaults.Examples.Add(new ClassificationExample("I hate it", "negative"));
+cohere.Defaults.Examples.Add(new ClassificationExample("This is awful", "negative"));
 
-ClassificationResponse cohereResult = await cohere.ClassifyAsync("The service was great", options);
+ClassificationResponse cohereResult = await cohere.ClassifyAsync("The service was great");
 Console.WriteLine(cohereResult.Classifications[0].Label + " " + cohereResult.Classifications[0].Score);
 ```
 
-TEI inputs are always sent in its batch form (each input wrapped in its own array) so that two inputs are never interpreted as a single text pair.
+Examples set in `Defaults` are used when the call passes none. TEI inputs are always sent in batch form, so two inputs are never read as one text pair.
 
 ### Sparse Embeddings (TEI)
 
-A TEI server hosting a SPLADE-style model returns sparse vectors through `EmbedSparseAsync`:
+A TEI server hosting a SPLADE-style model returns sparse vectors:
 
 ```csharp
-using TeiClient client = new TeiClient("http://localhost:8080");
+using TeiSparseEmbeddingClient client = new TeiSparseEmbeddingClient("http://localhost:8080");
 SparseEmbeddingResponse response = await client.EmbedSparseAsync(new List<string> { "sparse retrieval" });
 foreach (SparseValue value in response.Embeddings[0].Values)
 {
@@ -724,187 +663,142 @@ foreach (SparseValue value in response.Embeddings[0].Values)
 }
 ```
 
-### Text Generation (Non-Streaming)
+### Decision Models
+
+A decision model reads a state and answers typed questions about it with calibrated probabilities. Nothing is generated, so answers are fast, cheap, and always well-formed.
+
+| Question | Factory | Answer | Answer fields |
+|---|---|---|---|
+| Yes/no | `DecisionQuestion.Binary(id, instructions, trueCriterion?, falseCriterion?)` | `BinaryAnswer` | `Probability` (of true) |
+| Pick one | `DecisionQuestion.Choice(id, instructions, "a", "b", ...)` or with `DecisionOption.Of(value, description)` | `ChoiceAnswer` | `Value`, `Probability` (of the chosen value) |
+| Rate on a rubric | `DecisionQuestion.Score(id, instructions, "level 0", "level 1", ...)` | `ScoreAnswer` | `Value` (may be fractional), `Level` (nearest level index), `LevelText`, `Legend` |
+
+Every answer also has `Confidence` (calibrated by the provider, 0 to 1) and `Probabilities` (the full distribution). `DecisionResponse.Choice(id)`, `Binary(id)`, and `Score(id)` return typed answers; a missing id throws `KeyNotFoundException` and the wrong type throws `InvalidOperationException`.
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
+DecisionRequest request = new DecisionRequest
+{
+    State = ticketText,   // text, or a structured object sent as JSON
+    Questions =
+    {
+        DecisionQuestion.Choice("intent", "What does the customer want?",
+            DecisionOption.Of("refund", "Wants money back"),
+            DecisionOption.Of("billing", "A question about a charge or an invoice"),
+            DecisionOption.Of("other")),
+        DecisionQuestion.Binary("urgent", "Does the customer need a response today?"),
+        DecisionQuestion.Score("tone", "How upset is the customer?", "calm", "annoyed", "angry", "furious")
+    }
+};
 
-using OllamaClient client = new OllamaClient("http://localhost:11434");
+DecisionResponse response = await jev.DecideAsync(request);
+if (response.Success)
+{
+    ChoiceAnswer intent = response.Choice("intent");
+    Console.WriteLine(intent.Value + " (p=" + intent.Probability + ", confidence=" + intent.Confidence + ")");
+}
+
+// A batch returns one response per request, in input order, sending at most MaxConcurrency (default 4) at once.
+jev.MaxConcurrency = 8;
+List<DecisionResponse> responses = await jev.DecideAsync(tickets.Select(t => new DecisionRequest { State = t, Questions = request.Questions }).ToList());
+```
+
+Requests are validated before sending: a state, at least one question, unique non-empty ids, non-empty instructions, 2 to 255 unique choice options, and 2 to 10 score levels. A batch is validated in full before any request is sent, and a failed request in a batch fails only its own response. Question text is a `DecisionContent`, which converts implicitly from `string`.
+
+`TypeSafeDecisionClient` speaks the TypeSafe System One API (`POST /v1/systemone`), served by TypeSafe's hosted Jev models and by Ollaya, the local runtime for open decision models. Binary questions are TypeSafe `noul` questions. HTTP 422 (validation), 429 (rate limit), and 529 (overloaded) are reported on the response.
+
+### Text Generation
+
+```csharp
+using OllamaCompletionClient client = new OllamaCompletionClient("http://localhost:11434");
 client.Model = "gemma3:4b";
 
 GenerationResponse response = await client.GenerateAsync("Once upon a time, in a land far away,");
 Console.WriteLine(response.Text);
-Console.WriteLine("Runtime: " + response.OverallRuntimeMs + " ms");
-```
-
-### Text Generation (Streaming)
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using GeminiClient client = new GeminiClient(
-    "https://generativelanguage.googleapis.com",
-    "your-api-key");
-client.Model = "gemini-2.5-flash";
 
 GenerationStreamingResponse stream = await client.GenerateStreamingAsync("Write a limerick about coding.");
-
 await foreach (GenerationStreamingChunk chunk in stream.Chunks)
 {
-    if (!string.IsNullOrEmpty(chunk.Text))
-    {
-        Console.Write(chunk.Text);
-    }
-}
-
-Console.WriteLine();
-Console.WriteLine("Time to first token: " + stream.TimeToFirstTokenMs + " ms");
-Console.WriteLine("Tokens/sec: " + stream.OverallTokensPerSecond.ToString("F1"));
-```
-
-### List Available Models
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-await foreach (ModelInformation model in client.ListModelsAsync())
-{
-    Console.WriteLine(model.Name
-        + (model.DisplayName != null ? " (" + model.DisplayName + ")" : "")
-        + (model.SizeBytes.HasValue ? " [" + (model.SizeBytes.Value / 1_000_000_000.0).ToString("F1") + " GB]" : ""));
+    if (!string.IsNullOrEmpty(chunk.Text)) Console.Write(chunk.Text);
 }
 ```
 
-### Check If a Model Exists
+OpenAI and Azure OpenAI generation uses the legacy completions API, which current chat models do not serve; Anthropic, Bedrock, and Cohere send the prompt as a single-turn chat.
+
+### Models
 
 ```csharp
-using PolyPrompt.Clients;
+using OllamaModelClient models = new OllamaModelClient("http://localhost:11434");
 
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-bool exists = await client.ModelExistsAsync("gemma3:4b");
-Console.WriteLine("gemma3:4b exists: " + exists);
-
-// Also matches without tags: "gemma3" matches "gemma3:latest"
-bool existsNoTag = await client.ModelExistsAsync("gemma3");
-Console.WriteLine("gemma3 exists: " + existsNoTag);
-```
-
-### Get Model Details
-
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-ModelInformation? info = await client.GetModelInformationAsync("gemma3:4b");
-if (info != null)
+await foreach (ModelInformation model in models.ListModelsAsync())
 {
-    Console.WriteLine("Name: " + info.Name);
-    Console.WriteLine("Modified: " + info.ModifiedUtc);
-
-    foreach (KeyValuePair<string, string?> kv in info.Metadata)
-    {
-        Console.WriteLine("  " + kv.Key + ": " + kv.Value);
-    }
+    Console.WriteLine(model.Name + (model.SizeBytes.HasValue ? " [" + (model.SizeBytes.Value / 1_000_000_000.0).ToString("F1") + " GB]" : ""));
 }
-```
 
-### Pull a Model (Ollama)
+bool exists = await models.ModelExistsAsync("gemma3");            // also matches "gemma3:latest"
+ModelInformation? info = await models.GetModelInformationAsync("gemma3:4b");
 
-```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-bool success = await client.PullModelAsync("gemma3:4b", async (ModelPullProgress progress) =>
+// Ollama only: pull with progress, and delete.
+models.PullTimeout = TimeSpan.FromMinutes(60);
+bool pulled = await models.PullModelAsync("gemma3:4b", progress =>
 {
-    if (progress.PercentComplete.HasValue)
-    {
-        Console.Write("\r" + progress.Status + " " + progress.PercentComplete.Value.ToString("F1") + "%");
-    }
-    else
-    {
-        Console.WriteLine(progress.Status);
-    }
+    Console.Write("\r" + progress.Status + " " + progress.PercentComplete?.ToString("F1"));
+    return Task.CompletedTask;
 });
-
-Console.WriteLine();
-Console.WriteLine(success ? "Pull succeeded." : "Pull failed.");
+bool deleted = await models.DeleteModelAsync("old-model:1b");
 ```
 
-### Delete a Model (Ollama)
-
-```csharp
-using PolyPrompt.Clients;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-
-bool deleted = await client.DeleteModelAsync("gemma3:4b");
-Console.WriteLine(deleted ? "Model deleted." : "Delete failed.");
-```
+`AnthropicModelClient` and `CohereModelClient` page through their catalogs (`PageSize`, 1 to 1,000), and `GeminiModelClient` follows `nextPageToken`.
 
 ### Validate Connectivity
 
+Every client has `ValidateConnectivityAsync`. It returns true when the provider accepted a lightweight request made with that client's endpoint and credentials, and false on an HTTP error, an unreachable server, or a timeout. Only your own cancellation is rethrown.
+
 ```csharp
-using PolyPrompt.Clients;
-
-using GeminiClient client = new GeminiClient(
-    "https://generativelanguage.googleapis.com",
-    "your-api-key");
-
 bool reachable = await client.ValidateConnectivityAsync();
 Console.WriteLine(reachable ? "Connected." : "Cannot reach provider.");
 ```
 
+| Client | Probe |
+|---|---|
+| Ollama (all) | `GET /api/tags` |
+| OpenAI and Azure OpenAI (all) | `GET /v1/models` (Azure: `/openai/models?api-version=`) |
+| Gemini (all) | `GET /v1beta/models?pageSize=1` |
+| `VertexAiCompletionClient` | `POST :countTokens` on the client's model |
+| `VertexAiEmbeddingClient` | a one-word embedding |
+| Anthropic (all) | `GET /v1/models?limit=1` |
+| Bedrock (all) | `GET /foundation-models` on the control plane |
+| Cohere (all) | `GET /v1/models` |
+| VoyageAI (both) | a one-word embedding or rerank (VoyageAI has no model listing API) |
+| TEI (all) | `GET /health` |
+| `TypeSafeDecisionClient` | `GET /v1/models` (Ollaya); on HTTP 404 (hosted API), a one-question decision |
+
 ### Inspect Call Details
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-client.Model = "gemma3:4b";
-
 ChatResponse response = await client.ChatAsync("Hello!");
 
-foreach (CompletionCallDetail detail in client.CallDetails)
+foreach (CallDetail detail in client.CallDetails)
 {
     Console.WriteLine(detail.Method + " " + detail.Url);
-    Console.WriteLine("  Status: " + detail.StatusCode);
-    Console.WriteLine("  Time: " + detail.ResponseTimeMs + " ms");
-    Console.WriteLine("  Success: " + detail.Success);
+    Console.WriteLine("  Status: " + detail.StatusCode + ", time: " + detail.ResponseTimeMs + " ms, success: " + detail.Success);
 }
 
-// CallDetails returns a detached snapshot. Use MaxCallDetails to bound retention
-// and ClearCallDetails to release retained diagnostics on long-lived clients.
+// CallDetails is a detached snapshot. MaxCallDetails bounds retention (0 disables recording).
 client.MaxCallDetails = 100;
 client.ClearCallDetails();
 ```
 
-### Using CancellationToken
+Call details record the request headers, which include credentials; treat them as sensitive.
+
+### Cancellation and Timeouts
 
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-using OllamaClient client = new OllamaClient("http://localhost:11434");
-client.Model = "gemma3:4b";
-client.TimeoutMs = 10000;
+client.TimeoutMs = 10000;   // per client; default 120000; must be greater than zero
 
 using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
 try
 {
     ChatResponse response = await client.ChatAsync("Write a very long essay.", token: cts.Token);
-    Console.WriteLine(response.Text);
 }
 catch (OperationCanceledException)
 {
@@ -912,248 +806,146 @@ catch (OperationCanceledException)
 }
 ```
 
-`TimeoutMs` is enforced with per-call cancellation tokens and is honored for both
-non-streaming requests and streaming response bodies. Values must be greater than
-zero and are not silently clamped.
+`TimeoutMs` is enforced with per-call cancellation tokens for both non-streaming requests and streaming response bodies. A timeout throws `OperationCanceledException` (a `TaskCanceledException`), as your own cancellation does; check `token.IsCancellationRequested` to tell them apart. `ValidateConnectivityAsync` is the exception: it returns false on a timeout.
 
-### Custom HttpClient (custom transport, TLS, or proxy)
+### Custom or Shared HttpClient
 
-Every client constructor accepts an optional `HttpClient`. When you supply one, PolyPrompt
-uses it for all requests and does not dispose it — you retain ownership. This lets you
-configure the transport, for example to trust a self-signed certificate on an internal
-endpoint, or to route requests through a proxy. When omitted, the client creates and owns
-its own `HttpClient` as before.
+Every constructor accepts an optional `HttpClient`. When you supply one, PolyPrompt uses it and never disposes it. Because credentials are attached per request, one `HttpClient` can serve every client, across providers:
 
 ```csharp
-using System.Net.Http;
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-// Example: relax TLS certificate validation for a trusted internal endpoint.
 HttpClientHandler handler = new HttpClientHandler
 {
+    // Example: trust a self-signed certificate on an internal endpoint.
     ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 };
-using HttpClient httpClient = new HttpClient(handler);
+using HttpClient http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
 
-using OpenAiClient client = new OpenAiClient(
-    "https://internal-llm.example.corp/v1",
-    apiKey: "sk-your-api-key",
-    logging: null,
-    httpClient: httpClient);
-client.Model = "gpt-oss:20b";
-
-ChatResponse response = await client.ChatAsync("Hello!");
-Console.WriteLine(response.Text);
+using OpenAiCompletionClient chat = new OpenAiCompletionClient("https://internal-llm.example.corp/v1", "sk-a", httpClient: http);
+using OpenAiEmbeddingClient embed = new OpenAiEmbeddingClient("https://internal-llm.example.corp/v1", "sk-b", httpClient: http);
+using AnthropicCompletionClient claude = new AnthropicCompletionClient(apiKey: "sk-ant-c", httpClient: http);
 ```
 
-The client sets the injected `HttpClient`'s `Timeout` to infinite so per-request timeouts can
-be governed by `TimeoutMs`. If you share one `HttpClient` across multiple clients, give it an
-infinite timeout yourself, since its timeout can no longer be changed once it has sent a request.
+Give a shared `HttpClient` an infinite timeout, as above, so each client's `TimeoutMs` governs its requests.
 
 ### Provider-Agnostic Code
 
+Hold the capability base type:
+
 ```csharp
-using PolyPrompt.Clients;
-using PolyPrompt.Models;
-
-CompletionClientBase CreateClient(string provider, string endpoint, string? apiKey)
+CompletionClientBase CreateChat(string provider, string? apiKey) => provider switch
 {
-    switch (provider)
-    {
-        case "ollama":
-            return new OllamaClient(endpoint, apiKey);
-        case "openai":
-            return new OpenAiClient(endpoint, apiKey);
-        case "gemini":
-            return new GeminiClient(endpoint, apiKey);
-        case "anthropic":
-            return new AnthropicClient(endpoint, apiKey);
-        case "voyageai":
-            return new VoyageAiClient(endpoint, apiKey); // embeddings and reranking
-        case "cohere":
-            return new CohereClient(endpoint, apiKey);
-        case "tei":
-            return new TeiClient(endpoint, apiKey);      // embeddings, reranking, classification
-        default:
-            throw new ArgumentException("Unknown provider: " + provider);
-    }
-}
+    "ollama" => new OllamaCompletionClient(),
+    "openai" => new OpenAiCompletionClient(apiKey: apiKey),
+    "gemini" => new GeminiCompletionClient(apiKey: apiKey),
+    "anthropic" => new AnthropicCompletionClient(apiKey: apiKey),
+    "cohere" => new CohereCompletionClient(apiKey: apiKey),
+    _ => throw new ArgumentException("Unknown provider: " + provider)
+};
 
-// Same code works regardless of provider
-using CompletionClientBase client = CreateClient("ollama", "http://localhost:11434", null);
-client.Model = "gemma3:4b";
-
-ChatResponse chat = await client.ChatAsync("Hello!");
-Console.WriteLine(chat.Text);
-
-await foreach (ModelInformation model in client.ListModelsAsync())
+EmbeddingClientBase CreateEmbedding(string provider, string? apiKey) => provider switch
 {
-    Console.WriteLine("  " + model.Name);
-}
+    "ollama" => new OllamaEmbeddingClient(),
+    "openai" => new OpenAiEmbeddingClient(apiKey: apiKey),
+    "voyageai" => new VoyageAiEmbeddingClient(apiKey: apiKey),
+    "tei" => new TeiEmbeddingClient("http://localhost:8080"),
+    _ => throw new ArgumentException("Unknown provider: " + provider)
+};
+
+using CompletionClientBase chat = CreateChat("ollama", null);
+chat.Defaults.MaxTokens = 256;
+ChatResponse reply = await chat.ChatAsync("Hello!", new CompletionOptions { Temperature = 0.3 });
 ```
 
 ## API Reference
 
 ### Constructors
 
-The single-key clients (`OllamaClient`, `OpenAiClient`, `GeminiClient`, `AnthropicClient`, `VoyageAiClient`, `CohereClient`, `TeiClient`) share a constructor with the same optional parameters, all with provider-appropriate defaults:
+The single-key clients share one constructor shape, with every parameter optional:
 
 | Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `endpoint` | `string` | provider default | API endpoint URL |
-| `apiKey` | `string?` | `null` | API key; when non-empty an `Authorization: Bearer` header is added (Anthropic instead sends `x-api-key` plus `anthropic-version`, and Gemini passes the key as a query parameter) |
-| `logging` | `LoggingModule?` | `null` | Logging module; a new instance is created when omitted |
-| `httpClient` | `HttpClient?` | `null` | Transport to use. When supplied, the caller owns and disposes it (see [Custom HttpClient](#custom-httpclient-custom-transport-tls-or-proxy)); when omitted, the client creates and owns its own |
+|---|---|---|---|
+| `endpoint` | `string` | the provider's public API (Ollama `http://localhost:11434`, TEI `http://localhost:8080`) | API endpoint URL |
+| `apiKey` | `string?` | `null` | API key, attached to each request in the provider's format |
+| `logging` | `LoggingModule?` | `null` | Logging module; a new one is created when omitted |
+| `httpClient` | `HttpClient?` | `null` | Transport to use; the caller owns it (see [Custom or Shared HttpClient](#custom-or-shared-httpclient)) |
 
-The three cloud providers added in 2.5.0 take provider-shaped constructors because their credentials and routing differ:
+Clients with provider-shaped credentials or routing:
 
-| Client | Signature | Notes |
-|--------|-----------|-------|
-| `AzureOpenAiClient` | `(endpoint, deployment, apiKey, apiVersion?, logging?, httpClient?)` or `(endpoint, deployment, ICredentialProvider, apiVersion?, …)` | `deployment` becomes `Model`; `api-key` header or Azure AD bearer; settable `ApiVersion` (default `2024-10-21`) |
-| `VertexAiClient` | `(project, region, ICredentialProvider, endpoint?, logging?, httpClient?)` | OAuth bearer via `AdcCredential` / `ServiceAccountCredential` / `StaticTokenCredential`; endpoint defaults to `https://{region}-aiplatform.googleapis.com` |
-| `BedrockClient` | `(IAwsCredentialProvider, region, logging?, httpClient?, endpoint?)` | SigV4-signed; `StaticAwsCredential` / `EnvironmentAwsCredential`; endpoint defaults to `https://bedrock-runtime.{region}.amazonaws.com` |
+| Client | Signature |
+|---|---|
+| `AzureOpenAiCompletionClient`, `AzureOpenAiEmbeddingClient` | `(endpoint, deployment, apiKey, apiVersion?, logging?, httpClient?)` or `(endpoint, deployment, ICredentialProvider, apiVersion?, ...)` |
+| `AzureOpenAiModelClient` | `(endpoint, apiKey, apiVersion?, ...)` or `(endpoint, ICredentialProvider, apiVersion?, ...)` |
+| `VertexAiCompletionClient`, `VertexAiEmbeddingClient` | `(project, region, ICredentialProvider, endpoint?, logging?, httpClient?)`; the endpoint defaults to `https://{region}-aiplatform.googleapis.com` |
+| `Bedrock*Client` | `(IAwsCredentialProvider, region, endpoint?, logging?, httpClient?)`; runtime and control-plane endpoints are derived from the region |
 
-Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`EnvironmentAwsCredential` (AWS), and `StaticTokenCredential`/`ServiceAccountCredential`/`AdcCredential` (OAuth bearer). Bearer tokens are cached and refreshed automatically ahead of expiry.
+### Common Members
 
-### Client Properties
+| Member | On | Description |
+|---|---|---|
+| `Endpoint`, `ApiKey` | every client | Read-only |
+| `TimeoutMs` | every client | HTTP timeout in milliseconds (default 120,000, must be greater than zero) |
+| `CallDetails`, `MaxCallDetails`, `ClearCallDetails()` | every client | Recorded HTTP calls (default retention 1,000) |
+| `ValidateConnectivityAsync()` | every client | See [Validate Connectivity](#validate-connectivity) |
+| `Defaults` | every client except model clients | Client-wide settings of the capability's options type |
+| `Model` | every client except model clients | Shorthand for `Defaults.Model`; assigning null or whitespace throws |
+| `MaxConcurrency` | decision clients | Batch concurrency, 1 to 64 (default 4) |
+| `AnthropicVersion`, `WorkspaceId` | Anthropic clients | `anthropic-version` (default `2023-06-01`) and `anthropic-workspace-id` headers |
+| `ApiVersion` | Azure OpenAI clients | `api-version` query value (default `AzureOpenAiDefaults.ApiVersion`) |
+| `PageSize` | `AnthropicModelClient`, `CohereModelClient` | Model-list page size, 1 to 1,000 |
+| `PullTimeout`, `PullModelAsync`, `DeleteModelAsync` | `OllamaModelClient` | Model pull and delete |
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `Endpoint` | `string` | varies | API endpoint URL (read-only) |
-| `ApiKey` | `string?` | `null` | API key (read-only) |
-| `Model` | `string` | varies | Model name for requests |
-| `MaxTokens` | `int` | `4096` | Maximum tokens to generate (1 to 10,000,000) |
-| `TimeoutMs` | `int` | `120000` | HTTP timeout in milliseconds; must be greater than zero |
-| `Temperature` | `double?` | `null` | Sampling temperature (0.0 to 2.0) |
-| `TopP` | `double?` | `null` | Nucleus sampling threshold (0.0 to 1.0) |
-| `ReasoningEffort` | `ReasoningEffort?` | `null` | Default reasoning effort for tool chat; a request value overrides it |
-| `SystemPrompt` | `string?` | `null` | System prompt for chat completions |
-| `CallDetails` | `List<CompletionCallDetail>` | empty | Detached snapshot of recorded HTTP call details |
-| `MaxCallDetails` | `int` | `1000` | Maximum retained call details; set to 0 to disable recording |
+### Options
 
-`AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000). `AzureOpenAiClient` adds `ApiVersion` (the `api-version` query value, default `2024-10-21`).
+| Capability | Base options | Provider options |
+|---|---|---|
+| Completion | `CompletionOptions`: `Model`, `MaxTokens` (1 to 10,000,000), `Temperature` (0 to 2), `TopP` (0 to 1), `SystemPrompt`, `ReasoningEffort` | `OllamaCompletionOptions`, `OpenAiCompletionOptions` (also Azure), `GeminiCompletionOptions` (also Vertex AI), `AnthropicCompletionOptions`, `CohereCompletionOptions`; Bedrock uses the base type |
+| Embedding | `EmbeddingOptions`: `Model` | `OllamaEmbeddingOptions`, `OpenAiEmbeddingOptions` (also Azure), `GeminiEmbeddingOptions`, `VertexAiEmbeddingOptions`, `BedrockEmbeddingOptions`, `VoyageAiEmbeddingOptions`, `CohereEmbeddingOptions`, `TeiEmbeddingOptions` |
+| Sparse embedding | `SparseEmbeddingOptions`: `Model` | `TeiSparseEmbeddingOptions` |
+| Rerank | `RerankOptions`: `Model`, `TopN`, `ReturnDocuments` | `BedrockRerankOptions`, `VoyageAiRerankOptions`, `CohereRerankOptions`, `TeiRerankOptions` |
+| Classification | `ClassificationOptions`: `Model` | `CohereClassificationOptions`, `TeiClassificationOptions` |
+| Decision | `DecisionOptions`: `Model` | (none) |
 
-`CohereClient` adds `EmbeddingModel` (default `embed-v4.0`), `RerankModel` (default `rerank-v3.5`), `ClassificationModel` (default null, which lets Cohere pick its default model for few-shot examples), and `ModelsPageSize` (1..1,000, default 1,000). `VoyageAiClient` adds `RerankModel` (default `rerank-2.5`), and `BedrockClient` adds `RerankModel` (default `cohere.rerank-v3-5:0`; `amazon.rerank-v1:0` also works). `TeiClient` has no extra properties because the server decides the model. `GeminiClient` (and so `VertexAiClient`) adds `ToolSchemaMode` (default `GeminiToolSchemaMode.JsonSchema`; see [Gemini Tool Calling Notes](#gemini-tool-calling-notes)).
+Provider-specific parameters:
 
-### Client Methods
-
-| Method | Description |
-|--------|-------------|
-| `ChatAsync` | Non-streaming chat completion |
-| `ChatStreamingAsync` | Streaming chat completion with timing metrics |
-| `ToolChatAsync` | Tool-capable chat completion that returns assistant text and requested tool calls |
-| `ToolChatStreamingAsync` | Streaming tool-capable chat completion that returns text chunks, tool-call deltas, and accumulated final tool calls |
-| `EmbedAsync(string)` | Generate embedding for a single text |
-| `EmbedAsync(List<string>)` | Generate embeddings for a batch of texts |
-| `GenerateAsync` | Non-streaming text generation |
-| `GenerateStreamingAsync` | Streaming text generation with timing metrics |
-| `RerankAsync(query, documents)` | Score documents against a query, highest score first (Cohere, TEI, VoyageAI, Bedrock) |
-| `ClassifyAsync(string)` / `ClassifyAsync(List<string>)` | Classify one or more texts (Cohere, TEI) |
-| `EmbedSparseAsync(string)` / `EmbedSparseAsync(List<string>)` | Generate sparse embeddings (TEI with a SPLADE model) |
-| `ListModelsAsync` | List available models (returns `IAsyncEnumerable<ModelInformation>`) |
-| `ModelExistsAsync` | Check if a specific model exists |
-| `GetModelInformationAsync` | Get detailed information about a model |
-| `PullModelAsync` | Pull/download a model with progress callbacks (Ollama only) |
-| `DeleteModelAsync` | Delete a model (Ollama only) |
-| `ValidateConnectivityAsync` | Verify the provider is reachable |
-| `ClearCallDetails` | Clear retained HTTP call details |
-
-### Tool Calling Models
-
-`ToolChatAsync` and `ToolChatStreamingAsync` use a message-based request because tool calling is inherently multi-step. A model can return tool calls instead of final text, and the caller decides how to execute those tools.
-
-| Type | Purpose |
-|------|---------|
-| `ToolChatRequest` | Contains messages, tool definitions, tool choice, and generation overrides |
-| `ReasoningEffort` | Provider-neutral reasoning effort: a `ReasoningEffortLevel` plus clamped per-provider overrides and projection methods |
-| `ChatMessage` | Represents system, user, assistant, and tool-result messages |
-| `ToolDefinition` | Declares a callable function with a JSON Schema parameter object |
-| `ToolCall` | Represents a model-requested tool name and JSON arguments, plus the provider's opaque `ThoughtSignature` (Gemini 3) that must be sent back unchanged |
-| `ToolCallDelta` | Represents a streamed update to a tool call ID, name, type, argument JSON, or thought signature |
-| `GeminiToolSchemaMode` | Chooses how Gemini and Vertex AI send tool schemas: `JsonSchema` (`parametersJsonSchema`, default) or `OpenApiSubset` (sanitized `parameters`) |
-| `ToolChatResponse` | Contains assistant text, tool calls, status, timing, and finish metadata |
-| `ToolChatStreamingChunk` | Contains streamed assistant text, tool-call deltas, finish metadata, and usage |
-| `ToolChatStreamingResponse` | Contains streamed chunks plus accumulated assistant text, final tool calls, status, timing, and finish metadata |
-
-### Provider-Specific Options
-
-Each provider exposes option classes that extend the base options with provider-specific parameters:
-
-| Provider | Chat Options | Embedding Options | Generation Options | Rerank / Classify / Sparse Options |
-|----------|-------------|-------------------|-------------------|------------------------------------|
-| **Ollama** | `OllamaChatCompletionOptions` | `OllamaEmbeddingOptions` | `OllamaGenerationOptions` | (unsupported) |
-| **OpenAI** | `OpenAiChatCompletionOptions` | `OpenAiEmbeddingOptions` | `OpenAiGenerationOptions` | (unsupported) |
-| **Azure OpenAI** | `AzureOpenAiChatCompletionOptions` | `AzureOpenAiEmbeddingOptions` | (OpenAI generation options) | (unsupported) |
-| **Gemini** | `GeminiChatCompletionOptions` | `GeminiEmbeddingOptions` | `GeminiGenerationOptions` | (unsupported) |
-| **Vertex AI** | (Gemini chat options) | `VertexAiEmbeddingOptions` | (Gemini generation options) | (unsupported) |
-| **Anthropic** | `AnthropicChatCompletionOptions` | (embeddings unsupported) | `AnthropicGenerationOptions` | (unsupported) |
-| **Bedrock** | (base chat options) | `BedrockEmbeddingOptions` | (base generation options) | `BedrockRerankOptions` |
-| **VoyageAI** | (chat unsupported) | `VoyageAiEmbeddingOptions` | (generation unsupported) | `VoyageAiRerankOptions` |
-| **Cohere** | `CohereChatCompletionOptions` | `CohereEmbeddingOptions` | `CohereGenerationOptions` | `CohereRerankOptions`, `CohereClassificationOptions` |
-| **TEI** | (chat unsupported) | `TeiEmbeddingOptions` | (generation unsupported) | `TeiRerankOptions`, `TeiClassificationOptions`, `TeiSparseEmbeddingOptions` |
-
-The base option types for the new operations are `RerankOptions` (`Model`, `TopN`, `ReturnDocuments`), `ClassificationOptions` (`Model`), and `SparseEmbeddingOptions` (`Model`).
-
-**Ollama-specific parameters:** `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`
-
-**OpenAI / Azure OpenAI-specific parameters:** `FrequencyPenalty`, `PresencePenalty`, `Seed`, `Dimensions`, `EncodingFormat`, `Echo`, `Suffix`, `Logprobs` (Azure inherits the OpenAI options unchanged)
-
-**Gemini / Vertex AI-specific parameters:** `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `TaskType`, `Title`. `VertexAiEmbeddingOptions` adds `OutputDimensionality` and `AutoTruncate` for the `:predict` endpoint.
-
-**Anthropic-specific parameters:** `TopK`, `StopSequences`. Note that current Claude models (Opus 4.7 and later) reject sampling parameters (`temperature`, `top_p`, `top_k`) with a 400; leave them unset for those models.
-
-**Bedrock-specific parameters:** `BedrockEmbeddingOptions` exposes `InputType` (Cohere), `Dimensions` and `Normalize` (Amazon Titan v2). Reasoning maps to Converse extended thinking via `ReasoningEffort.BedrockThinkingBudget` / `ToBedrockThinkingBudget()`.
-
-**VoyageAI-specific parameters:** `InputType` (`query`/`document` retrieval-role hint), `Truncation`, `OutputDimension` (256/512/1024/2048 on Matryoshka-capable models), `OutputDtype` (`float`/`int8`/`uint8`/`binary`/`ubinary`). `VoyageAiRerankOptions` adds `Truncation`.
-
-**Bedrock rerank parameters:** `BedrockRerankOptions.MaxTokensPerDoc` (Cohere rerank models).
-
-**Cohere-specific parameters:** chat and generation options add `TopK` (`k`, 0..500), `Seed`, `FrequencyPenalty` and `PresencePenalty` (0..1), and `StopSequences` (at most 5); `TopP` is sent as `p` and clamped to Cohere's 0.01..0.99. `CohereEmbeddingOptions` adds `InputType` (`search_document`/`search_query`/`classification`/`clustering`, default `search_document`), `EmbeddingType` (`float`/`int8`/`uint8`/`binary`/`ubinary`), `OutputDimension` (256/512/1024/1536 on embed-v4.0), and `Truncate` (`NONE`/`START`/`END`). `CohereRerankOptions` adds `MaxTokensPerDoc`; `CohereClassificationOptions` adds `Examples` and `Truncate`. Reasoning maps to `thinking.token_budget` via `ReasoningEffort.CohereThinkingBudget` / `ToCohereThinkingBudget()` (Minimal turns thinking off, Low 1024, Medium 4096, High 16384).
-
-**TEI-specific parameters:** `TeiEmbeddingOptions` adds `Normalize`, `Truncate`, `TruncationDirection` (`left`/`right`), `PromptName` (a sentence-transformers prompt such as `query`), and `Dimensions`. `TeiRerankOptions` and `TeiClassificationOptions` add `RawScores`, `Truncate`, and `TruncationDirection`; `TeiSparseEmbeddingOptions` adds `Truncate`, `TruncationDirection`, and `PromptName`.
+- **Ollama**: `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`; embeddings add `ContextLength` and `Truncate` (bool).
+- **OpenAI and Azure OpenAI**: `FrequencyPenalty`, `PresencePenalty`, `Seed`, and, for generation only, `Echo`, `Suffix`, and `Logprobs`; embeddings add `Dimensions` and `EncodingFormat` (`float` or `base64`).
+- **Gemini and Vertex AI**: `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `ToolSchemaMode`; embeddings add `TaskType` and `Title`, and Vertex AI adds `OutputDimensionality` and `AutoTruncate`.
+- **Anthropic**: `TopK`, `StopSequences`. Current Claude models (Opus 4.7 and later) reject `temperature`, `top_p`, and `top_k`; leave them unset for those models.
+- **Bedrock**: embeddings add `InputType` (Cohere models), `Dimensions`, and `Normalize` (Titan v2); rerank adds `MaxTokensPerDoc`.
+- **VoyageAI**: `InputType` (`query` or `document`), `Truncation`, `OutputDimension` (256, 512, 1024, 2048), `OutputDtype`; rerank adds `Truncation`.
+- **Cohere**: `TopK` (0 to 500), `Seed`, `FrequencyPenalty` and `PresencePenalty` (0 to 1), `StopSequences` (at most 5), with `TopP` clamped to 0.01..0.99; embeddings add `InputType`, `EmbeddingType`, `OutputDimension`, and `Truncate`; rerank adds `MaxTokensPerDoc`; classification adds `Examples` and `Truncate`.
+- **TEI**: embeddings add `Normalize`, `Truncate`, `TruncationDirection`, `PromptName`, and `Dimensions`; rerank and classification add `RawScores`, `Truncate`, and `TruncationDirection`; sparse embeddings add `Truncate`, `TruncationDirection`, and `PromptName`.
 
 ### Default Models
 
-| Provider | Default Inference Model | Suggested Embedding Model | Default Rerank Model |
-|----------|------------------------|--------------------------|----------------------|
-| Ollama | `gemma3:4b` | `all-minilm` | (none) |
-| OpenAI | `gpt-4o-mini` | `text-embedding-3-small` | (none) |
-| Azure OpenAI | (deployment name; no default) | (deployment name) | (none) |
-| Gemini | `gemini-2.5-flash` | `gemini-embedding-001` | (none) |
-| Vertex AI | `gemini-2.5-flash` | `text-embedding-004` | (none) |
-| Anthropic | `claude-opus-4-8` | (no embeddings API) | (none) |
-| Bedrock | `anthropic.claude-3-5-sonnet-20240620-v1:0` | `amazon.titan-embed-text-v2:0` | `cohere.rerank-v3-5:0` |
-| VoyageAI | (no chat API) | `voyage-3.5` | `rerank-2.5` |
-| Cohere | `command-a-03-2025` | `embed-v4.0` (`EmbeddingModel`) | `rerank-v3.5` |
-| TEI | (no chat API) | (whatever the server hosts) | (whatever the server hosts) |
+| Provider | Completion | Embedding | Rerank | Decision |
+|---|---|---|---|---|
+| Ollama | `gemma3:4b` | `all-minilm` | | |
+| OpenAI | `gpt-4o-mini` | `text-embedding-3-small` | | |
+| Azure OpenAI | the deployment | the deployment | | |
+| Gemini | `gemini-2.5-flash` | `gemini-embedding-001` | | |
+| Vertex AI | `gemini-2.5-flash` | `text-embedding-005` | | |
+| Anthropic | `claude-opus-4-8` | | | |
+| Bedrock | `anthropic.claude-3-5-sonnet-20240620-v1:0` | `amazon.titan-embed-text-v2:0` | `cohere.rerank-v3-5:0` | |
+| VoyageAI | | `voyage-3.5` | `rerank-2.5` | |
+| Cohere | `command-a-03-2025` | `embed-v4.0` | `rerank-v3.5` | |
+| TEI | | the hosted model | the hosted model | |
+| TypeSafe | | | | `jev-latest` |
 
-### Provider Feature Support
+Cohere classification has no default model, which lets Cohere pick one for few-shot examples.
 
-| Feature | Ollama | OpenAI | Azure OpenAI | Gemini | Vertex AI | Anthropic | Bedrock | VoyageAI | Cohere | TEI |
-|---------|--------|--------|--------------|--------|-----------|-----------|---------|----------|--------|-----|
-| Chat (streaming + non-streaming) | Yes | Yes | Yes | Yes | Yes | Yes | Yes (Converse) | No | Yes (v2 Chat) | No |
-| Tool Chat (streaming + non-streaming) | Model-dependent | Yes | Yes | Yes | Yes | Yes | Yes | No | Yes | No |
-| Reasoning Effort | Via `think` | `reasoning_effort` | `reasoning_effort` | `thinkingConfig` budget | `thinkingConfig` budget | Adaptive `thinking` + effort | Converse thinking budget | No | `thinking.token_budget` | No |
-| Reasoning Capture | `message.thinking` | `reasoning_content` | `reasoning_content` | `thought` parts | `thought` parts | `thinking` blocks | `reasoningContent` | No | `thinking` content + tool plan | No |
-| Text Generation | Yes | Legacy completions | Legacy completions | Yes | Yes | Via Messages API | Via Converse | No | Via v2 Chat | No |
-| Embeddings (single + batch) | Yes | Yes | Yes | Yes | Yes (`:predict`) | No | Yes (Titan / Cohere) | Yes | Yes | Yes |
-| Sparse Embeddings | No | No | No | No | No | No | No | No | No | Yes (SPLADE models) |
-| Rerank | No | No | No | No | No | No | Yes (Cohere / Amazon) | Yes | Yes | Yes (reranker models) |
-| Classify | No | No | No | No | No | No | No | No | Yes | Yes (classifier / reranker models) |
-| List / Exists / Get Model | Yes | Yes | Yes | Yes | No | Yes (paginated) | Yes (control-plane) | No | Yes (paginated) | Yes (the hosted model, from `/info`) |
-| Pull / Delete Model | Yes | No | No | No | No | No | No | No | No | No |
-| Validate Connectivity | Yes | Yes | Yes | Yes | Yes (via `:predict`) | Yes | Yes | Yes (via embeddings) | Yes (via `/v1/models`) | Yes (via `/health`) |
+### Feature Notes
 
-Every "No" is enforced with a provider-level `NotSupportedException` carrying a message that names the missing capability: `PullModelAsync`/`DeleteModelAsync` on the cloud providers, `EmbedAsync` on Anthropic, model management on Vertex AI, everything completion-shaped (chat, tool chat, generation, model management) on VoyageAI, chat and generation on TEI, and `RerankAsync`, `ClassifyAsync`, and `EmbedSparseAsync` wherever the provider has no such API. These are thrown before any request is sent.
+| Feature | Ollama | OpenAI | Azure | Gemini | Vertex | Anthropic | Bedrock | Cohere |
+|---|---|---|---|---|---|---|---|---|
+| Tool chat | model-dependent | yes | yes | yes | yes | yes | yes | yes |
+| Reasoning effort | `think` | `reasoning_effort` | `reasoning_effort` | `thinkingBudget` | `thinkingBudget` | adaptive thinking + effort | thinking budget | `thinking.token_budget` |
+| Reasoning output | `message.thinking` | `reasoning_content` | `reasoning_content` | `thought` parts | `thought` parts | `thinking` blocks | `reasoningContent` | thinking content and tool plan |
+| Text generation | yes | legacy completions | legacy completions | yes | yes | via Messages | via Converse | via v2 Chat |
 
-Unsupported entries are intentionally explicit. PolyPrompt prefers a clear provider-level `NotSupportedException` over silently falling back to a different protocol shape. One VoyageAI-specific note: `ListModelsAsync` throws at call time (VoyageAI has no model listing endpoint), and `ValidateConnectivityAsync` therefore probes with a minimal one-word embeddings request instead.
-
-TEI is the one provider where support depends on the deployment rather than the client: a TEI server hosts one model, and its type (`embedding`, `reranker`, or `classifier`, reported in `ModelInformation.Metadata["model_type"]`) decides which of `EmbedAsync`, `RerankAsync`, `ClassifyAsync`, and `EmbedSparseAsync` succeed. The others return an unsuccessful response carrying TEI's HTTP 424 error rather than throwing, because the client cannot know the model type without asking the server.
-
-Cohere tool choice: Cohere accepts only `REQUIRED` and `NONE`. `auto` (or null) omits the field, `required`/`any` sends `REQUIRED`, `none` sends `NONE`, and a specific tool name sends only that tool with `REQUIRED` so the model must call it. Cohere's tool plan (the reasoning it emits before calling tools) is surfaced as `Reasoning` and, like all reasoning, is never sent back on follow-up turns.
-
-Ollama tool calling is model-dependent. For example, `gemma3:4b` is a valid Ollama chat, streaming chat, and generation model, but Ollama reports that it does not support tools. Use a tool-capable model such as `gpt-oss:20b` when you want the live suite to exercise actual Ollama tool-call and streaming tool-call paths.
+- Cohere accepts only `REQUIRED` and `NONE` tool choice: `auto` (or null) omits the field, `required` or `any` sends `REQUIRED`, `none` sends `NONE`, and a tool name sends only that tool with `REQUIRED`.
+- Ollama tool calling depends on the model. `gemma3:4b` does not support tools; use a tool-capable model such as `gpt-oss:20b`.
+- A TEI server hosts one model, and its type (`ModelInformation.Metadata["model_type"]`: `embedding`, `reranker`, or `classifier`) decides which TEI clients succeed. The others return an unsuccessful response with TEI's HTTP 424 error.
 
 ## Project Structure
 
@@ -1162,19 +954,22 @@ PolyPrompt/
 |-- src/
 |   |-- PolyPrompt/              # Core library (NuGet package)
 |   |   |-- Auth/                # SigV4 signing and OAuth / AWS credential providers
-|   |   |-- Clients/             # CompletionClientBase and one client per provider
+|   |   |-- Clients/
+|   |   |   |-- Base/            # ClientBase and the seven capability bases
+|   |   |   `-- <Provider>/      # One folder per provider: capability clients and a shared protocol helper
 |   |   |-- Helpers/             # JSON serializer (System.Text.Json)
 |   |   |-- Wire/                # AWS event-stream decoder
-|   |   |-- Models/              # Request/response data models
-|   |   `-- Options/             # Provider-specific option classes
-|   |-- OllamaConsole/           # Interactive Ollama test harness, including tc/toolchat
-|   |-- OpenAIConsole/           # Interactive OpenAI test harness, including tc/toolchat
-|   |-- GeminiConsole/           # Interactive Gemini test harness, including tc/toolchat
-|   |-- AnthropicConsole/        # Interactive Anthropic test harness, including tc/toolchat
-|   |-- VoyageAIConsole/         # Interactive VoyageAI embeddings and rerank test harness
-|   |-- CohereConsole/           # Interactive Cohere test harness, including tc/toolchat, rr/rerank, cl/classify
-|   |-- TeiConsole/              # Interactive TEI test harness: embed, sparse, rerank, classify, info
-|   |-- Test.Shared/             # Shared Touchstone test descriptors
+|   |   |-- Models/              # Request, response, and base options models
+|   |   `-- Options/             # Provider-specific options
+|   |-- OllamaConsole/           # Interactive harnesses, one per provider
+|   |-- OpenAIConsole/
+|   |-- GeminiConsole/
+|   |-- AnthropicConsole/
+|   |-- VoyageAIConsole/
+|   |-- CohereConsole/
+|   |-- TeiConsole/
+|   |-- TypeSafeConsole/
+|   |-- Test.Shared/             # Shared Touchstone test descriptors and the local mock server
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Xunit/              # xUnit adapter over Test.Shared
 |   `-- Test.Nunit/              # NUnit adapter over Test.Shared
@@ -1191,68 +986,42 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
+The local suite (215 cases) runs against an in-process mock server and needs no credentials:
+
 ```bash
-# Local self-tests for request translation, timeout, cancellation, response disposal, CallDetails, chat, streaming chat, tool chat, streaming tool chat, generation, embeddings, reranking, classification, sparse embeddings, and model management
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest
-
-# Local self-tests through xUnit and NUnit
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
-
-# Live provider tests through the Touchstone console runner. OpenAI, Gemini, and Anthropic default to their public API endpoints.
-dotnet run --project src/Test.Automated -- --openai-key sk-your-key --openai-model gpt-4o-mini
-dotnet run --project src/Test.Automated -- --ollama-endpoint http://localhost:11434 --ollama-model gpt-oss:20b --ollama-embedding-model all-minilm
-dotnet run --project src/Test.Automated -- --gemini-key your-key --gemini-model gemini-2.5-flash
-dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --anthropic-model claude-opus-4-8
-
-# Identity-linked Anthropic API keys also require a workspace ID.
-dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-your-key --anthropic-workspace wrkspc_your-id
-
-# Anthropic has no embeddings API; the live embedding cases are skipped for it.
-
-# VoyageAI has no chat API; chat, tool-chat, generation, and model-listing live cases
-# are skipped, and model-management cases assert the unsupported behavior.
-dotnet run --project src/Test.Automated -- --voyageai-key pa-your-key --voyageai-embedding-model voyage-3.5 --voyageai-rerank-model rerank-2.5
-
-# Cohere runs every live case, including rerank and few-shot classification.
-dotnet run --project src/Test.Automated -- --cohere-key your-cohere-key --cohere-model command-a-03-2025 --cohere-rerank-model rerank-v3.5
-
-# TEI: chat and generation cases are skipped. The embed, rerank, and classify cases read the hosted
-# model type from /info and assert success for operations the model serves and a clean HTTP 424
-# failure for the rest, so run the suite once per model type you deploy.
-docker run -p 8081:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id BAAI/bge-reranker-base
-docker run -p 8082:80 ghcr.io/huggingface/text-embeddings-inference:cpu-latest --model-id BAAI/bge-small-en-v1.5
-dotnet run --project src/Test.Automated -- --tei-endpoint http://localhost:8081
-dotnet run --project src/Test.Automated -- --tei-endpoint http://localhost:8082
-
-# The live rerank and classify cases assert NotSupportedException on providers without those APIs.
-
-# Ollama can also be validated through its OpenAI-compatible /v1 API.
-dotnet run --project src/Test.Automated -- --openai-endpoint http://localhost:11434/v1 --openai-model gpt-oss:20b --openai-embedding-model all-minilm
-
-# Live tool-chat cases verify successful tool use when the configured model supports tools,
-# and verify the provider's unsupported-model error when it does not.
-
-# Generic named form and positional form are also supported (provider: ollama | openai | gemini | anthropic | voyageai | cohere | tei)
-dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b --embedding-model all-minilm
-dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
-
-# Live provider tests can also be enabled for xUnit and NUnit with environment variables
-set POLYPROMPT_TEST_PROVIDER=ollama
-set POLYPROMPT_TEST_ENDPOINT=http://localhost:11434
-set POLYPROMPT_TEST_MODEL=gpt-oss:20b
-set POLYPROMPT_TEST_EMBEDDING_MODEL=all-minilm
-dotnet test src/Test.Xunit/Test.Xunit.csproj
-dotnet test src/Test.Nunit/Test.Nunit.csproj
-
-# Provider-specific environment variables can be used instead of POLYPROMPT_TEST_PROVIDER
-# (POLYPROMPT_TEST_OPENAI_*, POLYPROMPT_TEST_OLLAMA_*, POLYPROMPT_TEST_GEMINI_*, POLYPROMPT_TEST_ANTHROPIC_*, POLYPROMPT_TEST_VOYAGEAI_*,
-#  POLYPROMPT_TEST_COHERE_* including COHERE_RERANK_MODEL, and POLYPROMPT_TEST_TEI_API_KEY / TEI_ENDPOINT).
-# POLYPROMPT_TEST_RERANK_MODEL sets the rerank model for the generic POLYPROMPT_TEST_PROVIDER form.
-set POLYPROMPT_TEST_OPENAI_API_KEY=sk-your-key
-set POLYPROMPT_TEST_OPENAI_MODEL=gpt-4o-mini
-dotnet test src/Test.Xunit/Test.Xunit.csproj
 ```
+
+The live suite runs against one provider at a time. Cases for a capability the provider does not have are skipped with the reason.
+
+```bash
+# Hosted APIs default to their public endpoints.
+dotnet run --project src/Test.Automated -- --openai-key sk-... --openai-model gpt-4o-mini
+dotnet run --project src/Test.Automated -- --gemini-key AIza... --gemini-model gemini-2.5-flash
+dotnet run --project src/Test.Automated -- --anthropic-key sk-ant-... --anthropic-model claude-opus-4-8 [--anthropic-workspace wrkspc_...]
+dotnet run --project src/Test.Automated -- --voyageai-key pa-... --voyageai-embedding-model voyage-3.5 --voyageai-rerank-model rerank-2.5
+dotnet run --project src/Test.Automated -- --cohere-key ... --cohere-model command-a-03-2025 --cohere-rerank-model rerank-v3.5
+dotnet run --project src/Test.Automated -- --typesafe-key ts-... [--typesafe-endpoint <Ollaya URL>]
+
+# Local servers.
+dotnet run --project src/Test.Automated -- --ollama-endpoint http://localhost:11434 --ollama-model gpt-oss:20b --ollama-embedding-model all-minilm
+dotnet run --project src/Test.Automated -- --tei-endpoint http://localhost:8080
+
+# Cloud providers.
+dotnet run --project src/Test.Automated -- --azure-endpoint https://my.openai.azure.com --azure-key ... --azure-model gpt-4o [--azure-embedding-model text-embedding-3-small]
+dotnet run --project src/Test.Automated -- --vertex-project my-project [--vertex-region us-central1] [--vertex-credentials sa.json]
+dotnet run --project src/Test.Automated -- --bedrock-region us-east-1 [--bedrock-access-key-id ... --bedrock-secret-access-key ...]
+
+# Generic form and positional form.
+dotnet run --project src/Test.Automated -- --provider ollama --endpoint http://localhost:11434 --model gpt-oss:20b
+dotnet run --project src/Test.Automated -- ollama http://localhost:11434 "" gpt-oss:20b all-minilm
+```
+
+The same settings can come from environment variables, which also enable the live suite under xUnit and NUnit: the generic `POLYPROMPT_TEST_PROVIDER`, `_ENDPOINT`, `_API_KEY`, `_MODEL`, `_EMBEDDING_MODEL`, `_RERANK_MODEL`, `_REGION`, `_PROJECT`, `_CREDENTIALS`, `_AWS_ACCESS_KEY_ID`, `_AWS_SECRET_ACCESS_KEY`, `_AWS_SESSION_TOKEN`, and `_API_VERSION`, or exactly one provider group such as `POLYPROMPT_TEST_OPENAI_API_KEY` and `POLYPROMPT_TEST_OPENAI_MODEL`. Run `Test.Automated --help` for the full list.
+
+A TEI server hosts one model, so run the TEI live suite once per model type you deploy (embedding, reranker, classifier). The TEI cases read the hosted model type from `/info` and assert success for what it serves and a clean HTTP 424 failure for the rest.
 
 ## Issues and Discussions
 

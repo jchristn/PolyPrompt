@@ -13,7 +13,7 @@ namespace Test.Shared
     internal static class LocalExtendedRoutes
     {
         /// <summary>
-        /// Bearer key the tests give to CohereClient so the server can route Cohere requests.
+        /// Bearer key the tests give to CohereCompletionClient so the server can route Cohere requests.
         /// </summary>
         public const string CohereTestKey = "cohere-key";
 

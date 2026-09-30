@@ -14,6 +14,8 @@ namespace Test.Shared
         private readonly List<string> _RequestBodies = new List<string>();
         private readonly object _RequestPathsLock = new object();
         private readonly List<string> _RequestPaths = new List<string>();
+        private readonly List<string> _RequestUrls = new List<string>();
+        private readonly List<Dictionary<string, string>> _RequestHeaders = new List<Dictionary<string, string>>();
         private bool _Disposed = false;
 
         /// <summary>
@@ -45,6 +47,34 @@ namespace Test.Shared
                 lock (_RequestPathsLock)
                 {
                     return new List<string>(_RequestPaths);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Detached snapshot of request paths with their query strings, in arrival order.
+        /// </summary>
+        public List<string> RequestUrls
+        {
+            get
+            {
+                lock (_RequestPathsLock)
+                {
+                    return new List<string>(_RequestUrls);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Detached snapshot of request headers (case-insensitive names), in arrival order.
+        /// </summary>
+        public List<Dictionary<string, string>> RequestHeaders
+        {
+            get
+            {
+                lock (_RequestPathsLock)
+                {
+                    return new List<Dictionary<string, string>>(_RequestHeaders);
                 }
             }
         }
@@ -143,9 +173,17 @@ namespace Test.Shared
                     _RequestBodies.Add(requestBody);
                 }
 
+                Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string? name in context.Request.Headers.AllKeys)
+                {
+                    if (name != null) headers[name] = context.Request.Headers[name] ?? string.Empty;
+                }
+
                 lock (_RequestPathsLock)
                 {
                     _RequestPaths.Add(path);
+                    _RequestUrls.Add(context.Request.Url?.PathAndQuery ?? path);
+                    _RequestHeaders.Add(headers);
                 }
 
                 if (await LocalGeminiToolRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
@@ -154,6 +192,11 @@ namespace Test.Shared
                 }
 
                 if (await LocalExtendedRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                if (await LocalDecisionRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
                 {
                     return;
                 }
@@ -844,6 +887,12 @@ namespace Test.Shared
                 // ---- Google Vertex AI (project/region/publisher routing; reuses the Gemini wire) ----
                 if (path.Contains("/publishers/google/models/", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (path.EndsWith(":countTokens", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await WriteJsonAsync(context, 200, "{\"totalTokens\":1}").ConfigureAwait(false);
+                        return;
+                    }
+
                     if (path.EndsWith(":predict", StringComparison.OrdinalIgnoreCase))
                     {
                         int instanceCount = CountOccurrences(requestBody, "\"content\"");

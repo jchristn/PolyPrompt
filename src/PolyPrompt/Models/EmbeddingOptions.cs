@@ -1,15 +1,17 @@
 namespace PolyPrompt.Models
 {
     /// <summary>
-    /// Base options for embedding requests.
-    /// When a value is null, the client instance default is used.
+    /// Settings for embedding operations, shared by every provider. The same type serves as a client's <c>Defaults</c>
+    /// and as per-call options; a non-null per-call value wins over the client default. Provider-specific settings
+    /// live on derived types.
     /// </summary>
     public class EmbeddingOptions
     {
         #region Public-Members
 
         /// <summary>
-        /// Model override for this embedding request. Null uses client default.
+        /// Model name. On a client's <c>Defaults</c> this is the client's model; per call it overrides that model.
+        /// Ignored by Text Embeddings Inference, which serves a single model. Default: null.
         /// </summary>
         public string? Model { get; set; } = null;
 

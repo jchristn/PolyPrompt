@@ -10,7 +10,7 @@ namespace Test.Shared
 
         public string? EncodingFormat { get; set; }
 
-        public int? Truncate { get; set; }
+        public bool? Truncate { get; set; }
 
         public Dictionary<string, object>? Options { get; set; }
 

@@ -3,14 +3,14 @@ namespace PolyPrompt.Options
     using PolyPrompt.Models;
 
     /// <summary>
-    /// Ollama-specific options for embedding requests.
-    /// These map to fields in the Ollama /api/embed request body.
+    /// Ollama settings for embedding requests, mapped to the Ollama <c>/api/embed</c> request body. Use this type for an
+    /// Ollama embedding client's <c>Defaults</c> or per call.
     /// </summary>
     public class OllamaEmbeddingOptions : EmbeddingOptions
     {
         #region Private-Members
 
-        private int? _Truncate = null;
+        private bool? _Truncate = null;
         private int? _ContextLength = null;
 
         #endregion
@@ -18,9 +18,10 @@ namespace PolyPrompt.Options
         #region Public-Members
 
         /// <summary>
-        /// Truncate input to this many tokens. Null uses model default.
+        /// Whether Ollama truncates inputs that exceed the context length (true) or returns an error (false).
+        /// Null uses the server default (true).
         /// </summary>
-        public int? Truncate
+        public bool? Truncate
         {
             get { return _Truncate; }
             set { _Truncate = value; }

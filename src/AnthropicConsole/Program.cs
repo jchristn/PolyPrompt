@@ -10,7 +10,8 @@ namespace AnthropicConsole
 
         private static bool _RunForever = true;
         private static bool _Streaming = true;
-        private static AnthropicClient _Client = null!;
+        private static AnthropicCompletionClient _Client = null!;
+        private static AnthropicModelClient _ModelClient = null!;
 
         #endregion
 
@@ -29,11 +30,15 @@ namespace AnthropicConsole
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new AnthropicClient(endpoint, apiKey);
+            _Client = new AnthropicCompletionClient(endpoint, apiKey);
             _Client.WorkspaceId = workspaceId;
             _Client.Model = model;
-            _Client.MaxTokens = maxTokens;
+            _Client.Defaults.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
+
+            _ModelClient = new AnthropicModelClient(endpoint, apiKey);
+            _ModelClient.WorkspaceId = workspaceId;
+            _ModelClient.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -44,6 +49,9 @@ namespace AnthropicConsole
                 string userInput = Inputty.GetString("Command [?/help]:", null, false);
                 await ProcessCommand(userInput).ConfigureAwait(false);
             }
+
+            _Client.Dispose();
+            _ModelClient.Dispose();
         }
 
         #endregion
@@ -82,16 +90,6 @@ namespace AnthropicConsole
                 case "tc":
                 case "toolchat":
                     await ToolChatCommandAsync(CancellationToken.None).ConfigureAwait(false);
-                    break;
-
-                case "em":
-                case "embed":
-                    await EmbedAsync().ConfigureAwait(false);
-                    break;
-
-                case "emb":
-                case "embedbatch":
-                    await EmbedBatchAsync().ConfigureAwait(false);
                     break;
 
                 case "gen":
@@ -140,8 +138,6 @@ namespace AnthropicConsole
             Console.WriteLine("  c/cls           Clear the screen");
             Console.WriteLine("  ch/chat         Send a chat completion");
             Console.WriteLine("  tc/toolchat     Send a tool-capable chat using the sample get_weather tool");
-            Console.WriteLine("  em/embed        Generate a single embedding (not supported by Anthropic)");
-            Console.WriteLine("  emb/embedbatch  Generate batch embeddings (not supported by Anthropic)");
             Console.WriteLine("  gen/generate    Generate text (non-streaming, via the Messages API)");
             Console.WriteLine("  gens/genstream  Generate text (streaming, via the Messages API)");
             Console.WriteLine("  system          Set or clear the system prompt");
@@ -161,25 +157,25 @@ namespace AnthropicConsole
             Console.WriteLine("  API version   : " + _Client.AnthropicVersion);
             Console.WriteLine("  Workspace ID  : " + (string.IsNullOrEmpty(_Client.WorkspaceId) ? "(none)" : _Client.WorkspaceId));
             Console.WriteLine("  Model         : " + _Client.Model);
-            Console.WriteLine("  Max tokens    : " + _Client.MaxTokens);
+            Console.WriteLine("  Max tokens    : " + _Client.Defaults.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
-            Console.WriteLine("  Temperature   : " + (_Client.Temperature.HasValue ? _Client.Temperature.Value.ToString("F1") : "(default)"));
-            Console.WriteLine("  Top-P         : " + (_Client.TopP.HasValue ? _Client.TopP.Value.ToString("F2") : "(default)"));
+            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Temperature.HasValue ? _Client.Defaults.Temperature.Value.ToString("F1") : "(default)"));
+            Console.WriteLine("  Top-P         : " + (_Client.Defaults.TopP.HasValue ? _Client.Defaults.TopP.Value.ToString("F2") : "(default)"));
             Console.WriteLine("  Streaming     : " + (_Streaming ? "on" : "off"));
-            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.SystemPrompt) ? "(none)" : _Client.SystemPrompt));
+            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "(none)" : _Client.Defaults.SystemPrompt));
             Console.WriteLine("");
         }
 
         private static void SetSystemPrompt()
         {
             Console.WriteLine("");
-            if (!string.IsNullOrEmpty(_Client.SystemPrompt))
+            if (!string.IsNullOrEmpty(_Client.Defaults.SystemPrompt))
             {
-                Console.WriteLine("Current system prompt: " + _Client.SystemPrompt);
+                Console.WriteLine("Current system prompt: " + _Client.Defaults.SystemPrompt);
             }
             string? newPrompt = Inputty.GetString("System prompt [Enter to clear]:", null, true);
-            _Client.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
-            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.SystemPrompt) ? "cleared" : "set") + ".");
+            _Client.Defaults.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
+            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "cleared" : "set") + ".");
             Console.WriteLine("");
         }
 
@@ -392,9 +388,9 @@ namespace AnthropicConsole
         {
             ToolChatRequest request = new ToolChatRequest();
 
-            if (!string.IsNullOrWhiteSpace(_Client.SystemPrompt))
+            if (!string.IsNullOrWhiteSpace(_Client.Defaults.SystemPrompt))
             {
-                request.Messages.Add(ChatMessage.System(_Client.SystemPrompt));
+                request.Messages.Add(ChatMessage.System(_Client.Defaults.SystemPrompt));
             }
 
             request.Messages.Add(ChatMessage.User(prompt));
@@ -517,81 +513,6 @@ namespace AnthropicConsole
             if (response.InterTokenTokensPerSecond > 0) Console.WriteLine("  Stream tok/sec     : " + response.InterTokenTokensPerSecond.ToString("F1"));
         }
 
-        private static async Task EmbedAsync()
-        {
-            string input = Inputty.GetString("Text to embed:", null, false);
-
-            Console.WriteLine("");
-
-            try
-            {
-                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
-
-                if (!response.Success)
-                {
-                    Console.WriteLine("Error: " + response.Error);
-                }
-                else
-                {
-                    Console.WriteLine("Embeddings returned: " + response.Embeddings.Count);
-                }
-            }
-            catch (NotSupportedException ex)
-            {
-                Console.WriteLine("Not supported: " + ex.Message);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-
-            Console.WriteLine("");
-        }
-
-        private static async Task EmbedBatchAsync()
-        {
-            List<string> inputs = new List<string>();
-            Console.WriteLine("Enter texts to embed (empty line to finish):");
-            while (true)
-            {
-                string? line = Inputty.GetString("Text [Enter to finish]:", null, true);
-                if (string.IsNullOrWhiteSpace(line)) break;
-                inputs.Add(line);
-            }
-
-            if (inputs.Count == 0)
-            {
-                Console.WriteLine("No inputs provided.");
-                return;
-            }
-
-            Console.WriteLine("");
-
-            try
-            {
-                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
-
-                if (!response.Success)
-                {
-                    Console.WriteLine("Error: " + response.Error);
-                }
-                else
-                {
-                    Console.WriteLine("Embeddings returned: " + response.Embeddings.Count);
-                }
-            }
-            catch (NotSupportedException ex)
-            {
-                Console.WriteLine("Not supported: " + ex.Message);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error: " + ex.Message);
-            }
-
-            Console.WriteLine("");
-        }
-
         private static async Task GenerateAsync()
         {
             string prompt = Inputty.GetString("Prompt:", null, false);
@@ -676,7 +597,7 @@ namespace AnthropicConsole
 
             try
             {
-                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -695,8 +616,11 @@ namespace AnthropicConsole
 
             try
             {
-                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
+
+                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
             }
             catch (Exception ex)
             {

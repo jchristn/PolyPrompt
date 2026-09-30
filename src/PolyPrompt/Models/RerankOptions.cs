@@ -1,7 +1,8 @@
 namespace PolyPrompt.Models
 {
     /// <summary>
-    /// Base options for rerank requests. When a value is null, the client instance default is used.
+    /// Settings for rerank operations, shared by every provider. The same type serves as a rerank client's
+    /// <c>Defaults</c> and as per-call options; a non-null per-call value wins over the client default.
     /// </summary>
     public class RerankOptions
     {
@@ -14,16 +15,17 @@ namespace PolyPrompt.Models
         #region Public-Members
 
         /// <summary>
-        /// Model override for this rerank request. Null uses the client's rerank model default (for example
-        /// <c>CohereClient.RerankModel</c>). Ignored by Text Embeddings Inference, which serves a single model.
+        /// Model name. On a client's <c>Defaults</c> this is the client's model; per call it overrides that model.
+        /// Ignored by Text Embeddings Inference, which serves a single model. Default: null.
         /// </summary>
         public string? Model { get; set; } = null;
 
         /// <summary>
         /// Maximum number of results to return, highest score first. Null returns a score for every document.
-        /// Minimum 1. It must also not exceed the number of documents passed to RerankAsync, which is checked
-        /// when the request is made. Providers without a native top-N parameter (Text Embeddings Inference)
-        /// score every document and the list is trimmed client-side.
+        /// Minimum 1. A per-call value cannot exceed the number of documents passed to RerankAsync, which is checked
+        /// when the request is made; a value from the client's <c>Defaults</c> is instead capped at the number of
+        /// documents. Providers without a native top-N parameter (Text Embeddings Inference) score every document
+        /// and the list is trimmed client-side. Default: null.
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when set to a value less than 1.</exception>
         public int? TopN
@@ -40,9 +42,9 @@ namespace PolyPrompt.Models
         /// <summary>
         /// When true, each <see cref="RerankResult.Document"/> is populated with the text of the document it
         /// scores. The text is taken from the caller's input list by index, so no extra data is requested
-        /// from the provider. Default: false.
+        /// from the provider. Null means false unless the client's <c>Defaults</c> sets it. Default: null.
         /// </summary>
-        public bool ReturnDocuments { get; set; } = false;
+        public bool? ReturnDocuments { get; set; } = null;
 
         #endregion
     }

@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CohereConsole", "CohereCons
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeiConsole", "TeiConsole\TeiConsole.csproj", "{9F85B0C5-F916-49D7-AF43-1B7507A0908A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TypeSafeConsole", "TypeSafeConsole\TypeSafeConsole.csproj", "{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -181,6 +183,18 @@ Global
 		{9F85B0C5-F916-49D7-AF43-1B7507A0908A}.Release|x64.Build.0 = Release|Any CPU
 		{9F85B0C5-F916-49D7-AF43-1B7507A0908A}.Release|x86.ActiveCfg = Release|Any CPU
 		{9F85B0C5-F916-49D7-AF43-1B7507A0908A}.Release|x86.Build.0 = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|x64.Build.0 = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Debug|x86.Build.0 = Debug|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|x64.ActiveCfg = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|x64.Build.0 = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|x86.ActiveCfg = Release|Any CPU
+		{A94F26A2-3091-4E66-A8FC-4CF699C6A7A7}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

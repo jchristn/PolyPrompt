@@ -2,19 +2,19 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>2.8.0</Version>
+    <Version>3.0.0</Version>
     <Authors>Joel Christner</Authors>
     <Company>Joel Christner</Company>
     <Copyright>(c)2026 Joel Christner</Copyright>
     <PackageId>PolyPrompt</PackageId>
-    <Description>PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, and classification across Ollama, OpenAI, Azure OpenAI, Google Gemini, Google Vertex AI, Anthropic Claude, AWS Bedrock, VoyageAI, Cohere, and Hugging Face Text Embeddings Inference (TEI) APIs.</Description>
+    <Description>PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, and decision models across Ollama, OpenAI, Azure OpenAI, Google Gemini, Google Vertex AI, Anthropic Claude, AWS Bedrock, VoyageAI, Cohere, Hugging Face Text Embeddings Inference (TEI), and TypeSafe (Jev, Ollaya) APIs, with one client per capability per provider.</Description>
     <PackageProjectUrl>https://github.com/jchristn/PolyPrompt</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jchristn/PolyPrompt</RepositoryUrl>
     <RepositoryType>Github</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>logo.png</PackageIcon>
-    <PackageTags>llm;ai;ollama;openai;azure;gemini;vertex;anthropic;claude;bedrock;aws;gcp;sigv4;voyageai;voyage;cohere;tei;huggingface;text-embeddings-inference;rerank;reranking;classification;sparse;rag;chat;completion;embedding;generation;streaming;tools;function-calling</PackageTags>
+    <PackageTags>llm;ai;ollama;openai;azure;gemini;vertex;anthropic;claude;bedrock;aws;gcp;sigv4;voyageai;voyage;cohere;tei;huggingface;text-embeddings-inference;rerank;reranking;classification;sparse;rag;chat;completion;embedding;generation;streaming;tools;function-calling;decision;typesafe;jev;ollaya</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <DocumentationFile>PolyPrompt.xml</DocumentationFile>
