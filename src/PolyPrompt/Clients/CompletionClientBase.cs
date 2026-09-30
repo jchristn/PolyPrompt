@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Diagnostics;
     using System.Runtime.CompilerServices;
     using System.Text;
+    using System.Text.Json;
     using PolyPrompt.Models;
     using SyslogLogging;
 
@@ -57,7 +58,7 @@ namespace PolyPrompt.Clients
         /// <summary>
         /// Serializer instance.
         /// </summary>
-        protected readonly SerializationHelper.Serializer _Serializer = new SerializationHelper.Serializer();
+        protected readonly PolyPrompt.Helpers.Serializer _Serializer = new PolyPrompt.Helpers.Serializer();
 
         /// <summary>
         /// Header prefix for log messages.
@@ -1337,6 +1338,47 @@ namespace PolyPrompt.Clients
 
             string nestedJson = _Serializer.SerializeJson(obj[key], false);
             return _Serializer.DeserializeJson<Dictionary<string, object>>(nestedJson);
+        }
+
+        /// <summary>
+        /// Parse text as JSON without throwing.
+        /// </summary>
+        /// <param name="text">Text that may contain JSON.</param>
+        /// <param name="element">The parsed root element (detached from its document) when parsing succeeds.</param>
+        /// <returns>True when the text is a single valid JSON value; false when it is null, empty, or not JSON.</returns>
+        protected static bool TryParseJson(string? text, out JsonElement element)
+        {
+            element = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(text, new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = true,
+                    CommentHandling = JsonCommentHandling.Skip
+                });
+                element = document.RootElement.Clone();
+                return true;
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Deserialize tool-call arguments into a JSON object dictionary without throwing. Arguments that are empty,
+        /// not valid JSON, or valid JSON that is not an object (an array, a scalar, or null) yield an empty dictionary.
+        /// </summary>
+        /// <param name="json">Tool-call arguments JSON.</param>
+        /// <returns>The arguments object, or an empty dictionary.</returns>
+        protected Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
+        {
+            if (!TryParseJson(json, out JsonElement element) || element.ValueKind != JsonValueKind.Object)
+                return new Dictionary<string, object>();
+
+            return _Serializer.DeserializeJson<Dictionary<string, object>>(element.GetRawText()) ?? new Dictionary<string, object>();
         }
 
         /// <summary>

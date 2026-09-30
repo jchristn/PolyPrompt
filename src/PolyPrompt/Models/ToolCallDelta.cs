@@ -35,5 +35,10 @@ namespace PolyPrompt.Models
         /// Complete JSON argument object for this tool call when the provider emits full arguments.
         /// </summary>
         public string? ArgumentsJson { get; set; } = null;
+
+        /// <summary>
+        /// Opaque provider thought signature for this tool call, when the provider emits one. See <see cref="ToolCall.ThoughtSignature"/>.
+        /// </summary>
+        public string? ThoughtSignature { get; set; } = null;
     }
 }

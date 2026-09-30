@@ -7,7 +7,7 @@ namespace PolyPrompt.Auth
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using SerializationHelper;
+    using PolyPrompt.Helpers;
 
     /// <summary>
     /// Supplies a short-lived OAuth bearer token per request. Used by providers whose credentials expire and

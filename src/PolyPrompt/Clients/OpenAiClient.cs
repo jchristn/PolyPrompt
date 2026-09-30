@@ -4,6 +4,7 @@ namespace PolyPrompt.Clients
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Text;
+    using System.Text.Json;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -836,6 +837,16 @@ namespace PolyPrompt.Clients
                     { "function", function }
                 };
 
+                // Gemini's OpenAI-compatible endpoint carries its thought signature in a vendor extension. It is
+                // only emitted when present, so requests to other OpenAI-compatible servers are unchanged.
+                if (!string.IsNullOrEmpty(toolCall.ThoughtSignature))
+                {
+                    item["extra_content"] = new Dictionary<string, object>
+                    {
+                        { "google", new Dictionary<string, object> { { "thought_signature", toolCall.ThoughtSignature } } }
+                    };
+                }
+
                 result.Add(item);
             }
 
@@ -922,7 +933,27 @@ namespace PolyPrompt.Clients
             toolCall.ArgumentsJson = function.ContainsKey("arguments") && function["arguments"] != null
                 ? function["arguments"]?.ToString() ?? "{}"
                 : "{}";
+            toolCall.ThoughtSignature = ReadGoogleThoughtSignature(toolCallObj);
             return toolCall;
+        }
+
+        private static string? ReadGoogleThoughtSignature(Dictionary<string, object> toolCallObj)
+        {
+            // extra_content.google.thought_signature, emitted by Gemini's OpenAI-compatible endpoint. Any other
+            // shape is ignored rather than failing the parse.
+            if (!toolCallObj.TryGetValue("extra_content", out object? extraContent)
+                || extraContent is not JsonElement extra
+                || extra.ValueKind != JsonValueKind.Object
+                || !extra.TryGetProperty("google", out JsonElement google)
+                || google.ValueKind != JsonValueKind.Object
+                || !google.TryGetProperty("thought_signature", out JsonElement signature)
+                || signature.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            string? value = signature.GetString();
+            return string.IsNullOrEmpty(value) ? null : value;
         }
 
         private static string? ReadOpenAiReasoning(Dictionary<string, object> obj)
@@ -1189,6 +1220,7 @@ namespace PolyPrompt.Clients
                 delta.Index = index;
                 delta.Id = toolCallObj.ContainsKey("id") ? toolCallObj["id"]?.ToString() : null;
                 delta.Type = toolCallObj.ContainsKey("type") ? toolCallObj["type"]?.ToString() : null;
+                delta.ThoughtSignature = ReadGoogleThoughtSignature(toolCallObj);
 
                 if (toolCallObj.ContainsKey("function"))
                 {

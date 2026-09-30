@@ -11,6 +11,7 @@ namespace PolyPrompt.Models
         internal string? Id { get; private set; }
         internal string? Type { get; private set; }
         internal string? Name { get; private set; }
+        internal string? ThoughtSignature { get; private set; }
 
         internal ToolCallAssembly(int index)
         {
@@ -22,6 +23,7 @@ namespace PolyPrompt.Models
             if (!string.IsNullOrEmpty(delta.Id)) Id = delta.Id;
             if (!string.IsNullOrEmpty(delta.Type)) Type = delta.Type;
             if (!string.IsNullOrEmpty(delta.Name)) Name = delta.Name;
+            if (string.IsNullOrEmpty(ThoughtSignature) && !string.IsNullOrEmpty(delta.ThoughtSignature)) ThoughtSignature = delta.ThoughtSignature;
 
             if (delta.ArgumentsJson != null)
             {
@@ -44,7 +46,8 @@ namespace PolyPrompt.Models
             {
                 Id = Id,
                 Name = Name ?? string.Empty,
-                ArgumentsJson = argumentsJson
+                ArgumentsJson = argumentsJson,
+                ThoughtSignature = ThoughtSignature
             };
         }
     }

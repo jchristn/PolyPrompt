@@ -865,14 +865,6 @@ namespace PolyPrompt.Clients
             return string.Equals(toolChoice, "none", StringComparison.OrdinalIgnoreCase);
         }
 
-        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
-
-            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
-            return parsed ?? new Dictionary<string, object>();
-        }
-
         private void PopulateAnthropicToolChatResponse(string responseBody, ToolChatResponse toolResponse)
         {
             Dictionary<string, object>? responseObj = _Serializer.DeserializeJson<Dictionary<string, object>>(responseBody);

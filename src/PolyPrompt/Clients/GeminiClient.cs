@@ -4,6 +4,7 @@ namespace PolyPrompt.Clients
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Text;
+    using System.Text.Json;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -18,6 +19,35 @@ namespace PolyPrompt.Clients
         // Gemini marks reasoning ("thought summary") parts with a truthy "thought" flag. Centralized so the
         // literal is defined once rather than inlined.
         private const string ThoughtKey = "thought";
+
+        // Gemini 3 attaches an opaque signature beside each functionCall and requires it back on replay.
+        private const string ThoughtSignatureKey = "thoughtSignature";
+
+        // Google's documented placeholder for replayed function calls that have no real signature.
+        private const string SkipThoughtSignatureValidator = "skip_thought_signature_validator";
+
+        private const string SyntheticCallIdPrefix = "gemini-call-";
+
+        // Keys accepted by Gemini's OpenAPI-subset Schema object (the functionDeclarations[].parameters field).
+        private static readonly HashSet<string> _OpenApiSchemaKeys = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "type", "format", "title", "description", "nullable", "enum", "default", "example",
+            "properties", "required", "items", "minItems", "maxItems", "minProperties", "maxProperties",
+            "minLength", "maxLength", "pattern", "minimum", "maximum", "anyOf", "propertyOrdering"
+        };
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// How tool parameter schemas are sent to Gemini.
+        /// Default: <see cref="GeminiToolSchemaMode.JsonSchema"/>, which sends the schema unchanged (apart from a root
+        /// <c>$schema</c> keyword) in <c>parametersJsonSchema</c>, where Gemini accepts standard JSON Schema.
+        /// Use <see cref="GeminiToolSchemaMode.OpenApiSubset"/> for endpoints that only accept the older
+        /// <c>parameters</c> field; the schema is then reduced to the OpenAPI subset Gemini accepts there.
+        /// </summary>
+        public GeminiToolSchemaMode ToolSchemaMode { get; set; } = GeminiToolSchemaMode.JsonSchema;
 
         #endregion
 
@@ -901,18 +931,31 @@ namespace PolyPrompt.Clients
         {
             List<Dictionary<string, object>> result = new List<Dictionary<string, object>>();
 
+            bool previousWasToolResult = false;
+
             foreach (ChatMessage message in messages)
             {
                 if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                bool isToolResult = IsToolResultMessage(message);
+                List<Dictionary<string, object>> parts = BuildGeminiParts(message);
+
+                // Results for parallel function calls belong together in one user turn.
+                if (isToolResult && previousWasToolResult && result.Count > 0)
+                {
+                    ((List<Dictionary<string, object>>)result[result.Count - 1]["parts"]).AddRange(parts);
+                    continue;
+                }
+
                 Dictionary<string, object> item = new Dictionary<string, object>
                 {
                     { "role", NormalizeGeminiRole(message.Role) },
-                    { "parts", BuildGeminiParts(message) }
+                    { "parts", parts }
                 };
 
                 result.Add(item);
+                previousWasToolResult = isToolResult;
             }
 
             return result;
@@ -944,6 +987,12 @@ namespace PolyPrompt.Clients
 
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {
+                // Gemini 3 validates the thought signature on replayed function calls. History that did not come
+                // from Gemini (another provider, a hand-built transcript) has none, so the first call of such a turn
+                // carries Google's documented sentinel instead. Turns with a real signature are replayed as received.
+                bool turnHasSignature = message.ToolCalls.Any(call => !string.IsNullOrEmpty(call.ThoughtSignature));
+                bool first = true;
+
                 foreach (ToolCall toolCall in message.ToolCalls)
                 {
                     Dictionary<string, object> functionCall = new Dictionary<string, object>
@@ -952,20 +1001,31 @@ namespace PolyPrompt.Clients
                         { "args", DeserializeDictionaryOrEmpty(toolCall.ArgumentsJson) }
                     };
 
-                    parts.Add(new Dictionary<string, object> { { "functionCall", functionCall } });
+                    if (IsProviderCallId(toolCall.Id)) functionCall["id"] = toolCall.Id!;
+
+                    Dictionary<string, object> part = new Dictionary<string, object> { { "functionCall", functionCall } };
+
+                    if (!string.IsNullOrEmpty(toolCall.ThoughtSignature))
+                        part[ThoughtSignatureKey] = toolCall.ThoughtSignature;
+                    else if (first && !turnHasSignature)
+                        part[ThoughtSignatureKey] = SkipThoughtSignatureValidator;
+
+                    parts.Add(part);
+                    first = false;
                 }
 
                 return parts;
             }
 
-            if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(message.Role, "function", StringComparison.OrdinalIgnoreCase))
+            if (IsToolResultMessage(message))
             {
                 Dictionary<string, object> functionResponse = new Dictionary<string, object>
                 {
                     { "name", ResolveToolResultName(message) },
                     { "response", DeserializeDictionaryOrResult(message.Content) }
                 };
+
+                if (IsProviderCallId(message.ToolCallId)) functionResponse["id"] = message.ToolCallId!;
 
                 parts.Add(new Dictionary<string, object> { { "functionResponse", functionResponse } });
                 return parts;
@@ -981,12 +1041,35 @@ namespace PolyPrompt.Clients
 
             foreach (ToolDefinition tool in tools)
             {
-                functionDeclarations.Add(new Dictionary<string, object>
+                Dictionary<string, object> declaration = new Dictionary<string, object>
                 {
                     { "name", tool.Name },
-                    { "description", tool.Description },
-                    { "parameters", tool.Parameters }
-                });
+                    { "description", tool.Description }
+                };
+
+                // A declaration without parameters is valid; an empty schema object adds nothing.
+                if (tool.Parameters != null && tool.Parameters.Count > 0)
+                {
+                    List<string> removed = new List<string>();
+
+                    if (ToolSchemaMode == GeminiToolSchemaMode.OpenApiSubset)
+                    {
+                        declaration["parameters"] = SanitizeOpenApiSchema(ToJsonElement(tool.Parameters), "", removed);
+                    }
+                    else
+                    {
+                        Dictionary<string, object> schema = new Dictionary<string, object>(tool.Parameters);
+                        if (schema.Remove("$schema")) removed.Add("$schema");
+                        declaration["parametersJsonSchema"] = schema;
+                    }
+
+                    if (removed.Count > 0)
+                    {
+                        _Logging.Debug(_Header + "tool '" + tool.Name + "' schema: removed unsupported keys " + string.Join(", ", removed));
+                    }
+                }
+
+                functionDeclarations.Add(declaration);
             }
 
             return new List<Dictionary<string, object>>
@@ -1083,47 +1166,154 @@ namespace PolyPrompt.Clients
 
                 if (part.ContainsKey("functionCall"))
                 {
-                    ToolCall? toolCall = ParseGeminiToolCall(part["functionCall"], index);
+                    ToolCall? toolCall = ParseGeminiToolCall(part, index);
                     if (toolCall != null) toolResponse.ToolCalls.Add(toolCall);
                     index++;
                 }
             }
         }
 
-        private ToolCall? ParseGeminiToolCall(object functionCallObj, int index)
+        private ToolCall? ParseGeminiToolCall(Dictionary<string, object> part, int index)
         {
-            string functionCallJson = _Serializer.SerializeJson(functionCallObj, false);
+            string functionCallJson = _Serializer.SerializeJson(part["functionCall"], false);
             Dictionary<string, object>? functionCall = _Serializer.DeserializeJson<Dictionary<string, object>>(functionCallJson);
             if (functionCall == null || !functionCall.ContainsKey("name")) return null;
 
             ToolCall toolCall = new ToolCall();
-            toolCall.Id = "gemini-call-" + index;
+            toolCall.Id = functionCall.ContainsKey("id") ? functionCall["id"]?.ToString() : null;
+            if (string.IsNullOrWhiteSpace(toolCall.Id)) toolCall.Id = SyntheticCallIdPrefix + index;
             toolCall.Name = functionCall["name"]?.ToString() ?? string.Empty;
             toolCall.ArgumentsJson = functionCall.ContainsKey("args") && functionCall["args"] != null
                 ? _Serializer.SerializeJson(functionCall["args"], false)
                 : "{}";
+            toolCall.ThoughtSignature = ReadThoughtSignature(part);
             return toolCall;
         }
 
-        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
+        private Dictionary<string, object> DeserializeDictionaryOrResult(string? content)
         {
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
-
-            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
-            return parsed ?? new Dictionary<string, object>();
-        }
-
-        private Dictionary<string, object> DeserializeDictionaryOrResult(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json))
+            // functionResponse.response must be a JSON object. Objects pass through; arrays and scalars are wrapped
+            // with their structure intact; empty or non-JSON text is wrapped as a string.
+            if (!TryParseJson(content, out JsonElement element))
             {
-                return new Dictionary<string, object> { { "result", string.Empty } };
+                return new Dictionary<string, object> { { "result", content ?? string.Empty } };
             }
 
-            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
-            if (parsed != null) return parsed;
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                return _Serializer.DeserializeJson<Dictionary<string, object>>(element.GetRawText()) ?? new Dictionary<string, object>();
+            }
 
-            return new Dictionary<string, object> { { "result", json } };
+            return new Dictionary<string, object> { { "result", element } };
+        }
+
+        private static string? ReadThoughtSignature(Dictionary<string, object> part)
+        {
+            if (!part.ContainsKey(ThoughtSignatureKey)) return null;
+            string? value = part[ThoughtSignatureKey]?.ToString();
+            return string.IsNullOrEmpty(value) ? null : value;
+        }
+
+        private static bool IsToolResultMessage(ChatMessage message)
+        {
+            return string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(message.Role, "function", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsProviderCallId(string? id)
+        {
+            // Ids synthesized by this client were never issued by Gemini, so they are not sent back.
+            return !string.IsNullOrWhiteSpace(id) && !id.StartsWith(SyntheticCallIdPrefix, StringComparison.Ordinal);
+        }
+
+        private JsonElement ToJsonElement(object value)
+        {
+            using JsonDocument document = JsonDocument.Parse(_Serializer.SerializeJson(value, false));
+            return document.RootElement.Clone();
+        }
+
+        private static object SanitizeOpenApiSchema(JsonElement schema, string path, List<string> removed)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>();
+            if (schema.ValueKind != JsonValueKind.Object)
+            {
+                removed.Add(string.IsNullOrEmpty(path) ? "(non-object schema)" : path);
+                return result;
+            }
+
+            foreach (JsonProperty property in schema.EnumerateObject())
+            {
+                string key = property.Name;
+                string keyPath = string.IsNullOrEmpty(path) ? key : path + "." + key;
+                JsonElement value = property.Value;
+
+                if (key == "type" && value.ValueKind == JsonValueKind.Array)
+                {
+                    // ["string", "null"] becomes type string, nullable; a union of several types becomes anyOf.
+                    List<string> types = value.EnumerateArray()
+                        .Where(item => item.ValueKind == JsonValueKind.String)
+                        .Select(item => item.GetString()!)
+                        .ToList();
+                    if (types.Remove("null")) result["nullable"] = true;
+                    if (types.Count == 1)
+                    {
+                        result["type"] = types[0];
+                    }
+                    else if (types.Count > 1)
+                    {
+                        result["anyOf"] = types.Select(type => (object)new Dictionary<string, object> { { "type", type } }).ToList();
+                    }
+                }
+                else if (key == "const")
+                {
+                    result["enum"] = new List<object> { value };
+                }
+                else if (key == "properties" && value.ValueKind == JsonValueKind.Object)
+                {
+                    Dictionary<string, object> properties = new Dictionary<string, object>();
+                    foreach (JsonProperty child in value.EnumerateObject())
+                    {
+                        properties[child.Name] = SanitizeOpenApiSchema(child.Value, keyPath + "." + child.Name, removed);
+                    }
+                    result[key] = properties;
+                }
+                else if (key == "items" && value.ValueKind == JsonValueKind.Object)
+                {
+                    result[key] = SanitizeOpenApiSchema(value, keyPath, removed);
+                }
+                else if ((key == "anyOf" || key == "oneOf") && value.ValueKind == JsonValueKind.Array)
+                {
+                    List<object> options = new List<object>();
+                    int i = 0;
+                    foreach (JsonElement option in value.EnumerateArray())
+                    {
+                        options.Add(SanitizeOpenApiSchema(option, keyPath + "." + i, removed));
+                        i++;
+                    }
+                    result["anyOf"] = options;
+                }
+                else if (_OpenApiSchemaKeys.Contains(key) && key != "properties" && key != "items" && key != "anyOf")
+                {
+                    if (key == "enum" && value.ValueKind == JsonValueKind.Array)
+                    {
+                        // Gemini's enum is a list of strings.
+                        result[key] = value.EnumerateArray()
+                            .Where(item => item.ValueKind != JsonValueKind.Null)
+                            .Select(item => (object)(item.ValueKind == JsonValueKind.String ? item.GetString()! : item.GetRawText()))
+                            .ToList();
+                    }
+                    else
+                    {
+                        result[key] = value;
+                    }
+                }
+                else
+                {
+                    removed.Add(keyPath);
+                }
+            }
+
+            return result;
         }
 
         private static string ResolveToolResultName(ChatMessage message)
@@ -1135,9 +1325,10 @@ namespace PolyPrompt.Clients
 
         private static string NormalizeGeminiRole(string? role)
         {
+            // Gemini contents accept only the roles user and model; function responses travel in a user turn.
             if (string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase)) return "model";
-            if (string.Equals(role, "tool", StringComparison.OrdinalIgnoreCase)) return "function";
-            return string.IsNullOrWhiteSpace(role) ? "user" : role.ToLowerInvariant();
+            if (string.Equals(role, "model", StringComparison.OrdinalIgnoreCase)) return "model";
+            return "user";
         }
 
         private static bool IsToolChoiceNone(string? toolChoice)
@@ -1402,11 +1593,12 @@ namespace PolyPrompt.Clients
             }
             if (string.IsNullOrWhiteSpace(delta.Id))
             {
-                delta.Id = "gemini-call-" + index;
+                delta.Id = SyntheticCallIdPrefix + index;
             }
 
             delta.Type = "function";
             delta.Name = functionCall["name"]?.ToString() ?? string.Empty;
+            delta.ThoughtSignature = ReadThoughtSignature(part);
 
             if (functionCall.ContainsKey("args") && functionCall["args"] != null)
             {

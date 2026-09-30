@@ -1084,14 +1084,6 @@ namespace PolyPrompt.Clients
             return toolCall;
         }
 
-        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
-
-            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
-            return parsed ?? new Dictionary<string, object>();
-        }
-
         private static string NormalizeOllamaRole(string? role)
         {
             if (string.Equals(role, "model", StringComparison.OrdinalIgnoreCase)) return "assistant";

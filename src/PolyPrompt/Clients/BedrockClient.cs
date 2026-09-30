@@ -948,13 +948,6 @@ namespace PolyPrompt.Clients
             return "tool";
         }
 
-        private Dictionary<string, object> DeserializeDictionaryOrEmpty(string? json)
-        {
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
-            Dictionary<string, object>? parsed = _Serializer.DeserializeJson<Dictionary<string, object>>(json);
-            return parsed ?? new Dictionary<string, object>();
-        }
-
         private ConverseParseResult ParseConverseResponse(string responseBody)
         {
             ConverseParseResult parseResult = new ConverseParseResult();

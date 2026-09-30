@@ -1220,6 +1220,22 @@
             <param name="key">The key whose value is a nested object.</param>
             <returns>The nested object as a dictionary, or null.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.TryParseJson(System.String,System.Text.Json.JsonElement@)">
+            <summary>
+            Parse text as JSON without throwing.
+            </summary>
+            <param name="text">Text that may contain JSON.</param>
+            <param name="element">The parsed root element (detached from its document) when parsing succeeds.</param>
+            <returns>True when the text is a single valid JSON value; false when it is null, empty, or not JSON.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.DeserializeDictionaryOrEmpty(System.String)">
+            <summary>
+            Deserialize tool-call arguments into a JSON object dictionary without throwing. Arguments that are empty,
+            not valid JSON, or valid JSON that is not an object (an array, a scalar, or null) yield an empty dictionary.
+            </summary>
+            <param name="json">Tool-call arguments JSON.</param>
+            <returns>The arguments object, or an empty dictionary.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.NormalizeReasoning(System.String)">
             <summary>
             Normalizes a reasoning value: returns null for null/empty/whitespace, otherwise the value
@@ -1290,6 +1306,15 @@
         <member name="T:PolyPrompt.Clients.GeminiClient">
             <summary>
             Client for the Google Gemini API supporting chat completions, embeddings, and text generation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.GeminiClient.ToolSchemaMode">
+            <summary>
+            How tool parameter schemas are sent to Gemini.
+            Default: <see cref="F:PolyPrompt.Models.GeminiToolSchemaMode.JsonSchema"/>, which sends the schema unchanged (apart from a root
+            <c>$schema</c> keyword) in <c>parametersJsonSchema</c>, where Gemini accepts standard JSON Schema.
+            Use <see cref="F:PolyPrompt.Models.GeminiToolSchemaMode.OpenApiSubset"/> for endpoints that only accept the older
+            <c>parameters</c> field; the schema is then reduced to the OpenAPI subset Gemini accepts there.
             </summary>
         </member>
         <member name="M:PolyPrompt.Clients.GeminiClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
@@ -1877,6 +1902,32 @@
             <param name="token">Cancellation token.</param>
             <returns>True if the provider accepted the embeddings request, false otherwise.</returns>
             <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled.</exception>
+        </member>
+        <member name="T:PolyPrompt.Helpers.Serializer">
+            <summary>
+            JSON serializer used by PolyPrompt clients, built on System.Text.Json.
+            Untyped values (object, Dictionary&lt;string, object&gt;, List&lt;object&gt;) deserialize to <see cref="T:System.Text.Json.JsonElement"/>.
+            Null properties are omitted when writing (dictionary entries are always written), enums are written as strings,
+            and reads tolerate trailing commas, comments, and numbers written as strings.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.SerializeJson(System.Object,System.Boolean)">
+            <summary>
+            Serialize an object to JSON.
+            </summary>
+            <param name="obj">Object to serialize. A null object serializes to the JSON literal null.</param>
+            <param name="pretty">True to indent the output.</param>
+            <returns>JSON text.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.DeserializeJson``1(System.String)">
+            <summary>
+            Deserialize JSON text to an instance of the specified type.
+            </summary>
+            <typeparam name="T">Target type.</typeparam>
+            <param name="json">JSON text.</param>
+            <returns>The deserialized instance, or default when the JSON literal is null.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when json is null.</exception>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when json is not valid JSON or does not match the target type.</exception>
         </member>
         <member name="T:PolyPrompt.Models.ChatCompletionOptions">
             <summary>
@@ -2513,6 +2564,24 @@
             The embedding vector as an array of floats.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.GeminiToolSchemaMode">
+            <summary>
+            How the Gemini and Vertex AI clients send tool parameter schemas.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiToolSchemaMode.JsonSchema">
+            <summary>
+            Send the JSON Schema in <c>functionDeclarations[].parametersJsonSchema</c>, which accepts standard JSON Schema.
+            Only a root <c>$schema</c> keyword is removed.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiToolSchemaMode.OpenApiSubset">
+            <summary>
+            Send the schema in <c>functionDeclarations[].parameters</c>, reduced to the OpenAPI subset that field accepts.
+            Unsupported keywords are removed, <c>"type": ["x", "null"]</c> becomes <c>"type": "x", "nullable": true</c>,
+            <c>const</c> becomes a one-value <c>enum</c>, and <c>oneOf</c> becomes <c>anyOf</c>.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Models.GenerationOptions">
             <summary>
             Base options for text generation requests.
@@ -3091,6 +3160,15 @@
             Tool arguments as a JSON object string. Defaults to an empty JSON object.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ToolCall.ThoughtSignature">
+            <summary>
+            Opaque provider token that must be sent back, unchanged, when this tool call is replayed in conversation history.
+            Gemini 3 models attach a thought signature to the function calls they emit and reject a follow-up request whose
+            replayed function call is missing it. Populated by the Gemini and Vertex AI clients (native thoughtSignature)
+            and by the OpenAI client (Gemini's OpenAI-compatible extra_content.google.thought_signature); null otherwise.
+            Callers that persist conversations must store and restore this value along with the tool call.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Models.ToolCall.DeserializeArguments``1">
             <summary>
             Deserialize ArgumentsJson into a typed arguments object.
@@ -3132,6 +3210,11 @@
         <member name="P:PolyPrompt.Models.ToolCallDelta.ArgumentsJson">
             <summary>
             Complete JSON argument object for this tool call when the provider emits full arguments.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ToolCallDelta.ThoughtSignature">
+            <summary>
+            Opaque provider thought signature for this tool call, when the provider emits one. See <see cref="P:PolyPrompt.Models.ToolCall.ThoughtSignature"/>.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ToolChatRequest">

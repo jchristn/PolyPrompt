@@ -148,6 +148,11 @@ namespace Test.Shared
                     _RequestPaths.Add(path);
                 }
 
+                if (await LocalGeminiToolRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
+                {
+                    return;
+                }
+
                 if (await LocalExtendedRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
                 {
                     return;

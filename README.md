@@ -23,7 +23,7 @@ PolyPrompt is a lightweight, unified .NET library for chat completions, tool cal
 
 ## What It Does
 
-PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning ten different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability (VoyageAI and TEI have no chat API, Anthropic has no embeddings API, and only Cohere, TEI, VoyageAI, and Bedrock can rerank), so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library (two package dependencies total).
+PolyPrompt provides a single, consistent API surface for interacting with multiple LLM providers. Instead of learning ten different SDKs with different conventions, response formats, and streaming patterns, you use one set of methods that work identically across all supported providers. Not every provider offers every capability (VoyageAI and TEI have no chat API, Anthropic has no embeddings API, and only Cohere, TEI, VoyageAI, and Bedrock can rerank), so the [Provider Feature Support](#provider-feature-support) matrix is explicit about what each provider can do, and unsupported operations throw a clear `NotSupportedException` rather than faking a protocol. PolyPrompt takes **no provider SDK dependencies**; even AWS SigV4 request signing and Google service-account token exchange are implemented in-library, and JSON handling uses the built-in `System.Text.Json` (one package dependency total, for logging).
 
 - **Chat Completions** - Streaming and non-streaming conversational AI with system prompts
 - **Tool Calling** - Provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
@@ -68,7 +68,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **2.7.1**.
+Current documented package version: **2.8.0**.
 
 PolyPrompt targets both **.NET 8.0** and **.NET 10.0**.
 
@@ -450,6 +450,33 @@ Provider protocol shapes differ:
 - **Ollama** uses `/api/chat` newline-delimited JSON chunks and parses streamed `message.tool_calls`.
 - **Gemini** uses `models/{model}:streamGenerateContent?alt=sse` with the same `GenerateContentRequest` body shape as `ToolChatAsync`: `contents`, optional `systemInstruction`, `tools.functionDeclarations`, and `toolConfig`. It parses streamed `GenerateContentResponse` chunks from `candidates[].content.parts[]`, including `text`, complete `functionCall` objects, `finishReason`, `responseId`, `modelVersion`, and `usageMetadata`.
 - **Anthropic** uses `/v1/messages` with `"stream": true` and parses the event-typed SSE stream: `message_start` (id, model, input tokens), `content_block_start` for `text`, `thinking`, and `tool_use` blocks, `content_block_delta` carrying `text_delta`, `thinking_delta`, and `input_json_delta` fragments, and `message_delta` (stop reason, output tokens). Tool declarations use `tools[].input_schema`, and tool results are sent back as user-role `tool_result` content blocks; consecutive tool results merge into a single user turn so parallel tool calls resolve together.
+
+### Gemini Tool Calling Notes
+
+These rules apply to `GeminiClient` and `VertexAiClient`, and the thought-signature rule also applies to `OpenAiClient` when it points at Gemini's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`).
+
+- **Thought signatures.** Gemini 3 models attach an opaque `thoughtSignature` to the function calls they emit and reject the follow-up request (HTTP 400, "Function call is missing a thought_signature") if a replayed call has lost it. PolyPrompt captures the signature into `ToolCall.ThoughtSignature` (native `thoughtSignature` beside `functionCall`, or `extra_content.google.thought_signature` on the OpenAI-compatible endpoint, streaming and non-streaming) and sends it back unchanged. `ToAssistantMessage()` keeps it, so the loop above works as written.
+- **If you persist conversations, persist `ToolCall.ThoughtSignature` too.** Store it with each tool call and restore it when you rebuild the `ChatMessage` list, or the next Gemini 3 turn will fail.
+- **History without signatures.** When a replayed assistant turn has no signature at all (it came from another provider, an older PolyPrompt, or was built by hand), the Gemini clients put Google's documented `skip_thought_signature_validator` placeholder on the turn's first function call. Turns that carry a real signature are sent exactly as received; for parallel calls Gemini signs only the first, and PolyPrompt never invents signatures for the others. `OpenAiClient` never adds the placeholder and only emits `extra_content` when a signature exists, so requests to OpenAI and other compatible servers are unchanged.
+- **Tool results.** Tool results are sent as `functionResponse` parts in a `user` turn (Gemini accepts only `user` and `model` roles), and consecutive tool results merge into one turn. `functionResponse.id` carries the matching call id when Gemini issued one. Tool-result content can be anything: a JSON object is sent as the response; a JSON array or scalar is wrapped as `{"result": <value>}` with its structure kept; empty or non-JSON text is wrapped as `{"result": "<text>"}`. Tool-call arguments that are not a JSON object are sent as `{}`. None of these throw.
+- **Tool schemas.** By default (`ToolSchemaMode = GeminiToolSchemaMode.JsonSchema`) tool schemas go in `functionDeclarations[].parametersJsonSchema`, which accepts standard JSON Schema, so keywords such as `additionalProperties`, `const`, `$defs`, or vendor extensions no longer fail the whole request. Only a root `$schema` keyword is removed. For endpoints that only accept the older `parameters` field, set `ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset`: the schema is reduced to the OpenAPI subset that field accepts (unsupported keys are removed and logged at debug level, `"type": ["string", "null"]` becomes `"type": "string", "nullable": true`, `const` becomes a one-value `enum`, and `oneOf` becomes `anyOf`). A tool with an empty parameter dictionary is declared without parameters.
+
+```csharp
+using GeminiClient gemini = new GeminiClient(apiKey: "your-google-api-key");
+gemini.Model = "gemini-3.5-flash";
+// gemini.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset; // only for endpoints without parametersJsonSchema
+
+ToolChatResponse turn = await gemini.ToolChatAsync(request);
+request.Messages.Add(turn.ToAssistantMessage());   // keeps ToolCall.ThoughtSignature
+
+foreach (ToolCall call in turn.ToolCalls)
+{
+    // Arrays, scalars, and plain text are all valid tool results.
+    request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "[{\"city\":\"Seattle\",\"temperature\":72}]"));
+}
+
+ToolChatResponse answer = await gemini.ToolChatAsync(request);
+```
 
 ### Reasoning Effort
 
@@ -1007,7 +1034,7 @@ Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`Environme
 
 `AnthropicClient` adds three provider-specific properties: `AnthropicVersion` (the `anthropic-version` header value, default `2023-06-01`), `WorkspaceId` (the `anthropic-workspace-id` header, default null; required for identity-linked API keys), and `ModelsPageLimit` (models list page size, 1..1,000, default 1,000). `AzureOpenAiClient` adds `ApiVersion` (the `api-version` query value, default `2024-10-21`).
 
-`CohereClient` adds `EmbeddingModel` (default `embed-v4.0`), `RerankModel` (default `rerank-v3.5`), `ClassificationModel` (default null, which lets Cohere pick its default model for few-shot examples), and `ModelsPageSize` (1..1,000, default 1,000). `VoyageAiClient` adds `RerankModel` (default `rerank-2.5`), and `BedrockClient` adds `RerankModel` (default `cohere.rerank-v3-5:0`; `amazon.rerank-v1:0` also works). `TeiClient` has no extra properties because the server decides the model.
+`CohereClient` adds `EmbeddingModel` (default `embed-v4.0`), `RerankModel` (default `rerank-v3.5`), `ClassificationModel` (default null, which lets Cohere pick its default model for few-shot examples), and `ModelsPageSize` (1..1,000, default 1,000). `VoyageAiClient` adds `RerankModel` (default `rerank-2.5`), and `BedrockClient` adds `RerankModel` (default `cohere.rerank-v3-5:0`; `amazon.rerank-v1:0` also works). `TeiClient` has no extra properties because the server decides the model. `GeminiClient` (and so `VertexAiClient`) adds `ToolSchemaMode` (default `GeminiToolSchemaMode.JsonSchema`; see [Gemini Tool Calling Notes](#gemini-tool-calling-notes)).
 
 ### Client Methods
 
@@ -1042,8 +1069,9 @@ Credential providers live in `PolyPrompt.Auth`: `StaticAwsCredential`/`Environme
 | `ReasoningEffort` | Provider-neutral reasoning effort: a `ReasoningEffortLevel` plus clamped per-provider overrides and projection methods |
 | `ChatMessage` | Represents system, user, assistant, and tool-result messages |
 | `ToolDefinition` | Declares a callable function with a JSON Schema parameter object |
-| `ToolCall` | Represents a model-requested tool name and JSON arguments |
-| `ToolCallDelta` | Represents a streamed update to a tool call ID, name, type, or argument JSON |
+| `ToolCall` | Represents a model-requested tool name and JSON arguments, plus the provider's opaque `ThoughtSignature` (Gemini 3) that must be sent back unchanged |
+| `ToolCallDelta` | Represents a streamed update to a tool call ID, name, type, argument JSON, or thought signature |
+| `GeminiToolSchemaMode` | Chooses how Gemini and Vertex AI send tool schemas: `JsonSchema` (`parametersJsonSchema`, default) or `OpenApiSubset` (sanitized `parameters`) |
 | `ToolChatResponse` | Contains assistant text, tool calls, status, timing, and finish metadata |
 | `ToolChatStreamingChunk` | Contains streamed assistant text, tool-call deltas, finish metadata, and usage |
 | `ToolChatStreamingResponse` | Contains streamed chunks plus accumulated assistant text, final tool calls, status, timing, and finish metadata |
@@ -1135,6 +1163,7 @@ PolyPrompt/
 |   |-- PolyPrompt/              # Core library (NuGet package)
 |   |   |-- Auth/                # SigV4 signing and OAuth / AWS credential providers
 |   |   |-- Clients/             # CompletionClientBase and one client per provider
+|   |   |-- Helpers/             # JSON serializer (System.Text.Json)
 |   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request/response data models
 |   |   `-- Options/             # Provider-specific option classes

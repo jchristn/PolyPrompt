@@ -2,7 +2,7 @@ namespace Test.Shared
 {
     internal static class LocalRequestParser
     {
-        private static readonly SerializationHelper.Serializer _Serializer = new SerializationHelper.Serializer();
+        private static readonly PolyPrompt.Helpers.Serializer _Serializer = new PolyPrompt.Helpers.Serializer();
 
         public static LocalOpenAiChatRequest? DeserializeOpenAiChatRequest(string requestBody)
         {
