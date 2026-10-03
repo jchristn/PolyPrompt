@@ -54,10 +54,12 @@ builder.Services.AddOpenTelemetry()
 
 | Name | Type | Version |
 |------|------|---------|
-| `PolyPrompt` | `Meter` | the package version, for example `3.1.0` |
+| `PolyPrompt` | `Meter` | the package version, for example `3.1.1` |
 | `PolyPrompt` | `ActivitySource` | the package version |
 
 These names, every metric name, every attribute key, and every bounded attribute value are public contract, defined in `PolyPrompt.Telemetry.PolyPromptTelemetryNames`. They change only in a major version.
+
+The `LoggingModule` PolyPrompt logs through (SyslogLogging 2.3 and later) emits its own metrics and spans on a separate `Meter` and `ActivitySource` named `SyslogLogging` (`SyslogLogging.SyslogLoggingTelemetry`). Subscribing to `PolyPrompt` does not pick them up; add those names too if you want them.
 
 ## Configuration
 

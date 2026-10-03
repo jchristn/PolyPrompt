@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>3.1.0</Version>
+    <Version>3.1.1</Version>
     <Authors>Joel Christner</Authors>
     <Company>Joel Christner</Company>
     <Copyright>(c)2026 Joel Christner</Copyright>
@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SyslogLogging" Version="2.2.1" />
+    <PackageReference Include="SyslogLogging" Version="2.3.1" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,18 @@
 # Changelog
 
+## v3.1.1 (2026-10-03)
+
+Dependency update. No public API changes.
+
+### Changed
+
+- `SyslogLogging` 2.2.1 -> 2.3.1. SyslogLogging now emits its own metrics and traces on a BCL `Meter` and `ActivitySource` named `SyslogLogging`, separate from PolyPrompt's `PolyPrompt` names, and `LoggingModule.DisposeAsync` now stops the log retention timer.
+- Test dependencies: `Touchstone.Core`, `Touchstone.Cli`, `Touchstone.XunitAdapter`, and `Touchstone.NunitAdapter` 0.1.12 -> 0.2.0; `NUnit` 4.6.1 -> 5.0.0; `NUnit.Analyzers` 4.14.0 -> 4.15.0; `NUnit3TestAdapter` 6.2.0 -> 6.3.0; `Microsoft.NET.Test.Sdk` 18.9.0 -> 18.10.1; `coverlet.collector` 10.0.1 -> 10.1.0.
+
+### Added
+
+- Telemetry test case `tel_logging_isolation`: with a subscribed, injected `LoggingModule`, SyslogLogging's instruments and spans stay on its own meter and source, PolyPrompt still emits exactly its documented telemetry, and the module disposes asynchronously.
+
 ## v3.1.0 (2026-10-03)
 
 Adds production observability. Backward compatible: no public API is removed or changed.

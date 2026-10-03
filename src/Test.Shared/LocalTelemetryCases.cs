@@ -6,6 +6,7 @@ namespace Test.Shared
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
     using PolyPrompt.Telemetry;
+    using SyslogLogging;
     using Touchstone.Core;
     using N = PolyPrompt.Telemetry.PolyPromptTelemetryNames;
 
@@ -38,6 +39,7 @@ namespace Test.Shared
                 Case(suiteId, "tel_model_ops", "Model existence, information, pull, delete, and connectivity emit operation spans with HTTP children and failure outcomes", RunModelOpsAsync),
                 Case(suiteId, "tel_provider_labels", "Every client reports its documented provider label on its spans", RunProviderLabelsAsync),
                 Case(suiteId, "tel_gauges", "The active clients, active operations, and active HTTP request gauges track live work", RunGaugesAsync),
+                Case(suiteId, "tel_logging_isolation", "SyslogLogging's own meter and activity source stay separate from PolyPrompt's when both are subscribed", RunLoggingIsolationAsync),
             };
         }
 
@@ -623,6 +625,66 @@ namespace Test.Shared
 
             SharedAssert.True(LatestGauge(capture, N.ActiveOperations, N.Provider, "openai", N.Operation, "chat_stream") < activeOps, "The active operation gauge should drop when the stream ends.");
             SharedAssert.True(LatestGauge(capture, N.HttpActiveRequests, N.Provider, "openai", N.HttpMethod, "POST") < activeRequests, "The active request gauge should drop when the stream ends.");
+        }
+
+        #endregion
+
+        #region Logging
+
+        private static async Task RunLoggingIsolationAsync(CancellationToken token)
+        {
+            SharedAssert.True(SyslogLoggingTelemetry.MeterName != N.MeterName, "SyslogLogging and PolyPrompt must use different meter names.");
+            SharedAssert.True(SyslogLoggingTelemetry.ActivitySourceName != N.ActivitySourceName, "SyslogLogging and PolyPrompt must use different activity source names.");
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            LoggingModule logging = new LoggingModule();
+            logging.Settings.EnableConsole = false;
+            logging.Settings.EnableMetrics = true;
+            logging.Settings.EnableTracing = true;
+
+            List<string> loggingInstruments = new List<string>();
+            List<Activity> loggingSpans = new List<Activity>();
+            using MeterListener loggingMeters = new MeterListener();
+            loggingMeters.InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name != SyslogLoggingTelemetry.MeterName) return;
+                lock (loggingInstruments) loggingInstruments.Add(instrument.Name);
+                listener.EnableMeasurementEvents(instrument);
+            };
+            loggingMeters.Start();
+            using ActivityListener loggingSources = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == SyslogLoggingTelemetry.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> options) => ActivitySamplingResult.AllDataAndRecorded,
+                ActivityStopped = activity => { lock (loggingSpans) loggingSpans.Add(activity); },
+            };
+            ActivitySource.AddActivityListener(loggingSources);
+
+            using (TelemetryCapture capture = new TelemetryCapture("tel_logging_isolation"))
+            {
+                using (OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key", logging))
+                {
+                    client.Model = UniqueModel("logging");
+                    client.TimeoutMs = 3000;
+
+                    await logging.InfoAsync("tel_logging_isolation entry").ConfigureAwait(false);
+                    ChatResponse chat = await client.ChatAsync("ping", token: token).ConfigureAwait(false);
+                    SharedAssert.True(chat.Success && chat.Text == "pong", "A chat with an injected, subscribed logging module should succeed.");
+                }
+
+                SharedAssert.Equal(1, capture.Spans("openai chat").Count, "PolyPrompt should emit exactly one chat span.");
+                SharedAssert.True(capture.Spans().All(a => a.Source.Name == N.ActivitySourceName), "Only PolyPrompt spans should be captured on the PolyPrompt source.");
+                SharedAssert.True(capture.Instruments.All(name => !loggingInstruments.Contains(name)), "No SyslogLogging instrument should be published on the PolyPrompt meter.");
+            }
+
+            lock (loggingInstruments) SharedAssert.True(loggingInstruments.Count > 0, "SyslogLogging should publish its own instruments on the SyslogLogging meter.");
+            lock (loggingSpans)
+            {
+                SharedAssert.True(loggingSpans.Count > 0, "SyslogLogging should emit its own spans on the SyslogLogging activity source.");
+                SharedAssert.True(loggingSpans.All(a => a.Source.Name == SyslogLoggingTelemetry.ActivitySourceName), "SyslogLogging spans should come only from its own source.");
+            }
+
+            await logging.DisposeAsync().ConfigureAwait(false);
         }
 
         #endregion

@@ -71,7 +71,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.1.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.1.1**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -817,7 +817,7 @@ What you get:
 - Decision batch queue wait (a `stage:queued` span per item), queued and in-flight gauges, and questions by type.
 - OAuth token refresh duration, failures, and cache hits and misses; live client counts; and build info.
 
-Labels are bounded (no ids or prompts), and no prompts, bodies, or credentials are recorded. [TELEMETRY.md](TELEMETRY.md) has the full metrics and spans catalog, PromQL alerts, and a Grafana dashboard map.
+Labels are bounded (no ids or prompts), and no prompts, bodies, or credentials are recorded. The `LoggingModule` from SyslogLogging 2.3+ emits its own telemetry on a separate `SyslogLogging` meter and activity source; subscribe to `SyslogLoggingTelemetry.MeterName` and `SyslogLoggingTelemetry.ActivitySourceName` as well if you want logging metrics and spans. [TELEMETRY.md](TELEMETRY.md) has the full metrics and spans catalog, PromQL alerts, and a Grafana dashboard map.
 
 ### Cancellation and Timeouts
 
