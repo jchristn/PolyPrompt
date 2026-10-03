@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Net.Http.Headers;
     using System.Text.Json;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -69,30 +70,33 @@ namespace PolyPrompt.Clients
         /// <returns>True when the provider accepted the request.</returns>
         public override async Task<bool> ValidateConnectivityAsync(CancellationToken token = default)
         {
-            try
+            return await InstrumentBoolAsync(PolyPromptTelemetryNames.OperationValidateConnectivity, null, async () =>
             {
-                HttpCallResult models = await GetAndRecordAsync(BuildUrl("/v1/models"), token).ConfigureAwait(false);
-                if (models.IsSuccessStatusCode) return true;
-                if (models.StatusCode != 404) return false;
-
-                DecisionRequest probe = new DecisionRequest
+                try
                 {
-                    State = "ping",
-                    Questions = { DecisionQuestion.Binary("reachable", "Is this a test message?") }
-                };
+                    HttpCallResult models = await GetAndRecordAsync(BuildUrl("/v1/models"), token).ConfigureAwait(false);
+                    if (models.IsSuccessStatusCode) return true;
+                    if (models.StatusCode != 404) return false;
 
-                DecisionResponse response = await DecideAsync(probe, null, token).ConfigureAwait(false);
-                return response.Success;
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
-                return false;
-            }
+                    DecisionRequest probe = new DecisionRequest
+                    {
+                        State = "ping",
+                        Questions = { DecisionQuestion.Binary("reachable", "Is this a test message?") }
+                    };
+
+                    DecisionResponse response = await DecideAsync(probe, null, token).ConfigureAwait(false);
+                    return response.Success;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
+                    return false;
+                }
+            }, token).ConfigureAwait(false);
         }
 
         #endregion

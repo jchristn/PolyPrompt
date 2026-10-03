@@ -4,6 +4,7 @@ namespace PolyPrompt.Clients
     using System.Runtime.CompilerServices;
     using System.Text;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -123,67 +124,78 @@ namespace PolyPrompt.Clients
         {
             if (string.IsNullOrWhiteSpace(model)) throw new ArgumentNullException(nameof(model));
 
-            string url = BuildUrl("/api/pull");
-            string json = _Serializer.SerializeJson(new Dictionary<string, object> { { "name", model }, { "stream", true } }, false);
-
-            _Logging.Debug(_Header + "POST " + url + " (pull " + model + ")");
-
-            try
+            return await InstrumentBoolAsync(PolyPromptTelemetryNames.OperationModelPull, model, async () =>
             {
-                using CancellationTokenSource timeoutCts = new CancellationTokenSource(_PullTimeout);
-                using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
+                string url = BuildUrl("/api/pull");
+                string json = _Serializer.SerializeJson(new Dictionary<string, object> { { "name", model }, { "stream", true } }, false);
 
-                using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-                await PrepareRequestAsync(request, Encoding.UTF8.GetBytes(json), linkedCts.Token).ConfigureAwait(false);
+                _Logging.Debug(_Header + "POST " + url + " (pull " + model + ")");
+                HttpCallScope? http = null;
 
-                using HttpResponseMessage response = await _HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
-
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    string errorBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
-                    _Logging.Warn(_Header + "pull request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                    using CancellationTokenSource timeoutCts = new CancellationTokenSource(_PullTimeout);
+                    using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
+
+                    using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                    byte[] body = Encoding.UTF8.GetBytes(json);
+                    await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
+                    http = HttpCallScope.Start(TelemetryProvider, "POST", url, body.Length);
+
+                    using HttpResponseMessage response = await _HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+                    http?.SetStatus((int)response.StatusCode);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string errorBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
+                        http?.End();
+                        _Logging.Warn(_Header + "pull request failed with status " + (int)response.StatusCode + ": " + errorBody);
+                        return false;
+                    }
+
+                    using Stream stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
+                    using StreamReader reader = new StreamReader(stream);
+
+                    bool success = false;
+                    string? line;
+                    while ((line = await reader.ReadLineAsync(linkedCts.Token).ConfigureAwait(false)) != null)
+                    {
+                        linkedCts.Token.ThrowIfCancellationRequested();
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+
+                        Dictionary<string, object>? chunk = TryDeserializeObject(line);
+                        if (chunk == null) continue;
+
+                        string status = chunk.ContainsKey("status") ? chunk["status"]?.ToString() ?? "" : "";
+                        if (string.Equals(status, "success", StringComparison.OrdinalIgnoreCase)) success = true;
+
+                        if (progress != null)
+                        {
+                            ModelPullProgress update = new ModelPullProgress();
+                            update.Status = status;
+                            update.Digest = chunk.ContainsKey("digest") ? chunk["digest"]?.ToString() : null;
+                            update.TotalBytes = TryGetLong(chunk, "total");
+                            update.CompletedBytes = TryGetLong(chunk, "completed");
+                            await progress(update).ConfigureAwait(false);
+                        }
+                    }
+
+                    http?.End();
+                    return success;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    http?.Fail(ex, token);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    http?.Fail(ex, token);
+                    _Logging.Warn(_Header + "pull request failed: " + ex.Message);
                     return false;
                 }
-
-                using Stream stream = await response.Content.ReadAsStreamAsync(linkedCts.Token).ConfigureAwait(false);
-                using StreamReader reader = new StreamReader(stream);
-
-                bool success = false;
-                string? line;
-                while ((line = await reader.ReadLineAsync(linkedCts.Token).ConfigureAwait(false)) != null)
-                {
-                    linkedCts.Token.ThrowIfCancellationRequested();
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    Dictionary<string, object>? chunk = TryDeserializeObject(line);
-                    if (chunk == null) continue;
-
-                    string status = chunk.ContainsKey("status") ? chunk["status"]?.ToString() ?? "" : "";
-                    if (string.Equals(status, "success", StringComparison.OrdinalIgnoreCase)) success = true;
-
-                    if (progress != null)
-                    {
-                        ModelPullProgress update = new ModelPullProgress();
-                        update.Status = status;
-                        update.Digest = chunk.ContainsKey("digest") ? chunk["digest"]?.ToString() : null;
-                        update.TotalBytes = TryGetLong(chunk, "total");
-                        update.CompletedBytes = TryGetLong(chunk, "completed");
-                        await progress(update).ConfigureAwait(false);
-                    }
-                }
-
-                return success;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _Logging.Warn(_Header + "pull request failed: " + ex.Message);
-                return false;
-            }
+            }, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -199,28 +211,31 @@ namespace PolyPrompt.Clients
         {
             if (string.IsNullOrWhiteSpace(model)) throw new ArgumentNullException(nameof(model));
 
-            string url = BuildUrl("/api/delete");
-            string json = _Serializer.SerializeJson(new Dictionary<string, object> { { "model", model } }, false);
-
-            _Logging.Debug(_Header + "DELETE " + url + " (model " + model + ")");
-
-            try
+            return await InstrumentBoolAsync(PolyPromptTelemetryNames.OperationModelDelete, model, async () =>
             {
-                HttpCallResult result = await DeleteAndRecordAsync(url, json, token).ConfigureAwait(false);
-                if (result.IsSuccessStatusCode) return true;
+                string url = BuildUrl("/api/delete");
+                string json = _Serializer.SerializeJson(new Dictionary<string, object> { { "model", model } }, false);
 
-                _Logging.Warn(_Header + "delete request failed with status " + result.StatusCode + ": " + result.ResponseBody);
-                return false;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _Logging.Warn(_Header + "delete request failed: " + ex.Message);
-                return false;
-            }
+                _Logging.Debug(_Header + "DELETE " + url + " (model " + model + ")");
+
+                try
+                {
+                    HttpCallResult result = await DeleteAndRecordAsync(url, json, token).ConfigureAwait(false);
+                    if (result.IsSuccessStatusCode) return true;
+
+                    _Logging.Warn(_Header + "delete request failed with status " + result.StatusCode + ": " + result.ResponseBody);
+                    return false;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + "delete request failed: " + ex.Message);
+                    return false;
+                }
+            }, token).ConfigureAwait(false);
         }
 
         #endregion

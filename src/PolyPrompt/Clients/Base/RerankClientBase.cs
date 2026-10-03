@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -95,7 +96,8 @@ namespace PolyPrompt.Clients
             if (RequiresModel && string.IsNullOrWhiteSpace(model))
                 throw new InvalidOperationException("No model is configured. Set Model or pass a model in the options.");
 
-            RerankResponse response = await RerankCoreAsync(query, documents, model, topN, options, token).ConfigureAwait(false);
+            RerankResponse response = await InstrumentAsync(PolyPromptTelemetryNames.OperationRerank, model, s => s.RecordBatchSize(documents.Count),
+                () => RerankCoreAsync(query, documents, model, topN, options, token), token).ConfigureAwait(false);
             if (response.Success) FinalizeResults(response, documents, topN, returnDocuments);
             return response;
         }

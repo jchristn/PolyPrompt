@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -63,7 +64,9 @@ namespace PolyPrompt.Clients
         public Task<EmbeddingResponse> EmbedAsync(string input, EmbeddingOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(input);
-            return EmbedSingleCoreAsync(input, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationEmbed, model, s => s.RecordBatchSize(1),
+                () => EmbedSingleCoreAsync(input, model, options, token), token);
         }
 
         /// <summary>
@@ -79,7 +82,9 @@ namespace PolyPrompt.Clients
         public Task<EmbeddingResponse> EmbedAsync(List<string> inputs, EmbeddingOptions? options = null, CancellationToken token = default)
         {
             ValidateInputList(inputs, nameof(inputs), "Embedding requests require at least one input.");
-            return EmbedCoreAsync(inputs, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationEmbed, model, s => s.RecordBatchSize(inputs.Count),
+                () => EmbedCoreAsync(inputs, model, options, token), token);
         }
 
         #endregion

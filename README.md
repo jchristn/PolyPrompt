@@ -39,6 +39,7 @@ PolyPrompt gives you one consistent API per capability. A chat call looks the sa
 - **Connectivity validation**: verify each client's endpoint and credentials before running workloads
 - **Timing and usage metrics**: time-to-first-token, tokens per second, and provider-reported token usage, including cached, cache-write, and reasoning tokens where reported
 - **Call recording**: every HTTP call is recorded with full request and response details for debugging and auditing
+- **Observability**: OpenTelemetry-shaped metrics and traces for every operation, outbound request, stream, decision batch, and credential refresh, emitted through the BCL `Meter` and `ActivitySource` named `PolyPrompt` with no exporter dependency (see [TELEMETRY.md](TELEMETRY.md))
 - **Settings that compose**: client-wide `Defaults` plus per-call options, merged field by field, with provider-specific options that extend the common ones
 
 ## Use Cases
@@ -70,7 +71,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.0.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.1.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -790,6 +791,34 @@ client.ClearCallDetails();
 
 Call details record the request headers, which include credentials; treat them as sensitive.
 
+### Telemetry (Metrics and Traces)
+
+Every client emits metrics and traces through the BCL `Meter` and `ActivitySource` named `PolyPrompt`. PolyPrompt takes no OpenTelemetry or exporter dependency and records nothing until your application subscribes a collector, so its cost when unused is a few boolean checks per call. Subscribe with Radiant, the OpenTelemetry SDK, or any `MeterListener` / `ActivityListener`:
+
+```csharp
+// Radiant (in your application)
+RadiantSettings settings = new RadiantSettings("my-service");
+settings.Sources.AddMeter(PolyPromptTelemetryNames.MeterName);           // "PolyPrompt"
+settings.Sources.AddActivitySource(PolyPromptTelemetryNames.ActivitySourceName);
+using RadiantHost host = RadiantHost.Start(settings);
+
+// OpenTelemetry SDK
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(m => m.AddMeter(PolyPromptTelemetryNames.MeterName))
+    .WithTracing(t => t.AddSource(PolyPromptTelemetryNames.ActivitySourceName));
+```
+
+What you get:
+
+- A client span per operation (`openai chat`, `aws.bedrock embed`, `typesafe decide_batch`) with OpenTelemetry GenAI attributes (model, max tokens, token usage, finish reason, response id), nested under your current span, plus a child span per HTTP request (`POST`) that propagates W3C `traceparent` to the provider.
+- Operation duration and outcome by provider, capability, operation, and `error.type` (HTTP status, `timeout`, `invalid_response`, or exception type); the GenAI semantic-convention `gen_ai.client.operation.duration` and `gen_ai.client.token.usage`; token counters including cached, cache-write, and reasoning tokens.
+- Streaming time to first chunk and chunk counts; a streaming span stays open until the stream ends and records `abandoned` if the caller stops early.
+- Per-provider HTTP request duration, status codes, body sizes, and in-flight requests.
+- Decision batch queue wait (a `stage:queued` span per item), queued and in-flight gauges, and questions by type.
+- OAuth token refresh duration, failures, and cache hits and misses; live client counts; and build info.
+
+Labels are bounded (no ids or prompts), and no prompts, bodies, or credentials are recorded. [TELEMETRY.md](TELEMETRY.md) has the full metrics and spans catalog, PromQL alerts, and a Grafana dashboard map.
+
 ### Cancellation and Timeouts
 
 ```csharp
@@ -958,6 +987,7 @@ PolyPrompt/
 |   |   |   |-- Base/            # ClientBase and the seven capability bases
 |   |   |   `-- <Provider>/      # One folder per provider: capability clients and a shared protocol helper
 |   |   |-- Helpers/             # JSON serializer (System.Text.Json)
+|   |   |-- Telemetry/           # Meter, ActivitySource, and the stable telemetry names (PolyPromptTelemetryNames)
 |   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request, response, and base options models
 |   |   `-- Options/             # Provider-specific options
@@ -986,7 +1016,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (215 cases) runs against an in-process mock server and needs no credentials:
+The local suite (231 cases, including the telemetry cases) runs against an in-process mock server and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest

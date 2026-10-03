@@ -2,12 +2,14 @@ namespace PolyPrompt.Auth
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Net.Http;
     using System.Security.Cryptography;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using PolyPrompt.Helpers;
+    using PolyPrompt.Telemetry;
 
     /// <summary>
     /// Supplies a short-lived OAuth bearer token per request. Used by providers whose credentials expire and
@@ -75,15 +77,24 @@ namespace PolyPrompt.Auth
         /// <inheritdoc />
         public async Task<string> GetBearerTokenAsync(CancellationToken token = default)
         {
-            if (IsCurrent()) return _CachedToken!;
+            if (IsCurrent())
+            {
+                RecordLookup(true);
+                return _CachedToken!;
+            }
 
             await _RefreshLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
                 // Re-check inside the lock: another caller may have refreshed while we waited.
-                if (IsCurrent()) return _CachedToken!;
+                if (IsCurrent())
+                {
+                    RecordLookup(true);
+                    return _CachedToken!;
+                }
 
-                TokenResult result = await FetchTokenAsync(token).ConfigureAwait(false);
+                RecordLookup(false);
+                TokenResult result = await FetchTokenObservedAsync(token).ConfigureAwait(false);
                 if (string.IsNullOrEmpty(result.AccessToken))
                     throw new InvalidOperationException("Credential provider returned an empty access token.");
 
@@ -135,6 +146,93 @@ namespace PolyPrompt.Auth
         private bool IsCurrent()
         {
             return _CachedToken != null && DateTime.UtcNow < _ExpiresAtUtc - _RefreshMargin;
+        }
+
+        private void RecordLookup(bool hit)
+        {
+            if (!PolyPromptTelemetry.CredentialCacheLookups.Enabled) return;
+            try
+            {
+                TagList tags = new TagList
+                {
+                    { PolyPromptTelemetryNames.CredentialSource, PolyPromptTelemetry.ResolveCredentialSource(GetType()) },
+                    { PolyPromptTelemetryNames.CacheResult, hit ? "hit" : "miss" },
+                };
+                PolyPromptTelemetry.SafeAdd(PolyPromptTelemetry.CredentialCacheLookups, 1, tags);
+            }
+            catch
+            {
+            }
+        }
+
+        private async Task<TokenResult> FetchTokenObservedAsync(CancellationToken token)
+        {
+            if (!PolyPromptTelemetry.IsEnabled) return await FetchTokenAsync(token).ConfigureAwait(false);
+
+            string source = PolyPromptTelemetry.ResolveCredentialSource(GetType());
+            long start = Stopwatch.GetTimestamp();
+            Activity? span = null;
+            try
+            {
+                span = PolyPromptTelemetry.Source.StartActivity(source + " token", ActivityKind.Client);
+                span?.SetTag(PolyPromptTelemetryNames.CredentialSource, source);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                TokenResult result = await FetchTokenAsync(token).ConfigureAwait(false);
+                RecordRefresh(source, start, span, PolyPromptTelemetryNames.OutcomeSuccess, null, null);
+                return result;
+            }
+            catch (OperationCanceledException ex)
+            {
+                bool cancelled = token.IsCancellationRequested;
+                RecordRefresh(source, start, span,
+                    cancelled ? PolyPromptTelemetryNames.OutcomeCancelled : PolyPromptTelemetryNames.OutcomeTimeout,
+                    cancelled ? null : PolyPromptTelemetryNames.ErrorTimeout, cancelled ? null : ex);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                RecordRefresh(source, start, span, PolyPromptTelemetryNames.OutcomeError, ex.GetType().FullName ?? ex.GetType().Name, ex);
+                throw;
+            }
+        }
+
+        private static void RecordRefresh(string source, long start, Activity? span, string outcome, string? errorType, Exception? ex)
+        {
+            try
+            {
+                double seconds = Stopwatch.GetElapsedTime(start).TotalSeconds;
+                TagList tags = new TagList
+                {
+                    { PolyPromptTelemetryNames.CredentialSource, source },
+                    { PolyPromptTelemetryNames.Outcome, outcome },
+                };
+                if (errorType != null) tags.Add(PolyPromptTelemetryNames.ErrorType, errorType);
+                PolyPromptTelemetry.SafeRecord(PolyPromptTelemetry.CredentialRefreshDuration, seconds, tags);
+                PolyPromptTelemetry.SafeAdd(PolyPromptTelemetry.CredentialRefreshes, 1, tags);
+
+                if (span == null) return;
+                span.SetTag(PolyPromptTelemetryNames.Outcome, outcome);
+                if (errorType != null)
+                {
+                    span.SetTag(PolyPromptTelemetryNames.ErrorType, errorType);
+                    span.SetStatus(ActivityStatusCode.Error, errorType);
+                }
+                else if (outcome == PolyPromptTelemetryNames.OutcomeSuccess)
+                {
+                    span.SetStatus(ActivityStatusCode.Ok);
+                }
+                if (ex != null) PolyPromptTelemetry.RecordException(span, ex);
+                span.Stop();
+            }
+            catch
+            {
+            }
         }
 
         #endregion

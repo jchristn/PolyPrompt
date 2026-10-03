@@ -554,6 +554,11 @@
             </summary>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown when set to a negative value.</exception>
         </member>
+        <member name="P:PolyPrompt.Clients.ClientBase.TelemetryProvider">
+            <summary>
+            Bounded provider label used on telemetry, for example <c>openai</c> or <c>aws.bedrock</c>.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.ClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
             <summary>
             Initialize a new client.
@@ -897,6 +902,55 @@
             </summary>
             <param name="result">HTTP result.</param>
             <returns>A message that includes the status code and response body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClientBase.InstrumentAsync``1(System.String,System.String,System.Action{PolyPrompt.Telemetry.OperationScope},System.Func{System.Threading.Tasks.Task{``0}},System.Threading.CancellationToken)">
+            <summary>
+            Run an operation that returns a response inside a telemetry scope (span plus metrics). When nothing is
+            listening the operation runs directly with no overhead.
+            </summary>
+            <typeparam name="TResponse">Response type.</typeparam>
+            <param name="operation">Operation label from <see cref="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames"/>.</param>
+            <param name="model">Requested model, or null.</param>
+            <param name="enrich">Adds request attributes to the scope, or null.</param>
+            <param name="core">The operation.</param>
+            <param name="token">Caller cancellation token.</param>
+            <returns>The operation's response.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClientBase.InstrumentStreamingAsync``1(System.String,System.String,System.Action{PolyPrompt.Telemetry.OperationScope},System.Func{System.Threading.Tasks.Task{``0}},System.Action{``0,PolyPrompt.Telemetry.OperationScope},System.Threading.CancellationToken)">
+            <summary>
+            Run a streaming operation inside a telemetry scope that stays open until the stream ends. On a successful
+            start, <paramref name="attach"/> wraps the response's chunk stream with the scope.
+            </summary>
+            <typeparam name="TResponse">Streaming response type.</typeparam>
+            <param name="operation">Operation label from <see cref="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames"/>.</param>
+            <param name="model">Requested model, or null.</param>
+            <param name="enrich">Adds request attributes to the scope, or null.</param>
+            <param name="core">The operation.</param>
+            <param name="attach">Wraps the response's chunk stream with the scope.</param>
+            <param name="token">Caller cancellation token.</param>
+            <returns>The operation's response.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClientBase.InstrumentBoolAsync(System.String,System.String,System.Func{System.Threading.Tasks.Task{System.Boolean}},System.Threading.CancellationToken)">
+            <summary>
+            Run an operation that reports success as a boolean inside a telemetry scope; false is recorded as an error.
+            </summary>
+            <param name="operation">Operation label from <see cref="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames"/>.</param>
+            <param name="model">Model, or null.</param>
+            <param name="core">The operation.</param>
+            <param name="token">Caller cancellation token.</param>
+            <returns>The operation's result.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClientBase.InstrumentValueAsync``1(System.String,System.String,System.Func{System.Threading.Tasks.Task{``0}},System.Threading.CancellationToken)">
+            <summary>
+            Run an operation that returns a plain value inside a telemetry scope. It succeeds unless it throws or the HTTP
+            transport underneath reported an error.
+            </summary>
+            <typeparam name="TValue">Result type.</typeparam>
+            <param name="operation">Operation label from <see cref="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames"/>.</param>
+            <param name="model">Model, or null.</param>
+            <param name="core">The operation.</param>
+            <param name="token">Caller cancellation token.</param>
+            <returns>The operation's result.</returns>
         </member>
         <member name="T:PolyPrompt.Clients.ClientBase.StreamingHttpResult">
             <summary>
@@ -5182,6 +5236,927 @@
             <summary>
             Whether over-length query/document pairs are truncated to the model context length (truncation).
             Null uses the provider default (true). When false, over-length inputs cause an error.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.HttpCallScope">
+            <summary>
+            Telemetry for one outbound HTTP request to a provider: a client span named after the HTTP method, the request
+            duration and count metrics, request and response body sizes, and the in-flight gauge. The span is current while
+            the request is sent, so HttpClient propagates its W3C <c>traceparent</c> to the provider. Errors are also reported
+            to the enclosing <see cref="T:PolyPrompt.Telemetry.OperationScope"/>. Every member is best-effort and never throws.
+            Thread safety: a scope is owned by one request; ending it is idempotent and safe from any thread.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.HttpCallScope.Activity">
+            <summary>
+            The request's span, or null when no trace listener sampled it.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.HttpCallScope.Start(System.String,System.String,System.String,System.Int64)">
+            <summary>
+            Start a scope for a request, or return null when nothing is listening or telemetry fails. Call from an async
+            method so the span does not remain current in the caller's flow.
+            </summary>
+            <param name="provider">Provider label.</param>
+            <param name="method">HTTP method.</param>
+            <param name="url">Request URL (the query string is removed before it is recorded).</param>
+            <param name="requestBytes">Request body size in bytes.</param>
+            <returns>The scope, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.HttpCallScope.SetStatus(System.Int32)">
+            <summary>
+            Record the response status once headers arrive, without ending the scope (used by streaming requests, which
+            end when the body has been read and the response disposed).
+            </summary>
+            <param name="statusCode">HTTP status code.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.HttpCallScope.End">
+            <summary>
+            End the scope with the status recorded by <see cref="M:PolyPrompt.Telemetry.HttpCallScope.SetStatus(System.Int32)"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.HttpCallScope.Complete(System.Int32,System.Nullable{System.Int64})">
+            <summary>
+            End the scope with a response status.
+            </summary>
+            <param name="statusCode">HTTP status code.</param>
+            <param name="responseBytes">Response body size in bytes, or null when the body was streamed.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.HttpCallScope.Fail(System.Exception,System.Threading.CancellationToken)">
+            <summary>
+            End the scope from an exception thrown while sending or reading the request.
+            </summary>
+            <param name="ex">Exception.</param>
+            <param name="callerToken">Caller cancellation token, used to tell cancellation from timeout.</param>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.InFlightEntry">
+            <summary>
+            One labeled in-flight count reported by an observable up-down counter.
+            Thread safety: all members are safe for concurrent use.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.InFlightEntry.Tags">
+            <summary>
+            Labels reported with the count.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.InFlightEntry.Value">
+            <summary>
+            Current count.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.InFlightEntry.#ctor(System.Collections.Generic.KeyValuePair{System.String,System.Object}[])">
+            <summary>
+            Create an entry with the given labels.
+            </summary>
+            <param name="tags">Labels reported with the count.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.InFlightEntry.Increment">
+            <summary>
+            Add one to the count.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.InFlightEntry.Decrement">
+            <summary>
+            Subtract one from the count.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.InFlightRegistry">
+            <summary>
+            Process-wide labeled counts read by an observable up-down counter. Counting with an observable instrument (rather
+            than a synchronous up-down counter) keeps the reported value correct when a listener attaches while work is
+            already in flight. Thread safety: all members are safe for concurrent use.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.InFlightRegistry.Get(System.String,System.String,System.String,System.String)">
+            <summary>
+            Get (or create) the entry for a pair of labels.
+            </summary>
+            <param name="key1">First label key.</param>
+            <param name="value1">First label value.</param>
+            <param name="key2">Second label key, or null for a single label.</param>
+            <param name="value2">Second label value.</param>
+            <returns>The entry.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.InFlightRegistry.Observe">
+            <summary>
+            Report every entry as a measurement.
+            </summary>
+            <returns>One measurement per label set.</returns>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.OperationScope">
+            <summary>
+            Telemetry for one public client operation: a client span named <c>{provider} {operation}</c>, the operation
+            duration and outcome metrics, GenAI token usage, and (for streaming operations) time to first chunk and chunk
+            counts. The scope is published through an async-local so the transport layer underneath can attach its error
+            type. Every member is best-effort: a telemetry failure is swallowed and never reaches the caller.
+            Thread safety: a scope is owned by one operation; ending it is idempotent and safe from any thread.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.OperationScope.Current">
+            <summary>
+            The scope of the operation running in the current async flow, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.OperationScope.Activity">
+            <summary>
+            The operation's span, or null when no trace listener sampled it.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.OperationScope.ErrorType">
+            <summary>
+            Error type reported by a lower layer (the HTTP transport) for this operation, or null. The first value wins.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.OperationScope.Provider">
+            <summary>
+            Provider label.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.Start(PolyPrompt.Clients.ClientBase,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Start a scope for an operation, or return null when nothing is listening or telemetry fails. The scope becomes
+            <see cref="P:PolyPrompt.Telemetry.OperationScope.Current"/> for the rest of the calling async method; callers must be async methods so the value
+            does not leak back to their own caller.
+            </summary>
+            <param name="client">Client running the operation.</param>
+            <param name="operation">Operation label from <see cref="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames"/>.</param>
+            <param name="model">Requested model, or null.</param>
+            <param name="token">Caller cancellation token, used to tell cancellation from timeout.</param>
+            <returns>The scope, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.SetTag(System.String,System.Object)">
+            <summary>
+            Set a span attribute.
+            </summary>
+            <param name="key">Attribute key.</param>
+            <param name="value">Attribute value.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.SetCompletionSettings(System.Int32,System.Nullable{System.Double},System.Nullable{System.Double})">
+            <summary>
+            Record the request's completion settings on the span.
+            </summary>
+            <param name="maxTokens">Max tokens.</param>
+            <param name="temperature">Temperature, or null.</param>
+            <param name="topP">Top-p, or null.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.RecordBatchSize(System.Int32)">
+            <summary>
+            Record the number of inputs in the request.
+            </summary>
+            <param name="count">Input count.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.RecordDecisionQuestions(System.Collections.Generic.List{PolyPrompt.Models.DecisionQuestion})">
+            <summary>
+            Count the questions of a decision request by type.
+            </summary>
+            <param name="questions">Questions.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.Complete(PolyPrompt.Models.ResponseBase)">
+            <summary>
+            End the operation from its response: success when <see cref="P:PolyPrompt.Models.ResponseBase.Success"/> is true, otherwise an
+            error classified by the transport's error type, the HTTP status, or <c>invalid_response</c>.
+            </summary>
+            <param name="response">
+            Response, or null for operations that return no response object; those succeed unless the transport reported
+            an error type.
+            </param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.CompleteBool(System.Boolean)">
+            <summary>
+            End an operation that reports its result as a boolean.
+            </summary>
+            <param name="success">The operation's result.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.CompleteWith(System.String,System.String)">
+            <summary>
+            End the operation with an explicit outcome.
+            </summary>
+            <param name="outcome">Outcome value.</param>
+            <param name="errorType">Error type, or null.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.Fail(System.Exception)">
+            <summary>
+            End the operation from an exception: cancellation by the caller, a timeout, or an error.
+            </summary>
+            <param name="ex">Exception.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.ReportError(System.String)">
+            <summary>
+            Record an error raised by a lower layer without ending the operation.
+            </summary>
+            <param name="errorType">Error type.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.WrapStream``1(System.Collections.Generic.IAsyncEnumerable{``0},PolyPrompt.Models.ResponseBase,System.Func{``0,System.Boolean},System.Threading.CancellationToken)">
+            <summary>
+            Wrap a response's chunk stream so the operation ends when the stream does: completed, failed, or abandoned by
+            the consumer. Records time to first chunk and the chunk count.
+            </summary>
+            <typeparam name="TChunk">Chunk type.</typeparam>
+            <param name="source">Chunk stream.</param>
+            <param name="response">Response whose fields (usage, finish reason) are final once the stream ends.</param>
+            <param name="isContent">Whether a chunk carries content (and so counts as a chunk).</param>
+            <param name="token">Enumeration cancellation token.</param>
+            <returns>The wrapped stream.</returns>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.PolyPromptTelemetry">
+            <summary>
+            The process-wide <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Meter"/>, <see cref="T:System.Diagnostics.ActivitySource"/>, and instruments behind PolyPrompt's telemetry.
+            Emission goes through the BCL only: PolyPrompt takes no exporter or SDK dependency, and every recording path is
+            skipped when no listener is attached. Thread safety: all members are safe for concurrent use.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Version">
+            <summary>
+            Library version reported on spans and the build-info gauge.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Source">
+            <summary>
+            Source for every PolyPrompt span.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Meter">
+            <summary>
+            Meter for every PolyPrompt metric.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ActiveOperations">
+            <summary>
+            In-flight operations by provider and operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ActiveRequests">
+            <summary>
+            In-flight HTTP requests by provider and method.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.DecisionInFlight">
+            <summary>
+            Decision batch items holding a concurrency slot, by provider.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.DecisionQueued">
+            <summary>
+            Decision batch items waiting for a concurrency slot, by provider.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ActiveClients">
+            <summary>
+            Live clients by provider and capability.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.OperationDuration">
+            <summary>
+            Operation duration histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Operations">
+            <summary>
+            Operation counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.GenAiOperationDuration">
+            <summary>
+            GenAI semantic-convention operation duration histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.GenAiTokenUsage">
+            <summary>
+            GenAI semantic-convention token usage histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.Tokens">
+            <summary>
+            Token counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.StreamTimeToFirstChunk">
+            <summary>
+            Streaming time-to-first-chunk histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.StreamChunks">
+            <summary>
+            Streaming chunk counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.BatchSize">
+            <summary>
+            Batch size histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ToolCalls">
+            <summary>
+            Tool call counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.FinishReasons">
+            <summary>
+            Finish reason counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.HttpRequestDuration">
+            <summary>
+            HTTP request duration histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.HttpRequests">
+            <summary>
+            HTTP request counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.HttpRequestBodySize">
+            <summary>
+            HTTP request body size histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.HttpResponseBodySize">
+            <summary>
+            HTTP response body size histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.DecisionQueueDuration">
+            <summary>
+            Decision batch queue wait histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.DecisionQuestions">
+            <summary>
+            Decision question counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.CredentialRefreshDuration">
+            <summary>
+            Credential refresh duration histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.CredentialRefreshes">
+            <summary>
+            Credential refresh counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.CredentialCacheLookups">
+            <summary>
+            Credential cache lookup counter.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.PolyPromptTelemetry.IsEnabled">
+            <summary>
+            True when a listener is attached to the activity source or to any synchronous PolyPrompt instrument. When
+            false, instrumentation is skipped entirely.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.ResolveProvider(System.Type)">
+            <summary>
+            Resolve the bounded provider label for a client type, for example <c>openai</c> for
+            <see cref="T:PolyPrompt.Clients.OpenAiCompletionClient"/> or any type derived from it.
+            </summary>
+            <param name="type">Client type.</param>
+            <returns>The provider label.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.ResolveCapability(PolyPrompt.Clients.ClientBase)">
+            <summary>
+            Resolve the bounded capability label for a client.
+            </summary>
+            <param name="client">Client.</param>
+            <returns>The capability label.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.ResolveCredentialSource(System.Type)">
+            <summary>
+            Resolve the bounded credential source label for a credential provider type.
+            </summary>
+            <param name="type">Credential provider type.</param>
+            <returns>The credential source label.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.ToGenAiOperation(System.String)">
+            <summary>
+            Map a PolyPrompt operation to its OpenTelemetry GenAI operation name, or null when the operation is not a
+            model call (model management, connectivity checks, batch wrappers).
+            </summary>
+            <param name="operation">PolyPrompt operation.</param>
+            <returns>The GenAI operation name, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.Bound(System.String,System.Int32)">
+            <summary>
+            Bound a free-form label value (a model name or finish reason) so a misbehaving caller or provider cannot emit
+            arbitrarily long label values.
+            </summary>
+            <param name="value">Value.</param>
+            <param name="maxLength">Maximum length kept.</param>
+            <returns>The bounded value, or <c>unknown</c> when empty.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.RecordException(System.Diagnostics.Activity,System.Exception)">
+            <summary>
+            Record an exception on a span as an OpenTelemetry <c>exception</c> event and mark the span as failed.
+            </summary>
+            <param name="activity">Span, or null.</param>
+            <param name="ex">Exception.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.SafeRecord(System.Diagnostics.Metrics.Histogram{System.Double},System.Double,System.Diagnostics.TagList@)">
+            <summary>
+            Record a histogram value, swallowing any exception a listener throws so one faulty listener cannot suppress
+            the remaining signals.
+            </summary>
+            <param name="histogram">Histogram.</param>
+            <param name="value">Value.</param>
+            <param name="tags">Labels.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.SafeRecord(System.Diagnostics.Metrics.Histogram{System.Int64},System.Int64,System.Diagnostics.TagList@)">
+            <summary>
+            Record a histogram value, swallowing any exception a listener throws.
+            </summary>
+            <param name="histogram">Histogram.</param>
+            <param name="value">Value.</param>
+            <param name="tags">Labels.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.SafeAdd(System.Diagnostics.Metrics.Counter{System.Int64},System.Int64,System.Diagnostics.TagList@)">
+            <summary>
+            Add to a counter, swallowing any exception a listener throws.
+            </summary>
+            <param name="counter">Counter.</param>
+            <param name="value">Value.</param>
+            <param name="tags">Labels.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.PolyPromptTelemetry.StopDetached(System.Diagnostics.Activity)">
+            <summary>
+            Stop a span without disturbing the caller's current activity. A span ended from a different async flow (for
+            example a stream finished by the consumer) must not reset <see cref="P:System.Diagnostics.Activity.Current"/> for that flow.
+            </summary>
+            <param name="activity">Span, or null.</param>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.PolyPromptTelemetryNames">
+            <summary>
+            Every stable telemetry name PolyPrompt emits: the meter and activity source names, the metric instrument names,
+            the attribute (label) keys, and the bounded attribute values. These names are a public contract consumed by
+            collectors, dashboards, and alerts; they change only in a major version. See TELEMETRY.md for the full catalog.
+            Thread safety: constants only, safe from any thread.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.MeterName">
+            <summary>
+            Name of the <see cref="T:System.Diagnostics.Metrics.Meter"/> that carries every PolyPrompt metric.
+            Subscribe a collector to this name (for example Radiant's <c>settings.Sources.AddMeter("PolyPrompt")</c>).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ActivitySourceName">
+            <summary>
+            Name of the <see cref="T:System.Diagnostics.ActivitySource"/> that carries every PolyPrompt span.
+            Subscribe a collector to this name (for example Radiant's <c>settings.Sources.AddActivitySource("PolyPrompt")</c>).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationDuration">
+            <summary>
+            Histogram (seconds): duration of each public client operation, from the call until the response is returned
+            (or, for streaming operations, until the stream ends). Labels: provider, capability, operation, outcome, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Operations">
+            <summary>
+            Counter ({operation}): completed public client operations. Labels: provider, capability, operation, outcome, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ActiveOperations">
+            <summary>
+            Observable up-down counter ({operation}): client operations currently in progress. Labels: provider, operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.GenAiOperationDuration">
+            <summary>
+            Histogram (seconds): OpenTelemetry GenAI semantic-convention operation duration for model calls (chat,
+            text completion, embeddings, rerank, classify, decide). Labels: gen_ai.operation.name, gen_ai.provider.name,
+            gen_ai.request.model, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.GenAiTokenUsage">
+            <summary>
+            Histogram ({token}): OpenTelemetry GenAI semantic-convention token usage per call. Labels: gen_ai.operation.name,
+            gen_ai.provider.name, gen_ai.request.model, gen_ai.token.type (input or output).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Tokens">
+            <summary>
+            Counter ({token}): tokens consumed, including cache and reasoning breakdowns. Labels: provider, operation,
+            gen_ai.request.model, polyprompt.token.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.StreamTimeToFirstChunk">
+            <summary>
+            Histogram (seconds): time from the start of a streaming operation to its first content chunk.
+            Labels: provider, operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.StreamChunks">
+            <summary>
+            Counter ({chunk}): content chunks delivered by streaming operations. Labels: provider, operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.BatchSize">
+            <summary>
+            Histogram ({item}): number of inputs per request (embedding inputs, rerank documents, classification inputs,
+            decision requests in a batch, decision questions). Labels: provider, operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolCalls">
+            <summary>
+            Counter ({call}): tool calls requested by the model. Labels: provider, operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.FinishReasons">
+            <summary>
+            Counter ({response}): completion responses by finish reason, which exposes truncation (length / max_tokens)
+            and content filtering. Labels: provider, operation, gen_ai.response.finish_reason.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpRequestDuration">
+            <summary>
+            Histogram (seconds): duration of each outbound HTTP request to a provider. For streaming requests this covers
+            the whole response body. Labels: provider, http.request.method, http.response.status_code, error.type,
+            server.address, server.port.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpRequests">
+            <summary>
+            Counter ({request}): outbound HTTP requests to providers. Labels: provider, http.request.method,
+            http.response.status_code, error.type, server.address, server.port.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpActiveRequests">
+            <summary>
+            Observable up-down counter ({request}): outbound HTTP requests currently in flight. Labels: provider,
+            http.request.method.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpRequestBodySize">
+            <summary>
+            Histogram (bytes): outbound HTTP request body size. Labels: provider, http.request.method.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpResponseBodySize">
+            <summary>
+            Histogram (bytes): HTTP response body size for non-streaming requests. Labels: provider, http.request.method.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.DecisionQueueDuration">
+            <summary>
+            Histogram (seconds): time a decision batch item waited for a concurrency slot (the queued stage).
+            Labels: provider.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.DecisionInFlight">
+            <summary>
+            Observable up-down counter ({request}): decision batch items holding a concurrency slot. Labels: provider.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.DecisionQueued">
+            <summary>
+            Observable up-down counter ({request}): decision batch items waiting for a concurrency slot. Labels: provider.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.DecisionQuestions">
+            <summary>
+            Counter ({question}): decision questions sent, by question type. Labels: provider, polyprompt.question.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.CredentialRefreshDuration">
+            <summary>
+            Histogram (seconds): duration of a credential token fetch (OAuth exchange or metadata server).
+            Labels: polyprompt.credential.source, outcome, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.CredentialRefreshes">
+            <summary>
+            Counter ({refresh}): credential token fetches. Labels: polyprompt.credential.source, outcome, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.CredentialCacheLookups">
+            <summary>
+            Counter ({lookup}): credential cache lookups. Labels: polyprompt.credential.source, polyprompt.cache.result (hit or miss).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ActiveClients">
+            <summary>
+            Observable up-down counter ({client}): constructed and not yet disposed clients. Labels: provider, capability.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.BuildInfo">
+            <summary>
+            Observable gauge ({build}): always 1, carrying the library version in polyprompt.version.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Provider">
+            <summary>
+            Provider label (OpenTelemetry GenAI key), for example <c>openai</c>, <c>aws.bedrock</c>, or <c>gcp.vertex_ai</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Capability">
+            <summary>
+            Capability label: completion, embedding, sparse_embedding, rerank, classification, decision, or model.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Operation">
+            <summary>
+            PolyPrompt operation label, for example <c>chat</c>, <c>chat_stream</c>, <c>embed</c>, or <c>decide_batch</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Outcome">
+            <summary>
+            Outcome label: success, error, timeout, cancelled, or abandoned.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ErrorType">
+            <summary>
+            Error type (OpenTelemetry key): an HTTP status code, <c>invalid_response</c>, <c>timeout</c>, or an exception type name.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.GenAiOperationName">
+            <summary>
+            GenAI operation name (OpenTelemetry key): chat, text_completion, embeddings, or a PolyPrompt operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.RequestModel">
+            <summary>
+            Requested model (OpenTelemetry key). Model names are configured by the application, so the set is bounded.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ResponseModel">
+            <summary>
+            Model reported by the provider (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ResponseId">
+            <summary>
+            Provider response id (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.FinishReason">
+            <summary>
+            Finish reason (OpenTelemetry key).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.FinishReasonLabel">
+            <summary>
+            Finish reason label on <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.FinishReasons"/>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.RequestMaxTokens">
+            <summary>
+            Requested max tokens (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.RequestTemperature">
+            <summary>
+            Requested temperature (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.RequestTopP">
+            <summary>
+            Requested top-p (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UsageInputTokens">
+            <summary>
+            Input tokens (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UsageOutputTokens">
+            <summary>
+            Output tokens (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UsageCachedInputTokens">
+            <summary>
+            Cached input tokens. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UsageCacheCreationTokens">
+            <summary>
+            Cache creation tokens. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UsageReasoningTokens">
+            <summary>
+            Reasoning tokens. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.GenAiTokenType">
+            <summary>
+            Token type label on <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.GenAiTokenUsage"/> (OpenTelemetry key): input or output.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.TokenType">
+            <summary>
+            Token type label on <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Tokens"/>: input, output, cached_input, cache_creation, or reasoning.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Streaming">
+            <summary>
+            Whether the operation streams its response. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.BatchSizeAttribute">
+            <summary>
+            Input count for the operation. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolDefinitionCount">
+            <summary>
+            Number of tool definitions offered to the model. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolCallCount">
+            <summary>
+            Number of tool calls returned by the model. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.StreamChunkCount">
+            <summary>
+            Number of content chunks delivered by a stream. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.StreamTimeToFirstChunkMs">
+            <summary>
+            Milliseconds to the first content chunk of a stream. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.MaxConcurrency">
+            <summary>
+            Concurrency limit of a decision batch. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.QuestionType">
+            <summary>
+            Decision question type label: binary, choice, or score.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.CredentialSource">
+            <summary>
+            Credential source label: service_account, adc, or a lower-cased custom provider type name.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.CacheResult">
+            <summary>
+            Cache lookup result label: hit or miss.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Version">
+            <summary>
+            Library version label on <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.BuildInfo"/>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpMethod">
+            <summary>
+            HTTP method (OpenTelemetry key).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.HttpStatusCode">
+            <summary>
+            HTTP response status code (OpenTelemetry key).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ServerAddress">
+            <summary>
+            Provider host (OpenTelemetry key). Endpoints are configured by the application, so the set is bounded.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ServerPort">
+            <summary>
+            Provider port (OpenTelemetry key).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.UrlFull">
+            <summary>
+            Full request URL with the query string removed (OpenTelemetry key). Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OutcomeSuccess">
+            <summary>
+            Outcome value: the operation succeeded.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OutcomeError">
+            <summary>
+            Outcome value: the operation failed (HTTP error, transport failure, or invalid response).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OutcomeTimeout">
+            <summary>
+            Outcome value: the operation exceeded the client's TimeoutMs.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OutcomeCancelled">
+            <summary>
+            Outcome value: the caller cancelled the operation.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OutcomeAbandoned">
+            <summary>
+            Outcome value: the caller stopped enumerating a stream before it ended.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ErrorInvalidResponse">
+            <summary>
+            Error type value: the provider returned a successful status with a body PolyPrompt could not use.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ErrorTimeout">
+            <summary>
+            Error type value: the request exceeded TimeoutMs.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ErrorBatchItemFailed">
+            <summary>
+            Error type value: at least one item in a decision batch failed.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ErrorOperationFailed">
+            <summary>
+            Error type value: an operation that returns a boolean reported failure without an HTTP status.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationChat">
+            <summary>
+            Operation value: <c>ChatAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationChatStream">
+            <summary>
+            Operation value: <c>ChatStreamingAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationToolChat">
+            <summary>
+            Operation value: <c>ToolChatAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationToolChatStream">
+            <summary>
+            Operation value: <c>ToolChatStreamingAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationGenerate">
+            <summary>
+            Operation value: <c>GenerateAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationGenerateStream">
+            <summary>
+            Operation value: <c>GenerateStreamingAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationEmbed">
+            <summary>
+            Operation value: <c>EmbedAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationSparseEmbed">
+            <summary>
+            Operation value: <c>EmbedSparseAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationRerank">
+            <summary>
+            Operation value: <c>RerankAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationClassify">
+            <summary>
+            Operation value: <c>ClassifyAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationDecide">
+            <summary>
+            Operation value: one decision request (<c>DecideAsync</c>, or one item of a batch).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationDecideBatch">
+            <summary>
+            Operation value: a decision batch (<c>DecideAsync</c> with a list).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelInfo">
+            <summary>
+            Operation value: <c>GetModelInformationAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelExists">
+            <summary>
+            Operation value: <c>ModelExistsAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelPull">
+            <summary>
+            Operation value: Ollama <c>PullModelAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelDelete">
+            <summary>
+            Operation value: Ollama <c>DeleteModelAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationValidateConnectivity">
+            <summary>
+            Operation value: <c>ValidateConnectivityAsync</c>.
             </summary>
         </member>
         <member name="T:PolyPrompt.Wire.EventStreamDecoder">

@@ -4,6 +4,7 @@ namespace PolyPrompt.Clients
     using PolyPrompt.Auth;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -70,20 +71,23 @@ namespace PolyPrompt.Clients
         /// <returns>True when the request succeeded.</returns>
         public override async Task<bool> ValidateConnectivityAsync(CancellationToken token = default)
         {
-            try
+            return await InstrumentBoolAsync(PolyPromptTelemetryNames.OperationValidateConnectivity, null, async () =>
             {
-                EmbeddingResponse probe = await EmbedAsync("ping", null, token).ConfigureAwait(false);
-                return probe.Success;
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
-                return false;
-            }
+                try
+                {
+                    EmbeddingResponse probe = await EmbedAsync("ping", null, token).ConfigureAwait(false);
+                    return probe.Success;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
+                    return false;
+                }
+            }, token).ConfigureAwait(false);
         }
 
         #endregion

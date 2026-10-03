@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -62,7 +63,9 @@ namespace PolyPrompt.Clients
         public Task<SparseEmbeddingResponse> EmbedSparseAsync(string input, SparseEmbeddingOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(input);
-            return EmbedSparseCoreAsync(new List<string> { input }, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationSparseEmbed, model, s => s.RecordBatchSize(1),
+                () => EmbedSparseCoreAsync(new List<string> { input }, model, options, token), token);
         }
 
         /// <summary>
@@ -77,7 +80,9 @@ namespace PolyPrompt.Clients
         public Task<SparseEmbeddingResponse> EmbedSparseAsync(List<string> inputs, SparseEmbeddingOptions? options = null, CancellationToken token = default)
         {
             ValidateInputList(inputs, nameof(inputs), "Sparse embedding requests require at least one input.");
-            return EmbedSparseCoreAsync(inputs, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationSparseEmbed, model, s => s.RecordBatchSize(inputs.Count),
+                () => EmbedSparseCoreAsync(inputs, model, options, token), token);
         }
 
         #endregion

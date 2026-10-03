@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Diagnostics;
     using System.Runtime.CompilerServices;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -73,7 +74,9 @@ namespace PolyPrompt.Clients
         public Task<ChatResponse> ChatAsync(string prompt, CompletionOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
-            return ChatCoreAsync(prompt, Resolve(options), token);
+            ResolvedCompletion settings = Resolve(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationChat, settings.Model, s => Enrich(s, settings, null),
+                () => ChatCoreAsync(prompt, settings, token), token);
         }
 
         /// <summary>
@@ -88,7 +91,11 @@ namespace PolyPrompt.Clients
         public Task<ChatStreamingResponse> ChatStreamingAsync(string prompt, CompletionOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
-            return ChatStreamingCoreAsync(prompt, Resolve(options), token);
+            ResolvedCompletion settings = Resolve(options);
+            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationChatStream, settings.Model, s => Enrich(s, settings, null),
+                () => ChatStreamingCoreAsync(prompt, settings, token),
+                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text) || !string.IsNullOrEmpty(c.ReasoningText)),
+                token);
         }
 
         /// <summary>
@@ -106,7 +113,8 @@ namespace PolyPrompt.Clients
         public Task<ToolChatResponse> ToolChatAsync(ToolChatRequest request, CancellationToken token = default)
         {
             ResolvedCompletion settings = ResolveToolChat(request, out List<ChatMessage> messages);
-            return ToolChatCoreAsync(request, messages, settings, token);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationToolChat, settings.Model, s => Enrich(s, settings, request),
+                () => ToolChatCoreAsync(request, messages, settings, token), token);
         }
 
         /// <summary>
@@ -122,7 +130,10 @@ namespace PolyPrompt.Clients
         public Task<ToolChatStreamingResponse> ToolChatStreamingAsync(ToolChatRequest request, CancellationToken token = default)
         {
             ResolvedCompletion settings = ResolveToolChat(request, out List<ChatMessage> messages);
-            return ToolChatStreamingCoreAsync(request, messages, settings, token);
+            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationToolChatStream, settings.Model, s => Enrich(s, settings, request),
+                () => ToolChatStreamingCoreAsync(request, messages, settings, token),
+                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text) || !string.IsNullOrEmpty(c.ReasoningText) || (c.ToolCallDeltas != null && c.ToolCallDeltas.Count > 0)),
+                token);
         }
 
         /// <summary>
@@ -139,7 +150,9 @@ namespace PolyPrompt.Clients
         public Task<GenerationResponse> GenerateAsync(string prompt, CompletionOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
-            return GenerateCoreAsync(prompt, Resolve(options), token);
+            ResolvedCompletion settings = Resolve(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationGenerate, settings.Model, s => Enrich(s, settings, null),
+                () => GenerateCoreAsync(prompt, settings, token), token);
         }
 
         /// <summary>
@@ -154,7 +167,11 @@ namespace PolyPrompt.Clients
         public Task<GenerationStreamingResponse> GenerateStreamingAsync(string prompt, CompletionOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
-            return GenerateStreamingCoreAsync(prompt, Resolve(options), token);
+            ResolvedCompletion settings = Resolve(options);
+            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationGenerateStream, settings.Model, s => Enrich(s, settings, null),
+                () => GenerateStreamingCoreAsync(prompt, settings, token),
+                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text)),
+                token);
         }
 
         #endregion
@@ -498,6 +515,15 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Private-Methods
+
+        private static void Enrich(OperationScope scope, ResolvedCompletion settings, ToolChatRequest? request)
+        {
+            scope.SetCompletionSettings(settings.MaxTokens, settings.Temperature, settings.TopP);
+            if (request != null)
+            {
+                scope.SetTag(PolyPromptTelemetryNames.ToolDefinitionCount, request.Tools?.Count ?? 0);
+            }
+        }
 
         private ResolvedCompletion ResolveToolChat(ToolChatRequest request, out List<ChatMessage> messages)
         {

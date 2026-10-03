@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -49,6 +50,42 @@ namespace PolyPrompt.Clients
             if (string.IsNullOrWhiteSpace(model))
                 throw new ArgumentNullException(nameof(model));
 
+            return await InstrumentValueAsync(PolyPromptTelemetryNames.OperationModelExists, model, () => ModelExistsCoreAsync(model, token), token).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Retrieve detailed information about a model.
+        /// </summary>
+        /// <param name="model">The model name to look up.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ModelInformation object if found, null otherwise (including on an HTTP error).</returns>
+        /// <exception cref="ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
+        public Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentNullException(nameof(model));
+
+            return InstrumentValueAsync(PolyPromptTelemetryNames.OperationModelInfo, model, () => GetModelInformationCoreAsync(model, token), token);
+        }
+
+        #endregion
+
+        #region Protected-Methods
+
+        /// <summary>
+        /// Provider implementation of <see cref="GetModelInformationAsync"/>.
+        /// </summary>
+        /// <param name="model">Validated model name.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>The model information, or null when not found.</returns>
+        protected abstract Task<ModelInformation?> GetModelInformationCoreAsync(string model, CancellationToken token);
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<bool> ModelExistsCoreAsync(string model, CancellationToken token)
+        {
             try
             {
                 await foreach (ModelInformation info in ListModelsAsync(token).ConfigureAwait(false))
@@ -75,37 +112,11 @@ namespace PolyPrompt.Clients
             }
             catch (Exception ex)
             {
+                OperationScope.Current?.ReportError(ex.GetType().FullName ?? ex.GetType().Name);
                 _Logging.Debug(_Header + "model lookup failed: " + ex.Message);
                 return false;
             }
         }
-
-        /// <summary>
-        /// Retrieve detailed information about a model.
-        /// </summary>
-        /// <param name="model">The model name to look up.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>A ModelInformation object if found, null otherwise (including on an HTTP error).</returns>
-        /// <exception cref="ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
-        public Task<ModelInformation?> GetModelInformationAsync(string model, CancellationToken token = default)
-        {
-            if (string.IsNullOrWhiteSpace(model))
-                throw new ArgumentNullException(nameof(model));
-
-            return GetModelInformationCoreAsync(model, token);
-        }
-
-        #endregion
-
-        #region Protected-Methods
-
-        /// <summary>
-        /// Provider implementation of <see cref="GetModelInformationAsync"/>.
-        /// </summary>
-        /// <param name="model">Validated model name.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The model information, or null when not found.</returns>
-        protected abstract Task<ModelInformation?> GetModelInformationCoreAsync(string model, CancellationToken token);
 
         #endregion
     }

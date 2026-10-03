@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -63,7 +64,9 @@ namespace PolyPrompt.Clients
         public Task<ClassificationResponse> ClassifyAsync(string input, ClassificationOptions? options = null, CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(input);
-            return ClassifyCoreAsync(new List<string> { input }, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationClassify, model, s => s.RecordBatchSize(1),
+                () => ClassifyCoreAsync(new List<string> { input }, model, options, token), token);
         }
 
         /// <summary>
@@ -78,7 +81,9 @@ namespace PolyPrompt.Clients
         public Task<ClassificationResponse> ClassifyAsync(List<string> inputs, ClassificationOptions? options = null, CancellationToken token = default)
         {
             ValidateInputList(inputs, nameof(inputs), "Classification requests require at least one input.");
-            return ClassifyCoreAsync(inputs, ResolveModel(options), options, token);
+            string? model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationClassify, model, s => s.RecordBatchSize(inputs.Count),
+                () => ClassifyCoreAsync(inputs, model, options, token), token);
         }
 
         #endregion

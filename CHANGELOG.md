@@ -1,5 +1,17 @@
 # Changelog
 
+## v3.1.0 (2026-10-03)
+
+Adds production observability. Backward compatible: no public API is removed or changed.
+
+### Added
+
+- **Metrics and traces for every client**, emitted through the BCL `Meter` and `ActivitySource` named `PolyPrompt` with no OpenTelemetry, Radiant, or exporter dependency. Nothing is recorded until a collector subscribes, and instrumentation never changes a call's result. See [TELEMETRY.md](TELEMETRY.md).
+- **Spans**: a client span per public operation named `{provider} {operation}` (for example `openai chat`) with OpenTelemetry GenAI attributes and explicit status; a client span per outbound HTTP request (`GET`, `POST`, `DELETE`) that propagates W3C `traceparent`; a `{provider} decide_batch` root with a `stage:queued` and a `decide` span per item; and a `{source} token` span for each OAuth token fetch. Streaming spans stay open until the stream ends.
+- **Metrics**: `polyprompt.client.operation.duration` and `polyprompt.client.operations` by provider, capability, operation, outcome, and `error.type`; `gen_ai.client.operation.duration` and `gen_ai.client.token.usage`; `polyprompt.client.tokens` (input, output, cached input, cache creation, reasoning); streaming time to first chunk and chunk counts; tool calls and finish reasons; batch sizes; per-provider HTTP request duration, counts, body sizes, and in-flight requests; decision batch queue wait, queued, and in-flight; decision questions by type; credential refresh duration, outcomes, and cache hits and misses; live clients; and `polyprompt.build.info`.
+- `PolyPrompt.Telemetry.PolyPromptTelemetryNames`: every meter, source, metric, attribute, and value name as public constants.
+- 16 telemetry test cases covering each instrumented path, the failure paths (HTTP errors, transport failures, invalid responses, timeouts, cancellation, abandoned streams, credential failures), the no-listener path, and a faulting listener.
+
 ## v3.0.0 (2026-09-30)
 
 A breaking release. Each provider client is split into one client per capability, settings move into reusable options classes, decision models are added, and a number of 2.x inconsistencies are fixed. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md) for a step-by-step guide.

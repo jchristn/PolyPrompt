@@ -1,6 +1,8 @@
 namespace PolyPrompt.Clients
 {
+    using System.Diagnostics;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -81,7 +83,9 @@ namespace PolyPrompt.Clients
         public Task<DecisionResponse> DecideAsync(DecisionRequest request, DecisionOptions? options = null, CancellationToken token = default)
         {
             ValidateRequest(request, nameof(request));
-            return DecideCoreAsync(request, ResolveModel(options), options, token);
+            string model = ResolveModel(options);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationDecide, model, s => s.RecordDecisionQuestions(request.Questions),
+                () => DecideCoreAsync(request, model, options, token), token);
         }
 
         /// <summary>
@@ -104,7 +108,9 @@ namespace PolyPrompt.Clients
                 ValidateRequest(requests[i], "requests[" + i + "]");
             }
 
-            return DecideBatchCoreAsync(requests, ResolveModel(options), options, token);
+            string model = ResolveModel(options);
+            if (!PolyPromptTelemetry.IsEnabled) return DecideBatchCoreAsync(requests, model, options, token);
+            return DecideBatchInstrumentedAsync(requests, model, options, token);
         }
 
         #endregion
@@ -142,13 +148,33 @@ namespace PolyPrompt.Clients
                 int index = i;
                 tasks[i] = Task.Run(async () =>
                 {
-                    await gate.WaitAsync(token).ConfigureAwait(false);
+                    bool observed = PolyPromptTelemetry.IsEnabled;
+                    InFlightEntry? queued = observed ? PolyPromptTelemetry.DecisionQueued.Get(PolyPromptTelemetryNames.Provider, TelemetryProvider) : null;
+                    long queuedAt = Stopwatch.GetTimestamp();
+                    queued?.Increment();
+                    Activity? queuedSpan = observed ? StartQueuedSpan() : null;
                     try
                     {
-                        responses[index] = await DecideCoreAsync(requests[index], model, options, token).ConfigureAwait(false);
+                        await gate.WaitAsync(token).ConfigureAwait(false);
                     }
                     finally
                     {
+                        queued?.Decrement();
+                        PolyPromptTelemetry.StopDetached(queuedSpan);
+                    }
+
+                    InFlightEntry? inFlight = null;
+                    if (observed) inFlight = RecordSlotAcquired(queuedAt);
+
+                    try
+                    {
+                        DecisionRequest request = requests[index];
+                        responses[index] = await InstrumentAsync(PolyPromptTelemetryNames.OperationDecide, model, s => s.RecordDecisionQuestions(request.Questions),
+                            () => DecideCoreAsync(request, model, options, token), token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        inFlight?.Decrement();
                         gate.Release();
                     }
                 }, token);
@@ -242,6 +268,71 @@ namespace PolyPrompt.Clients
             if (string.IsNullOrWhiteSpace(model))
                 throw new InvalidOperationException("No model is configured. Set Model or pass a model in the options.");
             return model;
+        }
+
+        #endregion
+
+        #region Private-Methods
+
+        private async Task<List<DecisionResponse>> DecideBatchInstrumentedAsync(List<DecisionRequest> requests, string model, DecisionOptions? options, CancellationToken token)
+        {
+            OperationScope? scope = OperationScope.Start(this, PolyPromptTelemetryNames.OperationDecideBatch, model, token);
+            scope?.RecordBatchSize(requests.Count);
+            scope?.SetTag(PolyPromptTelemetryNames.MaxConcurrency, _MaxConcurrency);
+
+            try
+            {
+                List<DecisionResponse> responses = await DecideBatchCoreAsync(requests, model, options, token).ConfigureAwait(false);
+                if (scope != null)
+                {
+                    bool allSucceeded = responses.All(r => r != null && r.Success);
+                    scope.CompleteWith(
+                        allSucceeded ? PolyPromptTelemetryNames.OutcomeSuccess : PolyPromptTelemetryNames.OutcomeError,
+                        allSucceeded ? null : PolyPromptTelemetryNames.ErrorBatchItemFailed);
+                }
+                return responses;
+            }
+            catch (Exception ex)
+            {
+                scope?.Fail(ex);
+                throw;
+            }
+        }
+
+        private Activity? StartQueuedSpan()
+        {
+            try
+            {
+                Activity? span = PolyPromptTelemetry.Source.StartActivity("stage:queued", ActivityKind.Internal);
+                span?.SetTag(PolyPromptTelemetryNames.Provider, TelemetryProvider);
+                span?.SetTag(PolyPromptTelemetryNames.MaxConcurrency, _MaxConcurrency);
+                return span;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private InFlightEntry? RecordSlotAcquired(long queuedAt)
+        {
+            try
+            {
+                double seconds = Stopwatch.GetElapsedTime(queuedAt).TotalSeconds;
+                if (PolyPromptTelemetry.DecisionQueueDuration.Enabled)
+                {
+                    TagList tags = new TagList { { PolyPromptTelemetryNames.Provider, TelemetryProvider } };
+                    PolyPromptTelemetry.SafeRecord(PolyPromptTelemetry.DecisionQueueDuration, seconds, tags);
+                }
+
+                InFlightEntry inFlight = PolyPromptTelemetry.DecisionInFlight.Get(PolyPromptTelemetryNames.Provider, TelemetryProvider);
+                inFlight.Increment();
+                return inFlight;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         #endregion

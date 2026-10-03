@@ -6,6 +6,7 @@ namespace PolyPrompt.Clients
     using System.Text.Json;
     using PolyPrompt.Helpers;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -30,6 +31,9 @@ namespace PolyPrompt.Clients
         private readonly bool _OwnsHttpClient;
 
         private bool _Disposed = false;
+
+        private readonly string _TelemetryProvider;
+        private readonly InFlightEntry? _ClientEntry;
 
         #endregion
 
@@ -143,6 +147,14 @@ namespace PolyPrompt.Clients
             }
         }
 
+        /// <summary>
+        /// Bounded provider label used on telemetry, for example <c>openai</c> or <c>aws.bedrock</c>.
+        /// </summary>
+        internal string TelemetryProvider
+        {
+            get { return _TelemetryProvider; }
+        }
+
         #endregion
 
         #region Constructors-and-Factories
@@ -188,6 +200,19 @@ namespace PolyPrompt.Clients
                 {
                 }
             }
+
+            _TelemetryProvider = PolyPromptTelemetry.ResolveProvider(GetType());
+            try
+            {
+                _ClientEntry = PolyPromptTelemetry.ActiveClients.Get(
+                    PolyPromptTelemetryNames.Provider, _TelemetryProvider,
+                    PolyPromptTelemetryNames.Capability, PolyPromptTelemetry.ResolveCapability(this));
+                _ClientEntry.Increment();
+            }
+            catch
+            {
+                _ClientEntry = null;
+            }
         }
 
         #endregion
@@ -223,6 +248,8 @@ namespace PolyPrompt.Clients
             if (_Disposed) return;
             _Disposed = true;
 
+            _ClientEntry?.Decrement();
+
             if (_OwnsHttpClient)
             {
                 _HttpClient?.Dispose();
@@ -255,18 +282,23 @@ namespace PolyPrompt.Clients
         /// <returns>True when the response has a success status code.</returns>
         protected async Task<bool> ProbeAsync(string url, CancellationToken token)
         {
+            OperationScope? scope = OperationScope.Start(this, PolyPromptTelemetryNames.OperationValidateConnectivity, null, token);
+
             try
             {
                 HttpCallResult result = await GetAndRecordAsync(url, token).ConfigureAwait(false);
+                scope?.CompleteBool(result.IsSuccessStatusCode);
                 return result.IsSuccessStatusCode;
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (token.IsCancellationRequested)
             {
+                scope?.Fail(ex);
                 throw;
             }
             catch (Exception ex)
             {
                 _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
+                scope?.CompleteBool(false);
                 return false;
             }
         }
@@ -377,6 +409,7 @@ namespace PolyPrompt.Clients
             }
             catch (Exception ex)
             {
+                OperationScope.Current?.ReportError(ex.GetType().FullName ?? ex.GetType().Name);
                 _Logging.Warn(_Header + "streaming " + operation + " request failed: " + ex.Message);
                 response.Success = false;
                 response.Error = ex.Message;
@@ -401,6 +434,7 @@ namespace PolyPrompt.Clients
             detail.TimestampUtc = DateTime.UtcNow;
 
             Stopwatch sw = Stopwatch.StartNew();
+            HttpCallScope? http = null;
 
             try
             {
@@ -413,15 +447,18 @@ namespace PolyPrompt.Clients
                 using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url);
                 await PrepareRequestAsync(request, Array.Empty<byte>(), linkedCts.Token).ConfigureAwait(false);
                 detail.RequestHeaders = CaptureRequestHeaders(request);
+                http = HttpCallScope.Start(_TelemetryProvider, "GET", url, 0);
 
                 using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
+                http?.Complete((int)response.StatusCode, response.Content.Headers.ContentLength ?? Encoding.UTF8.GetByteCount(responseBody));
                 return CompleteCall(detail, response, responseBody, sw);
             }
             catch (Exception ex)
             {
+                http?.Fail(ex, token);
                 sw.Stop();
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.Success = false;
@@ -447,6 +484,7 @@ namespace PolyPrompt.Clients
             detail.TimestampUtc = DateTime.UtcNow;
 
             Stopwatch sw = Stopwatch.StartNew();
+            HttpCallScope? http = null;
 
             try
             {
@@ -463,15 +501,18 @@ namespace PolyPrompt.Clients
 
                 await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
                 detail.RequestHeaders = CaptureRequestHeaders(request);
+                http = HttpCallScope.Start(_TelemetryProvider, "DELETE", url, body.Length);
 
                 using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
+                http?.Complete((int)response.StatusCode, response.Content.Headers.ContentLength ?? Encoding.UTF8.GetByteCount(responseBody));
                 return CompleteCall(detail, response, responseBody, sw);
             }
             catch (Exception ex)
             {
+                http?.Fail(ex, token);
                 sw.Stop();
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.Success = false;
@@ -499,6 +540,7 @@ namespace PolyPrompt.Clients
             detail.TimestampUtc = DateTime.UtcNow;
 
             Stopwatch sw = Stopwatch.StartNew();
+            HttpCallScope? http = null;
 
             try
             {
@@ -512,15 +554,18 @@ namespace PolyPrompt.Clients
                 byte[] body = Encoding.UTF8.GetBytes(requestBodyJson ?? string.Empty);
                 await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
                 detail.RequestHeaders = CaptureRequestHeaders(request);
+                http = HttpCallScope.Start(_TelemetryProvider, "POST", url, body.Length);
 
                 using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
 
                 sw.Stop();
+                http?.Complete((int)response.StatusCode, response.Content.Headers.ContentLength ?? Encoding.UTF8.GetByteCount(responseBody));
                 return CompleteCall(detail, response, responseBody, sw);
             }
             catch (Exception ex)
             {
+                http?.Fail(ex, token);
                 sw.Stop();
                 detail.ResponseTimeMs = sw.ElapsedMilliseconds;
                 detail.Success = false;
@@ -562,6 +607,7 @@ namespace PolyPrompt.Clients
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Content = content;
+            HttpCallScope? http = null;
 
             try
             {
@@ -569,16 +615,19 @@ namespace PolyPrompt.Clients
                 // before the request is sent, mirroring the non-streaming path.
                 byte[] body = await content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
                 await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
+                http = HttpCallScope.Start(_TelemetryProvider, "POST", url, body.Length);
 
                 HttpResponseMessage response = await _HttpClient.SendAsync(
                     request,
                     HttpCompletionOption.ResponseHeadersRead,
                     linkedCts.Token).ConfigureAwait(false);
 
-                return new StreamingHttpResult(response, timeoutCts, linkedCts, request);
+                http?.SetStatus((int)response.StatusCode);
+                return new StreamingHttpResult(response, timeoutCts, linkedCts, request, http);
             }
-            catch
+            catch (Exception ex)
             {
+                http?.Fail(ex, token);
                 request.Dispose();
                 linkedCts.Dispose();
                 timeoutCts.Dispose();
@@ -966,9 +1015,172 @@ namespace PolyPrompt.Clients
             return "HTTP " + result.StatusCode + ": " + result.ResponseBody;
         }
 
+        /// <summary>
+        /// Run an operation that returns a response inside a telemetry scope (span plus metrics). When nothing is
+        /// listening the operation runs directly with no overhead.
+        /// </summary>
+        /// <typeparam name="TResponse">Response type.</typeparam>
+        /// <param name="operation">Operation label from <see cref="PolyPromptTelemetryNames"/>.</param>
+        /// <param name="model">Requested model, or null.</param>
+        /// <param name="enrich">Adds request attributes to the scope, or null.</param>
+        /// <param name="core">The operation.</param>
+        /// <param name="token">Caller cancellation token.</param>
+        /// <returns>The operation's response.</returns>
+        private protected Task<TResponse> InstrumentAsync<TResponse>(
+            string operation,
+            string? model,
+            Action<OperationScope>? enrich,
+            Func<Task<TResponse>> core,
+            CancellationToken token)
+            where TResponse : ResponseBase
+        {
+            if (!PolyPromptTelemetry.IsEnabled) return core();
+            return InstrumentResponseCoreAsync(operation, model, enrich, core, null, token);
+        }
+
+        /// <summary>
+        /// Run a streaming operation inside a telemetry scope that stays open until the stream ends. On a successful
+        /// start, <paramref name="attach"/> wraps the response's chunk stream with the scope.
+        /// </summary>
+        /// <typeparam name="TResponse">Streaming response type.</typeparam>
+        /// <param name="operation">Operation label from <see cref="PolyPromptTelemetryNames"/>.</param>
+        /// <param name="model">Requested model, or null.</param>
+        /// <param name="enrich">Adds request attributes to the scope, or null.</param>
+        /// <param name="core">The operation.</param>
+        /// <param name="attach">Wraps the response's chunk stream with the scope.</param>
+        /// <param name="token">Caller cancellation token.</param>
+        /// <returns>The operation's response.</returns>
+        private protected Task<TResponse> InstrumentStreamingAsync<TResponse>(
+            string operation,
+            string? model,
+            Action<OperationScope>? enrich,
+            Func<Task<TResponse>> core,
+            Action<TResponse, OperationScope> attach,
+            CancellationToken token)
+            where TResponse : ResponseBase
+        {
+            if (!PolyPromptTelemetry.IsEnabled) return core();
+            return InstrumentResponseCoreAsync(operation, model, enrich, core, attach, token);
+        }
+
+        /// <summary>
+        /// Run an operation that reports success as a boolean inside a telemetry scope; false is recorded as an error.
+        /// </summary>
+        /// <param name="operation">Operation label from <see cref="PolyPromptTelemetryNames"/>.</param>
+        /// <param name="model">Model, or null.</param>
+        /// <param name="core">The operation.</param>
+        /// <param name="token">Caller cancellation token.</param>
+        /// <returns>The operation's result.</returns>
+        private protected Task<bool> InstrumentBoolAsync(string operation, string? model, Func<Task<bool>> core, CancellationToken token)
+        {
+            if (!PolyPromptTelemetry.IsEnabled) return core();
+            return InstrumentBoolCoreAsync(operation, model, core, token);
+        }
+
+        /// <summary>
+        /// Run an operation that returns a plain value inside a telemetry scope. It succeeds unless it throws or the HTTP
+        /// transport underneath reported an error.
+        /// </summary>
+        /// <typeparam name="TValue">Result type.</typeparam>
+        /// <param name="operation">Operation label from <see cref="PolyPromptTelemetryNames"/>.</param>
+        /// <param name="model">Model, or null.</param>
+        /// <param name="core">The operation.</param>
+        /// <param name="token">Caller cancellation token.</param>
+        /// <returns>The operation's result.</returns>
+        private protected Task<TValue> InstrumentValueAsync<TValue>(string operation, string? model, Func<Task<TValue>> core, CancellationToken token)
+        {
+            if (!PolyPromptTelemetry.IsEnabled) return core();
+            return InstrumentValueCoreAsync(operation, model, core, token);
+        }
+
         #endregion
 
         #region Private-Methods
+
+        private async Task<TResponse> InstrumentResponseCoreAsync<TResponse>(
+            string operation,
+            string? model,
+            Action<OperationScope>? enrich,
+            Func<Task<TResponse>> core,
+            Action<TResponse, OperationScope>? attach,
+            CancellationToken token)
+            where TResponse : ResponseBase
+        {
+            OperationScope? scope = OperationScope.Start(this, operation, model, token);
+            if (scope != null && enrich != null)
+            {
+                try
+                {
+                    enrich(scope);
+                }
+                catch
+                {
+                }
+            }
+
+            TResponse response;
+            try
+            {
+                response = await core().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                scope?.Fail(ex);
+                throw;
+            }
+
+            if (scope == null) return response;
+
+            if (attach != null && response.Success)
+            {
+                try
+                {
+                    attach(response, scope);
+                }
+                catch
+                {
+                    scope.Complete(response);
+                }
+            }
+            else
+            {
+                scope.Complete(response);
+            }
+
+            return response;
+        }
+
+        private async Task<bool> InstrumentBoolCoreAsync(string operation, string? model, Func<Task<bool>> core, CancellationToken token)
+        {
+            OperationScope? scope = OperationScope.Start(this, operation, model, token);
+            try
+            {
+                bool result = await core().ConfigureAwait(false);
+                scope?.CompleteBool(result);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                scope?.Fail(ex);
+                throw;
+            }
+        }
+
+        private async Task<TValue> InstrumentValueCoreAsync<TValue>(string operation, string? model, Func<Task<TValue>> core, CancellationToken token)
+        {
+            OperationScope? scope = OperationScope.Start(this, operation, model, token);
+            try
+            {
+                TValue result = await core().ConfigureAwait(false);
+                scope?.Complete(null);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                scope?.Fail(ex);
+                throw;
+            }
+        }
 
         private async Task<TResponse> ExecuteAsync<TResponse>(
             TResponse response,
@@ -1007,6 +1219,7 @@ namespace PolyPrompt.Clients
             }
             catch (Exception ex)
             {
+                OperationScope.Current?.ReportError(ex.GetType().FullName ?? ex.GetType().Name);
                 _Logging.Warn(_Header + operation + " request failed: " + ex.Message);
                 response.Success = false;
                 response.Error = ex.Message;
@@ -1068,6 +1281,7 @@ namespace PolyPrompt.Clients
             private readonly CancellationTokenSource _TimeoutCts;
             private readonly CancellationTokenSource _LinkedCts;
             private readonly HttpRequestMessage _Request;
+            private readonly HttpCallScope? _Telemetry;
             private bool _Disposed = false;
 
             /// <summary>
@@ -1092,11 +1306,22 @@ namespace PolyPrompt.Clients
                 CancellationTokenSource timeoutCts,
                 CancellationTokenSource linkedCts,
                 HttpRequestMessage request)
+                : this(response, timeoutCts, linkedCts, request, null)
+            {
+            }
+
+            internal StreamingHttpResult(
+                HttpResponseMessage response,
+                CancellationTokenSource timeoutCts,
+                CancellationTokenSource linkedCts,
+                HttpRequestMessage request,
+                HttpCallScope? telemetry)
             {
                 Response = response;
                 _TimeoutCts = timeoutCts;
                 _LinkedCts = linkedCts;
                 _Request = request;
+                _Telemetry = telemetry;
             }
 
             /// <summary>
@@ -1111,6 +1336,7 @@ namespace PolyPrompt.Clients
                 _Request.Dispose();
                 _LinkedCts.Dispose();
                 _TimeoutCts.Dispose();
+                _Telemetry?.End();
             }
         }
 

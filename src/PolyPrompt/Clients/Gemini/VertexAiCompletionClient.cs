@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Net.Http.Headers;
     using PolyPrompt.Auth;
     using PolyPrompt.Models;
+    using PolyPrompt.Telemetry;
     using SyslogLogging;
 
     /// <summary>
@@ -62,33 +63,36 @@ namespace PolyPrompt.Clients
         /// <returns>True when the request succeeded.</returns>
         public override async Task<bool> ValidateConnectivityAsync(CancellationToken token = default)
         {
-            try
+            return await InstrumentBoolAsync(PolyPromptTelemetryNames.OperationValidateConnectivity, null, async () =>
             {
-                Dictionary<string, object> body = new Dictionary<string, object>
+                try
                 {
-                    { "contents", new List<object>
-                        {
-                            new Dictionary<string, object>
+                    Dictionary<string, object> body = new Dictionary<string, object>
+                    {
+                        { "contents", new List<object>
                             {
-                                { "role", "user" },
-                                { "parts", new List<object> { new Dictionary<string, object> { { "text", "ping" } } } }
+                                new Dictionary<string, object>
+                                {
+                                    { "role", "user" },
+                                    { "parts", new List<object> { new Dictionary<string, object> { { "text", "ping" } } } }
+                                }
                             }
                         }
-                    }
-                };
+                    };
 
-                HttpCallResult result = await PostJsonAsync(BuildModelUrl(Model ?? "gemini-2.5-flash") + ":countTokens", body, token).ConfigureAwait(false);
-                return result.IsSuccessStatusCode;
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
-                return false;
-            }
+                    HttpCallResult result = await PostJsonAsync(BuildModelUrl(Model ?? "gemini-2.5-flash") + ":countTokens", body, token).ConfigureAwait(false);
+                    return result.IsSuccessStatusCode;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Debug(_Header + "connectivity probe failed: " + ex.Message);
+                    return false;
+                }
+            }, token).ConfigureAwait(false);
         }
 
         #endregion

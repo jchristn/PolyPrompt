@@ -31,6 +31,7 @@ namespace Test.Shared
             cases.AddRange(LocalArchitectureCases.Create(SuiteId));
             cases.AddRange(LocalDecisionCases.Create(SuiteId));
             cases.AddRange(LocalProviderDetailCases.Create(SuiteId));
+            cases.AddRange(LocalTelemetryCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 
