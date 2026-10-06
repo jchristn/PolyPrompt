@@ -2974,13 +2974,403 @@
         <member name="M:PolyPrompt.Clients.VoyageAiRerankClient.RerankCoreAsync(System.String,System.Collections.Generic.List{System.String},System.String,System.Nullable{System.Int32},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
+            <summary>
+            Source-generated JSON metadata for PolyPrompt's wire shapes and public models. It lets PolyPrompt run without
+            reflection under Native AOT and trimming, and lets applications persist conversations and responses the same way,
+            for example <c>JsonSerializer.Serialize(messages, PolyPromptJsonContext.Default.ListChatMessage)</c>.
+            Settings match <see cref="T:PolyPrompt.Helpers.Serializer"/>: null properties omitted, enums as strings, dates as UTC ISO 8601, and
+            tolerant reads. Decision questions and answers are abstract, polymorphic types and are not included.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Boolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Decimal">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Double">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableDouble">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DoubleArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Single">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.SingleArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CallDetail">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ChatMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ChatResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ClassificationLabel">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ClassificationResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ClassificationResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CompletionOptions">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.EmbeddingResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.EmbeddingResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GenerationResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ModelInformation">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ReasoningEffort">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ReasoningEffortLevel">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.RerankResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.RerankResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.SparseEmbeddingResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.SparseEmbeddingResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.SparseValue">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TokenUsage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolCall">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolChatRequest">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolChatResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolDefinition">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DictionaryStringObject">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DictionaryStringString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListDouble">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListSingle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListCallDetail">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListChatMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListClassificationLabel">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListClassificationResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListEmbeddingResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListModelInformation">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListRerankResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListSparseEmbeddingResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListSparseValue">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListToolCall">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListToolDefinition">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListDictionaryStringObject">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListListSingle">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListListDictionaryStringObject">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListObject">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListString">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DateTime">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableDateTime">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DateTimeOffset">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Guid">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.JsonElement">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.JsonNode">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TimeSpan">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Int32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableInt32">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Int32Array">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Int64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableInt64">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Object">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ObjectArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.String">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.StringArray">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Default">
+            <summary>
+            The default <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> associated with a default <see cref="T:System.Text.Json.JsonSerializerOptions"/> instance.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GeneratedSerializerOptions">
+            <summary>
+            The source-generated options associated with this context.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.PolyPromptJsonContext.#ctor">
+            <inheritdoc/>
+        </member>
+        <member name="M:PolyPrompt.Helpers.PolyPromptJsonContext.#ctor(System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc/>
+        </member>
+        <member name="M:PolyPrompt.Helpers.PolyPromptJsonContext.GetTypeInfo(System.Type)">
+            <inheritdoc/>
+        </member>
         <member name="T:PolyPrompt.Helpers.Serializer">
             <summary>
-            JSON serializer used by PolyPrompt clients, built on System.Text.Json.
+            JSON serializer used by PolyPrompt clients, built on System.Text.Json and safe for Native AOT and trimming.
             Untyped values (object, Dictionary&lt;string, object&gt;, List&lt;object&gt;) deserialize to <see cref="T:System.Text.Json.JsonElement"/>.
             Null properties are omitted when writing (dictionary entries are always written), enums are written as strings,
             and reads tolerate trailing commas, comments, and numbers written as strings.
             </summary>
+            <remarks>
+            Graphs made of dictionaries, lists, arrays, strings, numbers, booleans, enums, dates, GUIDs, byte arrays,
+            <see cref="T:System.Text.Json.JsonElement"/>, <see cref="T:System.Text.Json.JsonDocument"/>, and <see cref="T:System.Text.Json.Nodes.JsonNode"/> are written without reflection.
+            Any other type is resolved through, in order: resolvers registered with <see cref="M:PolyPrompt.Helpers.Serializer.AddTypeInfoResolver(System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver)"/>,
+            <see cref="T:PolyPrompt.Helpers.PolyPromptJsonContext"/>, and reflection when the application allows it
+            (<see cref="P:PolyPrompt.Helpers.Serializer.IsReflectionEnabled"/>). In a Native AOT or trimmed application reflection is off, so a type outside
+            those sources raises <see cref="T:System.NotSupportedException"/>; register a source-generated
+            <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/> that includes it, or use an overload that takes a <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>.
+            </remarks>
+        </member>
+        <member name="P:PolyPrompt.Helpers.Serializer.IsReflectionEnabled">
+            <summary>
+            True when reflection-based serialization is available as a fallback for types that no registered resolver
+            or <see cref="T:PolyPrompt.Helpers.PolyPromptJsonContext"/> covers. False in Native AOT and trimmed applications.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Helpers.Serializer.MaxDepth">
+            <summary>
+            Maximum nesting depth written for dictionary and list graphs. Deeper graphs, including cyclic ones, raise
+            <see cref="T:System.Text.Json.JsonException"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.AddTypeInfoResolver(System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver)">
+            <summary>
+            Register a type metadata resolver, typically a source-generated <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/>, so
+            PolyPrompt can serialize and deserialize your own types (tool argument models, decision state objects, values
+            placed in tool parameter schemas) without reflection. Registered resolvers are consulted before
+            <see cref="T:PolyPrompt.Helpers.PolyPromptJsonContext"/> and apply to every PolyPrompt client in the process. Registering the same
+            resolver twice has no effect.
+            </summary>
+            <param name="resolver">Resolver to register.</param>
+            <exception cref="T:System.ArgumentNullException">Thrown when resolver is null.</exception>
         </member>
         <member name="M:PolyPrompt.Helpers.Serializer.SerializeJson(System.Object,System.Boolean)">
             <summary>
@@ -2989,6 +3379,21 @@
             <param name="obj">Object to serialize. A null object serializes to the JSON literal null.</param>
             <param name="pretty">True to indent the output.</param>
             <returns>JSON text.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the graph contains a type with no available metadata
+            (see the remarks on <see cref="T:PolyPrompt.Helpers.Serializer"/>).</exception>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when the graph is deeper than <see cref="F:PolyPrompt.Helpers.Serializer.MaxDepth"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.SerializeJson``1(``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Boolean)">
+            <summary>
+            Serialize a value to JSON with explicit type metadata, for example from a source-generated
+            <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/>. The metadata's own options control naming and null handling.
+            </summary>
+            <typeparam name="T">Value type.</typeparam>
+            <param name="obj">Value to serialize.</param>
+            <param name="typeInfo">Type metadata.</param>
+            <param name="pretty">True to indent the output.</param>
+            <returns>JSON text.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when typeInfo is null.</exception>
         </member>
         <member name="M:PolyPrompt.Helpers.Serializer.DeserializeJson``1(System.String)">
             <summary>
@@ -2999,6 +3404,39 @@
             <returns>The deserialized instance, or default when the JSON literal is null.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when json is null.</exception>
             <exception cref="T:System.Text.Json.JsonException">Thrown when json is not valid JSON or does not match the target type.</exception>
+            <exception cref="T:System.NotSupportedException">Thrown when no metadata is available for T (see the remarks on
+            <see cref="T:PolyPrompt.Helpers.Serializer"/>).</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.DeserializeJson``1(System.String,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0})">
+            <summary>
+            Deserialize JSON text with explicit type metadata, for example from a source-generated
+            <see cref="T:System.Text.Json.Serialization.JsonSerializerContext"/>. The metadata's own options control naming and read tolerance.
+            </summary>
+            <typeparam name="T">Target type.</typeparam>
+            <param name="json">JSON text.</param>
+            <param name="typeInfo">Type metadata.</param>
+            <returns>The deserialized instance, or default when the JSON literal is null.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when json or typeInfo is null.</exception>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when json is not valid JSON or does not match the target type.</exception>
+        </member>
+        <member name="T:PolyPrompt.Helpers.UtcDateTimeConverter">
+            <summary>
+            Writes <see cref="T:System.DateTime"/> values as UTC ISO 8601 strings with microsecond precision
+            (yyyy-MM-ddTHH:mm:ss.ffffffZ) and reads any parseable date as UTC.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.UtcDateTimeConverter.Format(System.DateTime)">
+            <summary>
+            Format a date the way this converter writes it.
+            </summary>
+            <param name="value">Date to format. Local and unspecified dates are converted to UTC.</param>
+            <returns>The formatted date.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.UtcDateTimeConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Helpers.UtcDateTimeConverter.Write(System.Text.Json.Utf8JsonWriter,System.DateTime,System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc />
         </member>
         <member name="T:PolyPrompt.Models.BinaryAnswer">
             <summary>
@@ -4428,6 +4866,24 @@
             </summary>
             <typeparam name="T">Argument model type.</typeparam>
             <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
+            <remarks>
+            Under Native AOT or trimming, T must be covered by a resolver registered with
+            <see cref="M:PolyPrompt.Helpers.Serializer.AddTypeInfoResolver(System.Text.Json.Serialization.Metadata.IJsonTypeInfoResolver)"/>, or use the overload that takes a
+            <see cref="T:System.Text.Json.Serialization.Metadata.JsonTypeInfo`1"/>.
+            </remarks>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when ArgumentsJson is not valid JSON or does not match T.</exception>
+            <exception cref="T:System.NotSupportedException">Thrown when no JSON metadata is available for T.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ToolCall.DeserializeArguments``1(System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0})">
+            <summary>
+            Deserialize ArgumentsJson into a typed arguments object using explicit type metadata, for example
+            <c>call.DeserializeArguments(MyToolJsonContext.Default.WeatherArgs)</c>. Safe under Native AOT and trimming.
+            </summary>
+            <typeparam name="T">Argument model type.</typeparam>
+            <param name="typeInfo">Type metadata, typically from a source-generated JsonSerializerContext.</param>
+            <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when typeInfo is null.</exception>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when ArgumentsJson is not valid JSON or does not match T.</exception>
         </member>
         <member name="T:PolyPrompt.Models.ToolCallDelta">
             <summary>

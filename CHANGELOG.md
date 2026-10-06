@@ -1,5 +1,33 @@
 # Changelog
 
+## v3.2.0 (2026-10-06)
+
+Native AOT and trimming support. Backward compatible: no public API is removed or changed, and on the JIT every request body is byte-for-byte what 3.1 sent.
+
+### Added
+
+- **Native AOT and trimming compatibility.** The package is marked `IsAotCompatible` and builds with zero trim and AOT analyzer warnings on .NET 8 and .NET 10. Every client, operation, credential provider, and telemetry path works in a native binary with no setup. See [AOT.md](AOT.md).
+- **`PolyPromptJsonContext`** (`PolyPrompt.Helpers`): public source-generated JSON metadata for PolyPrompt's wire shapes and models, so applications can save and restore conversations (`ListChatMessage`, including `ToolCall.ThoughtSignature`), tool definitions, requests, and responses without reflection.
+- **`Serializer.AddTypeInfoResolver(IJsonTypeInfoResolver)`**: register source-generated metadata for your own types (typed tool arguments, decision `State` objects, values in tool schemas) once, for every client. Registered resolvers are consulted before `PolyPromptJsonContext` and reflection.
+- **Overloads that take explicit metadata**: `ToolCall.DeserializeArguments<T>(JsonTypeInfo<T>)`, `Serializer.SerializeJson<T>(T, JsonTypeInfo<T>, bool)`, and `Serializer.DeserializeJson<T>(string, JsonTypeInfo<T>)`.
+- `Serializer.IsReflectionEnabled` (false in Native AOT and trimmed applications) and `Serializer.MaxDepth` (64).
+- `AotConsole`: a sample that runs chat, streaming, a typed tool-calling loop, and conversation saving as a native binary.
+- `Test.Aot` and `verify-aot.sh`: run every client against the local mock server on the JIT and as a native binary in which any trim or AOT warning, in PolyPrompt or its dependencies, is a build error. Both runs must pass and send byte-identical request bodies.
+- 12 serializer test cases (`ser_*`): output parity with 3.1 for dictionary graphs and every scalar type (compact and indented), untyped and tolerant reads, `PolyPromptJsonContext` round trips and settings, the typed overloads, resolver precedence, and the failure cases (null arguments, invalid JSON, depth and cycles, non-finite numbers).
+
+### Changed
+
+- `Serializer` writes dictionaries, lists, and common value types (strings, numbers, booleans, enums, dates, GUIDs, `byte[]`, `JsonElement`, `JsonDocument`, `JsonNode`) with `Utf8JsonWriter` instead of reflection. Other types are resolved through registered resolvers, then `PolyPromptJsonContext`, then reflection when it is enabled. A type with no metadata while reflection is disabled raises `NotSupportedException` naming the type and the fix; client operations report it as an unsuccessful response without sending a request.
+- A dictionary or list graph nested more than 64 levels deep, including a cyclic one, now raises `JsonException` instead of overflowing.
+- `UtcDateTimeConverter` (`PolyPrompt.Helpers`) is now public so source-generated contexts can share PolyPrompt's date format.
+- `SyslogLogging` 2.3.1 -> 2.4.0, which is AOT compatible.
+- Test and sample dependencies: `Touchstone.Core`, `Touchstone.Cli`, `Touchstone.XunitAdapter`, and `Touchstone.NunitAdapter` 0.2.0 -> 0.2.1; `Inputty` 1.0.13 -> 1.0.14 (console harnesses).
+
+### Fixed
+
+- Three streaming tool chat tests asserted `OverallRuntimeMs > 0` and `OverallTokensPerSecond > 0` against the in-process mock server, and failed when a call finished in under a millisecond. They now assert that the runtime covers the time to the last token and that throughput is positive whenever the runtime is.
+- The Gemini tool-route mock wrote error messages with reflection-based `JsonSerializer`; it now uses `JsonEncodedText`, so the mock server also runs in a native binary.
+
 ## v3.1.1 (2026-10-03)
 
 Dependency update. No public API changes.

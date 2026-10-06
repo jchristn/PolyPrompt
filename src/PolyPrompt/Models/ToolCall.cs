@@ -1,5 +1,7 @@
 namespace PolyPrompt.Models
 {
+    using System.Text.Json.Serialization.Metadata;
+
     /// <summary>
     /// Tool call requested by a model.
     /// </summary>
@@ -46,9 +48,30 @@ namespace PolyPrompt.Models
         /// </summary>
         /// <typeparam name="T">Argument model type.</typeparam>
         /// <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
+        /// <remarks>
+        /// Under Native AOT or trimming, T must be covered by a resolver registered with
+        /// <see cref="PolyPrompt.Helpers.Serializer.AddTypeInfoResolver"/>, or use the overload that takes a
+        /// <see cref="JsonTypeInfo{T}"/>.
+        /// </remarks>
+        /// <exception cref="System.Text.Json.JsonException">Thrown when ArgumentsJson is not valid JSON or does not match T.</exception>
+        /// <exception cref="NotSupportedException">Thrown when no JSON metadata is available for T.</exception>
         public T? DeserializeArguments<T>()
         {
             return _Serializer.DeserializeJson<T>(ArgumentsJson);
+        }
+
+        /// <summary>
+        /// Deserialize ArgumentsJson into a typed arguments object using explicit type metadata, for example
+        /// <c>call.DeserializeArguments(MyToolJsonContext.Default.WeatherArgs)</c>. Safe under Native AOT and trimming.
+        /// </summary>
+        /// <typeparam name="T">Argument model type.</typeparam>
+        /// <param name="typeInfo">Type metadata, typically from a source-generated JsonSerializerContext.</param>
+        /// <returns>The deserialized argument object, or null when the JSON literal is null.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when typeInfo is null.</exception>
+        /// <exception cref="System.Text.Json.JsonException">Thrown when ArgumentsJson is not valid JSON or does not match T.</exception>
+        public T? DeserializeArguments<T>(JsonTypeInfo<T> typeInfo)
+        {
+            return _Serializer.DeserializeJson(ArgumentsJson, typeInfo);
         }
 
         #endregion

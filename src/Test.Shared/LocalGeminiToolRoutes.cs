@@ -290,7 +290,7 @@ namespace Test.Shared
 
         private static string ErrorJson(string message)
         {
-            return "{\"error\":{\"code\":400,\"message\":" + JsonSerializer.Serialize(message) + ",\"status\":\"INVALID_ARGUMENT\"}}";
+            return "{\"error\":{\"code\":400,\"message\":\"" + JsonEncodedText.Encode(message) + "\",\"status\":\"INVALID_ARGUMENT\"}}";
         }
 
         private static async Task WriteJsonAsync(HttpListenerContext context, int statusCode, string json)

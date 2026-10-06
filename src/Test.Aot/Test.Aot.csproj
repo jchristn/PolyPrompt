@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Native AOT verification for PolyPrompt. "dotnet run" runs the checks on the JIT; "dotnet publish -r <rid>" compiles
+    a native binary with every trim and AOT warning treated as an error, which then runs the same checks without
+    reflection or dynamic code. The local mock server is linked in from Test.Shared.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Test.Shared\LocalOpenAiTestServer.cs" Link="Shared\LocalOpenAiTestServer.cs" />
+    <Compile Include="..\Test.Shared\LocalExtendedRoutes.cs" Link="Shared\LocalExtendedRoutes.cs" />
+    <Compile Include="..\Test.Shared\LocalDecisionRoutes.cs" Link="Shared\LocalDecisionRoutes.cs" />
+    <Compile Include="..\Test.Shared\LocalGeminiToolRoutes.cs" Link="Shared\LocalGeminiToolRoutes.cs" />
+    <Compile Include="..\Test.Shared\LocalRequestParser.cs" Link="Shared\LocalRequestParser.cs" />
+    <Compile Include="..\Test.Shared\LocalJson.cs" Link="Shared\LocalJson.cs" />
+    <Compile Include="..\Test.Shared\LocalClients.cs" Link="Shared\LocalClients.cs" />
+    <Compile Include="..\Test.Shared\LocalAnthropic*.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Test.Shared\LocalGemini*.cs" Exclude="..\Test.Shared\LocalGeminiToolCases.cs;..\Test.Shared\LocalGeminiToolRoutes.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Test.Shared\LocalOpenAi*.cs" Exclude="..\Test.Shared\LocalOpenAiTestServer.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Test.Shared\LocalEmbeddingRequest.cs" Link="Shared\LocalEmbeddingRequest.cs" />
+    <Compile Include="..\Test.Shared\LocalGenerateRequest.cs" Link="Shared\LocalGenerateRequest.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyPrompt\PolyPrompt.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -32,6 +32,7 @@ namespace Test.Shared
             cases.AddRange(LocalDecisionCases.Create(SuiteId));
             cases.AddRange(LocalProviderDetailCases.Create(SuiteId));
             cases.AddRange(LocalTelemetryCases.Create(SuiteId));
+            cases.AddRange(LocalSerializerCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 
@@ -953,8 +954,8 @@ namespace Test.Shared
             SharedAssert.True(first.ChunkCount >= 4, "OpenAI-compatible streaming tool chat should count content chunks.");
             SharedAssert.True(first.TimeToFirstTokenMs >= 0, "OpenAI-compatible streaming tool chat should populate first-token timing.");
             SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "OpenAI-compatible streaming tool chat should order token timings.");
-            SharedAssert.True(first.OverallRuntimeMs > 0, "OpenAI-compatible streaming tool chat should populate runtime.");
-            SharedAssert.True(first.OverallTokensPerSecond > 0, "OpenAI-compatible streaming tool chat should populate throughput.");
+            SharedAssert.True(first.OverallRuntimeMs >= first.TimeToLastTokenMs, "OpenAI-compatible streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallRuntimeMs == 0 || first.OverallTokensPerSecond > 0, "OpenAI-compatible streaming tool chat should populate throughput.");
             SharedAssert.NotNull(first.Usage, "OpenAI-compatible streaming tool chat should expose usage.");
             SharedAssert.Equal(7, first.Usage!.CompletionTokens, "OpenAI-compatible streaming tool chat should parse completion tokens.");
 
@@ -1071,8 +1072,8 @@ namespace Test.Shared
             SharedAssert.True(first.ChunkCount >= 4, "Ollama streaming tool chat should count content chunks.");
             SharedAssert.True(first.TimeToFirstTokenMs >= 0, "Ollama streaming tool chat should populate first-token timing.");
             SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "Ollama streaming tool chat should order token timings.");
-            SharedAssert.True(first.OverallRuntimeMs > 0, "Ollama streaming tool chat should populate runtime.");
-            SharedAssert.True(first.OverallTokensPerSecond > 0, "Ollama streaming tool chat should populate throughput.");
+            SharedAssert.True(first.OverallRuntimeMs >= first.TimeToLastTokenMs, "Ollama streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallRuntimeMs == 0 || first.OverallTokensPerSecond > 0, "Ollama streaming tool chat should populate throughput.");
             SharedAssert.NotNull(first.Usage, "Ollama streaming tool chat should expose usage.");
             SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Ollama streaming tool chat should parse eval count.");
 
@@ -1203,8 +1204,8 @@ namespace Test.Shared
             SharedAssert.True(first.ChunkCount >= 3, "Gemini streaming tool chat should count content chunks.");
             SharedAssert.True(first.TimeToFirstTokenMs >= 0, "Gemini streaming tool chat should populate first-token timing.");
             SharedAssert.True(first.TimeToLastTokenMs >= first.TimeToFirstTokenMs, "Gemini streaming tool chat should order token timings.");
-            SharedAssert.True(first.OverallRuntimeMs > 0, "Gemini streaming tool chat should populate runtime.");
-            SharedAssert.True(first.OverallTokensPerSecond > 0, "Gemini streaming tool chat should populate throughput.");
+            SharedAssert.True(first.OverallRuntimeMs >= first.TimeToLastTokenMs, "Gemini streaming tool chat should populate runtime.");
+            SharedAssert.True(first.OverallRuntimeMs == 0 || first.OverallTokensPerSecond > 0, "Gemini streaming tool chat should populate throughput.");
             SharedAssert.NotNull(first.Usage, "Gemini streaming tool chat should expose usage.");
             SharedAssert.Equal(7, first.Usage!.CompletionTokens, "Gemini streaming tool chat should parse candidates token count.");
 

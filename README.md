@@ -41,6 +41,7 @@ PolyPrompt gives you one consistent API per capability. A chat call looks the sa
 - **Call recording**: every HTTP call is recorded with full request and response details for debugging and auditing
 - **Observability**: OpenTelemetry-shaped metrics and traces for every operation, outbound request, stream, decision batch, and credential refresh, emitted through the BCL `Meter` and `ActivitySource` named `PolyPrompt` with no exporter dependency (see [TELEMETRY.md](TELEMETRY.md))
 - **Settings that compose**: client-wide `Defaults` plus per-call options, merged field by field, with provider-specific options that extend the common ones
+- **Native AOT and trimming**: no reflection required, verified by publishing a native binary that exercises every client; your own types plug in through source-generated JSON metadata (see [AOT.md](AOT.md))
 
 ## Use Cases
 
@@ -71,7 +72,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.1.1**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.2.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -819,6 +820,31 @@ What you get:
 
 Labels are bounded (no ids or prompts), and no prompts, bodies, or credentials are recorded. The `LoggingModule` from SyslogLogging 2.3+ emits its own telemetry on a separate `SyslogLogging` meter and activity source; subscribe to `SyslogLoggingTelemetry.MeterName` and `SyslogLoggingTelemetry.ActivitySourceName` as well if you want logging metrics and spans. [TELEMETRY.md](TELEMETRY.md) has the full metrics and spans catalog, PromQL alerts, and a Grafana dashboard map.
 
+### Native AOT and Trimming
+
+PolyPrompt works in Native AOT and trimmed applications with no setup for the common cases: every client, streaming, tool calling with dictionary-based schemas, decisions with string state, credentials, and telemetry. Set `<PublishAot>true</PublishAot>` and publish for a runtime identifier.
+
+If PolyPrompt handles your own types (typed tool arguments, a decision `State` object, or a class inside a tool schema), give it source-generated metadata, since reflection is unavailable in a native binary:
+
+```csharp
+[JsonSerializable(typeof(WeatherArgs))]
+internal partial class AppJsonContext : JsonSerializerContext { }
+
+Serializer.AddTypeInfoResolver(AppJsonContext.Default);          // once, at startup
+
+WeatherArgs? args = call.DeserializeArguments<WeatherArgs>();    // now works under Native AOT
+WeatherArgs? same = call.DeserializeArguments(AppJsonContext.Default.WeatherArgs);   // or pass metadata explicitly
+```
+
+`PolyPromptJsonContext` covers PolyPrompt's own models, so conversations and responses can be saved without reflection:
+
+```csharp
+string json = JsonSerializer.Serialize(messages, PolyPromptJsonContext.Default.ListChatMessage);
+List<ChatMessage>? restored = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ListChatMessage);
+```
+
+On the JIT nothing changes: types you do not register are still handled by reflection. [AOT.md](AOT.md) covers the supported value types, how registered and explicit metadata differ, errors, and verification; [src/AotConsole](src/AotConsole/Program.cs) is a complete native sample.
+
 ### Cancellation and Timeouts
 
 ```csharp
@@ -986,7 +1012,7 @@ PolyPrompt/
 |   |   |-- Clients/
 |   |   |   |-- Base/            # ClientBase and the seven capability bases
 |   |   |   `-- <Provider>/      # One folder per provider: capability clients and a shared protocol helper
-|   |   |-- Helpers/             # JSON serializer (System.Text.Json)
+|   |   |-- Helpers/             # AOT-safe JSON serializer, PolyPromptJsonContext, UtcDateTimeConverter
 |   |   |-- Telemetry/           # Meter, ActivitySource, and the stable telemetry names (PolyPromptTelemetryNames)
 |   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request, response, and base options models
@@ -999,8 +1025,10 @@ PolyPrompt/
 |   |-- CohereConsole/
 |   |-- TeiConsole/
 |   |-- TypeSafeConsole/
+|   |-- AotConsole/              # Native AOT sample: chat, streaming, typed tool calls, saved conversation
 |   |-- Test.Shared/             # Shared Touchstone test descriptors and the local mock server
 |   |-- Test.Automated/          # Touchstone console runner
+|   |-- Test.Aot/                # Native AOT verification: every client, JIT vs native binary (verify-aot.sh)
 |   |-- Test.Xunit/              # xUnit adapter over Test.Shared
 |   `-- Test.Nunit/              # NUnit adapter over Test.Shared
 `-- assets/
@@ -1016,12 +1044,18 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (231 cases, including the telemetry cases) runs against an in-process mock server and needs no credentials:
+The local suite (244 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest
 dotnet test src/Test.Xunit/Test.Xunit.csproj
 dotnet test src/Test.Nunit/Test.Nunit.csproj
+```
+
+The Native AOT check runs every client on the JIT and as a native binary (any trim or AOT warning fails the publish), and requires both runs to send byte-identical requests. It needs the platform's [Native AOT prerequisites](https://learn.microsoft.com/dotnet/core/deploying/native-aot/#prerequisites):
+
+```bash
+src/Test.Aot/verify-aot.sh                      # current platform, net8.0 and net10.0
 ```
 
 The live suite runs against one provider at a time. Cases for a capability the provider does not have are skipped with the reason.
