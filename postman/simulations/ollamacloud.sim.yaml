@@ -1,0 +1,5 @@
+simulation: ollamacloud-smoke
+routing: path
+mocks:
+  - routeKey: ollamacloud
+    path: ../mocks/ollamacloud/config.yaml

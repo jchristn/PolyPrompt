@@ -1,0 +1,10 @@
+version: 1
+name: OllamaCloud native API smoke contract
+slug: ollamacloud-native-api-smoke-con
+interceptRequests: true
+protocol: http
+port: 4500
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

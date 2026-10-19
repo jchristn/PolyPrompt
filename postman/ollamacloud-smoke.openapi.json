@@ -1,0 +1,104 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "OllamaCloud native API smoke contract",
+    "version": "1.0.0",
+    "description": "Routes and response shapes reused from Ollama clients and docs.ollama.com/api. Local smoke fixtures; not a full provider specification."
+  },
+  "paths": {
+    "/api/tags": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Successful native Ollama response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "models": [
+                    {
+                      "name": "test-model",
+                      "model": "test-model"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Successful native Ollama response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "model": "test-model",
+                  "message": {
+                    "role": "assistant",
+                    "content": "pong"
+                  },
+                  "done": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/generate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Successful native Ollama response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "model": "test-model",
+                  "response": "generated text",
+                  "done": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/embed": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Successful native Ollama response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "embeddings": [
+                    [
+                      1.0,
+                      2.0,
+                      3.0
+                    ]
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

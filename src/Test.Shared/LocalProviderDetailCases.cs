@@ -19,6 +19,7 @@ namespace Test.Shared
         {
             return new List<TestCaseDescriptor>
             {
+                Case(suiteId, "ollamacloud_contract", "OllamaCloud fixes endpoint, requires bearer auth, and uses native Ollama routes", RunOllamaCloudAsync),
                 Case(suiteId, "gemini_tool_name_recovery", "Gemini recovers a tool result's name from the earlier tool call with the same id, and an explicit ToolName wins", RunToolNameRecoveryAsync),
                 Case(suiteId, "gemini_tool_name_unrecoverable", "Gemini rejects a tool result whose name cannot be recovered, before sending, naming the message and id", RunToolNameUnrecoverableAsync),
                 Case(suiteId, "tool_result_without_name_other_providers", "Providers that do not need the function name accept a tool result without ToolName", RunToolResultWithoutNameAsync),
@@ -31,6 +32,62 @@ namespace Test.Shared
         private static TestCaseDescriptor Case(string suiteId, string caseId, string displayName, Func<CancellationToken, Task> executeAsync)
         {
             return new TestCaseDescriptor(suiteId, caseId, displayName, executeAsync, new[] { "local" });
+        }
+
+        private static async Task RunOllamaCloudAsync(CancellationToken token)
+        {
+            foreach (string? invalid in new string?[] { null, "", " ", "bad token", "bad\r\ntoken" })
+            {
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudCompletionClient(invalid!)), "Completion must require a bearer token.");
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudEmbeddingClient(invalid!)), "Embedding must require a bearer token.");
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudModelClient(invalid!)), "Models must require a bearer token.");
+            }
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            string target = Environment.GetEnvironmentVariable("POLYPROMPT_OLLAMACLOUD_SIMULATION") ?? server.Endpoint;
+            using HttpClient http = new HttpClient(new CloudTransport(target));
+            using OllamaCloudCompletionClient completion = new OllamaCloudCompletionClient("test-cloud-token", httpClient: http) { Model = "test-model" };
+            using OllamaCloudEmbeddingClient embedding = new OllamaCloudEmbeddingClient("test-cloud-token", httpClient: http) { Model = "test-embed" };
+            using OllamaCloudModelClient models = new OllamaCloudModelClient("test-cloud-token", httpClient: http);
+            foreach (ClientBase client in new ClientBase[] { completion, embedding, models })
+            {
+                SharedAssert.Equal("https://ollama.com:443", client.Endpoint, "Endpoint must be fixed.");
+                SharedAssert.True(await client.ValidateConnectivityAsync(token), "Cloud connectivity should use native tags.");
+            }
+            SharedAssert.True((await completion.ChatAsync("hello", token: token)).Success, "Cloud native chat should succeed.");
+            ChatStreamingResponse stream = await completion.ChatStreamingAsync("hello", token: token);
+            await foreach (ChatStreamingChunk _ in stream.Chunks.WithCancellation(token)) { }
+            SharedAssert.True(stream.Success, "Cloud streaming chat should succeed.");
+            SharedAssert.True((await completion.GenerateAsync("hello", token: token)).Success, "Cloud generation should succeed.");
+            GenerationStreamingResponse generation = await completion.GenerateStreamingAsync("hello", token: token);
+            await foreach (GenerationStreamingChunk _ in generation.Chunks.WithCancellation(token)) { }
+            SharedAssert.True(generation.Success, "Cloud streaming generation should succeed.");
+            SharedAssert.True((await completion.ToolChatAsync(ParallelCallsWithIdOnlyResults(), token: token)).Success, "Cloud tool chat should succeed.");
+            ToolChatStreamingResponse tools = await completion.ToolChatStreamingAsync(ParallelCallsWithIdOnlyResults(), token: token);
+            await foreach (ToolChatStreamingChunk _ in tools.Chunks.WithCancellation(token)) { }
+            SharedAssert.True(tools.Success, "Cloud streaming tool chat should succeed.");
+            SharedAssert.True((await embedding.EmbedAsync("hello", token: token)).Success, "Cloud embeddings should succeed.");
+            int count = 0;
+            await foreach (ModelInformation _ in models.ListModelsAsync(token)) count++;
+            SharedAssert.True(count > 0, "Cloud model listing should parse models.");
+        }
+
+        // Assert the production destination and authentication before forwarding over real HTTP to a local server.
+        private sealed class CloudTransport : DelegatingHandler
+        {
+            private readonly string _Target;
+            public CloudTransport(string target) : base(new HttpClientHandler()) { _Target = target; }
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+            {
+                SharedAssert.Equal("https", request.RequestUri!.Scheme, "Cloud must use HTTPS.");
+                SharedAssert.Equal("ollama.com", request.RequestUri.Host, "Cloud host must be fixed.");
+                SharedAssert.Equal(443, request.RequestUri.Port, "Cloud port must be fixed.");
+                SharedAssert.Equal("Bearer", request.Headers.Authorization?.Scheme, "Cloud must use bearer auth.");
+                SharedAssert.Equal("test-cloud-token", request.Headers.Authorization?.Parameter, "Cloud must send the supplied token.");
+                SharedAssert.True(request.RequestUri.AbsolutePath.StartsWith("/api/", StringComparison.Ordinal), "Cloud must use native Ollama routes.");
+                request.RequestUri = new Uri(_Target.TrimEnd('/') + request.RequestUri.PathAndQuery);
+                return base.SendAsync(request, token);
+            }
         }
 
         #region Gemini-Tool-Names

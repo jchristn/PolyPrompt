@@ -2362,6 +2362,51 @@
             Attach the bearer token, when one is configured (Ollama itself needs none; proxies in front of it may).
             </summary>
         </member>
+        <member name="T:PolyPrompt.Clients.OllamaCloudCompletionClient">
+            <summary>
+            Ollama Cloud completion client using the native Ollama API at https://ollama.com:443.
+            Inherits Ollama's operations and settings and requires bearer authentication.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaCloudCompletionClient.#ctor(System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new Ollama Cloud completion client with a fixed endpoint and bearer authentication.
+            </summary>
+            <param name="apiKey">Required nonempty Ollama Cloud bearer token.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client; see <see cref="T:PolyPrompt.Clients.ClientBase"/>.</param>
+            <exception cref="T:System.ArgumentException">The token is empty or contains whitespace.</exception>
+        </member>
+        <member name="T:PolyPrompt.Clients.OllamaCloudEmbeddingClient">
+            <summary>
+            Ollama Cloud embedding client using the native Ollama API at https://ollama.com:443.
+            Inherits Ollama's operations and settings and requires bearer authentication.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaCloudEmbeddingClient.#ctor(System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new Ollama Cloud embedding client with a fixed endpoint and bearer authentication.
+            </summary>
+            <param name="apiKey">Required nonempty Ollama Cloud bearer token.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client; see <see cref="T:PolyPrompt.Clients.ClientBase"/>.</param>
+            <exception cref="T:System.ArgumentException">The token is empty or contains whitespace.</exception>
+        </member>
+        <member name="T:PolyPrompt.Clients.OllamaCloudModelClient">
+            <summary>
+            Ollama Cloud model client using the native Ollama API at https://ollama.com:443.
+            Inherits Ollama's operations and settings and requires bearer authentication.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaCloudModelClient.#ctor(System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new Ollama Cloud model client with a fixed endpoint and bearer authentication.
+            </summary>
+            <param name="apiKey">Required nonempty Ollama Cloud bearer token.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client; see <see cref="T:PolyPrompt.Clients.ClientBase"/>.</param>
+            <exception cref="T:System.ArgumentException">The token is empty or contains whitespace.</exception>
+        </member>
         <member name="T:PolyPrompt.Clients.AzureOpenAiCompletionClient">
             <summary>
             Azure OpenAI completion client. Request and response bodies, streaming, tool calls, and reasoning are the same as

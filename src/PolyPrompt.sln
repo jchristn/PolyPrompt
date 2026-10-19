@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Aot", "Test.Aot\Test.A
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AotConsole", "AotConsole\AotConsole.csproj", "{7C081309-14F1-4723-B2C1-B54B7C5979CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OllamaCloudConsole", "OllamaCloudConsole\OllamaCloudConsole.csproj", "{F4A93539-D383-4B04-8F4F-DBECAA2F204A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -223,6 +225,18 @@ Global
 		{7C081309-14F1-4723-B2C1-B54B7C5979CA}.Release|x64.Build.0 = Release|Any CPU
 		{7C081309-14F1-4723-B2C1-B54B7C5979CA}.Release|x86.ActiveCfg = Release|Any CPU
 		{7C081309-14F1-4723-B2C1-B54B7C5979CA}.Release|x86.Build.0 = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|x64.Build.0 = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Debug|x86.Build.0 = Debug|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|x64.ActiveCfg = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|x64.Build.0 = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|x86.ActiveCfg = Release|Any CPU
+		{F4A93539-D383-4B04-8F4F-DBECAA2F204A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.3.0 (2026-10-18)
+
+### Added
+
+- OllamaCloud provider: `OllamaCloudCompletionClient`, `OllamaCloudEmbeddingClient`, and `OllamaCloudModelClient` reuse Ollama operations and options, with the native Ollama API fixed to `https://ollama.com:443` and required bearer authentication.
+- `OllamaCloudConsole`, with the same interactive commands as OllamaConsole and token input through `OLLAMA_API_KEY` or a prompt.
+- Deterministic coverage for fixed endpoints, required tokens, native API routes, and bearer headers.
+
 ## v3.2.0 (2026-10-06)
 
 Native AOT and trimming support. Backward compatible: no public API is removed or changed, and on the JIT every request body is byte-for-byte what 3.1 sent.

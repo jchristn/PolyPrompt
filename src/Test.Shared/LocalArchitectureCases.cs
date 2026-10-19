@@ -23,13 +23,13 @@ namespace Test.Shared
 
         private static readonly Dictionary<Type, string[]> _ExpectedClients = new Dictionary<Type, string[]>
         {
-            { typeof(CompletionClientBase), new[] { "OllamaCompletionClient", "OpenAiCompletionClient", "AzureOpenAiCompletionClient", "GeminiCompletionClient", "VertexAiCompletionClient", "AnthropicCompletionClient", "CohereCompletionClient", "BedrockCompletionClient" } },
-            { typeof(EmbeddingClientBase), new[] { "OllamaEmbeddingClient", "OpenAiEmbeddingClient", "AzureOpenAiEmbeddingClient", "GeminiEmbeddingClient", "VertexAiEmbeddingClient", "BedrockEmbeddingClient", "VoyageAiEmbeddingClient", "CohereEmbeddingClient", "TeiEmbeddingClient" } },
+            { typeof(CompletionClientBase), new[] { "OllamaCompletionClient", "OllamaCloudCompletionClient", "OpenAiCompletionClient", "AzureOpenAiCompletionClient", "GeminiCompletionClient", "VertexAiCompletionClient", "AnthropicCompletionClient", "CohereCompletionClient", "BedrockCompletionClient" } },
+            { typeof(EmbeddingClientBase), new[] { "OllamaEmbeddingClient", "OllamaCloudEmbeddingClient", "OpenAiEmbeddingClient", "AzureOpenAiEmbeddingClient", "GeminiEmbeddingClient", "VertexAiEmbeddingClient", "BedrockEmbeddingClient", "VoyageAiEmbeddingClient", "CohereEmbeddingClient", "TeiEmbeddingClient" } },
             { typeof(SparseEmbeddingClientBase), new[] { "TeiSparseEmbeddingClient" } },
             { typeof(RerankClientBase), new[] { "BedrockRerankClient", "VoyageAiRerankClient", "CohereRerankClient", "TeiRerankClient" } },
             { typeof(ClassificationClientBase), new[] { "CohereClassificationClient", "TeiClassificationClient" } },
             { typeof(DecisionClientBase), new[] { "TypeSafeDecisionClient" } },
-            { typeof(ModelClientBase), new[] { "OllamaModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
+            { typeof(ModelClientBase), new[] { "OllamaModelClient", "OllamaCloudModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
         };
 
         public static IEnumerable<TestCaseDescriptor> Create(string suiteId)

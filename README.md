@@ -6,12 +6,13 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **Ollama Cloud**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
 
 > **Upgrading from 2.x?** Version 3.0 splits each provider client into one client per capability. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md).
 
 | Provider | Completion | Embedding | Rerank | Classification | Decision | Models | Auth |
 |---|---|---|---|---|---|---|---|
+| OllamaCloud | `OllamaCloudCompletionClient` | `OllamaCloudEmbeddingClient` | | | | `OllamaCloudModelClient` | bearer (required) |
 | Ollama | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer |
 | OpenAI (+ compatible) | `OpenAiCompletionClient` | `OpenAiEmbeddingClient` | | | | `OpenAiModelClient` | bearer |
 | Azure OpenAI | `AzureOpenAiCompletionClient` | `AzureOpenAiEmbeddingClient` | | | | `AzureOpenAiModelClient` | `api-key` or Azure AD |
@@ -72,7 +73,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.2.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.3.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -122,6 +123,34 @@ ChatResponse other = await chat.ChatAsync("Hi", new CompletionOptions { Model = 
 The same options object is used by `ChatAsync`, `GenerateAsync`, and `ToolChatAsync` (through `ToolChatRequest.Options`). When nothing sets `MaxTokens`, 4096 is sent.
 
 ## Quick Start
+
+### Ollama Cloud
+
+OllamaCloud uses the native Ollama API, fixes the read-only endpoint to `https://ollama.com:443`, and requires a bearer token. It inherits the same operations and `OllamaCompletionOptions` / `OllamaEmbeddingOptions` as Ollama. There is no API-type or endpoint override.
+
+```csharp
+using PolyPrompt.Clients;
+
+using OllamaCloudCompletionClient client = new OllamaCloudCompletionClient(
+    Environment.GetEnvironmentVariable("OLLAMA_API_KEY")!);
+client.Model = "gpt-oss:20b";
+var response = await client.ChatAsync("Say hello.");
+Console.WriteLine(response.Text);
+```
+
+`OllamaCloudEmbeddingClient` and `OllamaCloudModelClient` take the same required token. Available models and operations depend on the hosted service; local defaults, embeddings, pull, or delete may not be supported in the cloud. Choose a model returned by the cloud model listing.
+
+Run `dotnet run --project src/OllamaCloudConsole -f net10.0` for the interactive harness. Set `OLLAMA_API_KEY` or enter the bearer token when prompted. The harness offers the same commands as OllamaConsole.
+
+The local test suite checks token validation, the fixed HTTPS destination, bearer headers, and native API operations. To repeat those checks through the saved Postman smoke simulation, start `postman simulation run postman/simulations/ollamacloud.sim.yaml --port 4911 --no-history` and run:
+
+```bash
+POLYPROMPT_OLLAMACLOUD_SIMULATION=http://127.0.0.1:4911/ollamacloud \
+  dotnet run --project src/Test.Automated -c Release -f net10.0 -- selftest
+```
+
+The simulation uses local response fixtures from the native Ollama response shapes; it does not establish hosted model or capability availability.
+
 
 ### Ollama
 
@@ -1017,6 +1046,7 @@ PolyPrompt/
 |   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request, response, and base options models
 |   |   `-- Options/             # Provider-specific options
+|   |-- OllamaCloudConsole/      # Ollama Cloud harness (fixed URL, required bearer token)
 |   |-- OllamaConsole/           # Interactive harnesses, one per provider
 |   |-- OpenAIConsole/
 |   |-- GeminiConsole/
