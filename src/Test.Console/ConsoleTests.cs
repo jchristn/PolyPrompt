@@ -105,6 +105,7 @@ public sealed class ConsoleTests
         Assert.That(server.Bodies[1], Does.Contain("visible-to-model.txt"));
         Assert.That(output.ToString(), Does.Contain("--- Thinking ---").And.Contain("--- Answer ---").And.Contain("--- Tool: list_directory ---").And.Contain("Directory inspected."));
         Assert.That(session.Messages.Select(m => m.Role), Is.EqualTo(new[] { "user", "assistant", "tool", "assistant" }));
+        Assert.That(output.ToString(), Does.Contain("Output tokens: 270" + Environment.NewLine + Environment.NewLine));
         Assert.That(session.Messages[2].ToolName, Is.EqualTo("list_directory"));
         Assert.That(session.Messages[1].Content, Is.EqualTo("I will inspect it."));
         await session.SendAsync("Now acknowledge", streaming, false);
@@ -280,7 +281,7 @@ public sealed class ConsoleTests
                             : new { role = "assistant", content = "I will inspect it.", thinking = "Need directory evidence.", tool_calls = new object[] { new { function = new { name, arguments = mode == "malformed" ? new Dictionary<string, string>() : new Dictionary<string, string> { { "path", "." } } } } } };
                         string json = generation
                             ? JsonSerializer.Serialize(new { model = "test-model", thinking = "generation thought", response = "generated answer", done = true })
-                            : JsonSerializer.Serialize(new { model = "test-model", message, done = true });
+                            : JsonSerializer.Serialize(new { model = "test-model", message, done = true, prompt_eval_count = 2775, eval_count = 270 });
                         context.Response.ContentType = streaming ? "application/x-ndjson" : "application/json";
                         byte[] bytes = Encoding.UTF8.GetBytes(json + (streaming ? "\n" : ""));
                         await context.Response.OutputStream.WriteAsync(bytes); context.Response.Close();

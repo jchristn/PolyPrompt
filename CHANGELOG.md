@@ -6,6 +6,7 @@ No package version change; the PolyPrompt library is unchanged.
 
 ### Changed
 
+- Shared chat usage blocks always end with a blank line, keeping the next command prompt separate in streaming and non-streaming chat.
 - All console harnesses derive from `ConsoleApplicationBase`; chat providers share `ConsoleSession` for conversation history, streaming, and bounded automatic tool execution. Both `chat` and `toolchat` execute actual Mux tools instead of requesting manual weather-result JSON.
 - Added a shared Mux tool-host process for file operations, search, process execution, browser retrieval, and persistent task plans; configured web search and subagents are also supported. The companion is copied on build/publish and is usable from the native AotConsole.
 - Thinking and answers render separately for streaming and non-streaming chat/tool chat. A console-only observer also displays reasoning returned by native generation endpoints without modifying library models.

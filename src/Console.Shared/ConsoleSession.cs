@@ -115,6 +115,7 @@ public sealed class ConsoleSession(CompletionClientBase client, IConsoleToolRunt
         if (usage.PromptTokens.HasValue) output.WriteLine("Input tokens: " + usage.PromptTokens);
         if (usage.CompletionTokens.HasValue) output.WriteLine("Output tokens: " + usage.CompletionTokens);
         if (usage.ReasoningTokens.HasValue) output.WriteLine("Reasoning tokens: " + usage.ReasoningTokens);
+        output.WriteLine();
     }
 
     public void Dispose() => tools.Dispose();
