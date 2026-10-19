@@ -237,6 +237,7 @@ namespace Test.Automated
             Console.WriteLine("                    [--workspace <id>] [--region <r>] [--project <p>] [--credentials <path>]");
             Console.WriteLine("                    [--access-key-id <id>] [--secret-access-key <s>] [--session-token <t>] [--api-version <v>]");
             Console.WriteLine("or one provider group, with every option prefixed by the provider name, for example:");
+            Console.WriteLine("  --xai-key <key> [--xai-model <m>] [--xai-embedding-model <m>]");
             Console.WriteLine("  --openai-key <key> [--openai-model <m>] [--openai-embedding-model <m>]");
             Console.WriteLine("  --azure-endpoint <url> --azure-key <key> --azure-model <chat deployment> [--azure-embedding-model <deployment>] [--azure-api-version <v>]");
             Console.WriteLine("  --vertex-project <p> [--vertex-region <r>] [--vertex-credentials <service-account.json>]  (omit credentials to use ADC)");

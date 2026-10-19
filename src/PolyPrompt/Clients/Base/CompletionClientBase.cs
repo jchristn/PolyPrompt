@@ -170,7 +170,7 @@ namespace PolyPrompt.Clients
             ResolvedCompletion settings = Resolve(options);
             return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationGenerateStream, settings.Model, s => Enrich(s, settings, null),
                 () => GenerateStreamingCoreAsync(prompt, settings, token),
-                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text)),
+                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text) || !string.IsNullOrEmpty(c.ReasoningText)),
                 token);
         }
 
@@ -453,7 +453,7 @@ namespace PolyPrompt.Clients
             {
                 await foreach (GenerationStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
                 {
-                    if (!string.IsNullOrEmpty(chunk.Text))
+                    if (!string.IsNullOrEmpty(chunk.Text) || !string.IsNullOrEmpty(chunk.ReasoningText))
                     {
                         if (response.ChunkCount == 0)
                         {
@@ -462,6 +462,11 @@ namespace PolyPrompt.Clients
                         response.ChunkCount++;
                         response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
                     }
+
+                    if (!string.IsNullOrEmpty(chunk.ReasoningText)) response.Reasoning = (response.Reasoning ?? "") + chunk.ReasoningText;
+                    if (chunk.Usage != null) response.Usage = chunk.Usage;
+                    if (chunk.ResponseId != null) response.ResponseId = chunk.ResponseId;
+                    if (chunk.FinishReason != null) response.FinishReason = chunk.FinishReason;
 
                     yield return chunk;
                 }

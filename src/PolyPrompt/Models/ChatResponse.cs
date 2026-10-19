@@ -6,6 +6,10 @@ namespace PolyPrompt.Models
     /// </summary>
     public class ChatResponse : ResponseBase
     {
+        /// <summary>Provider response identifier, when reported.</summary>
+        public string? ResponseId { get; set; }
+        /// <summary>Provider finish reason, when reported.</summary>
+        public string? FinishReason { get; set; }
         /// <summary>
         /// The completion text returned by the model.
         /// </summary>

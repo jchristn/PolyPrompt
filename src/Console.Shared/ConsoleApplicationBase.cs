@@ -46,13 +46,14 @@ public abstract class ConsoleApplicationBase
             if (streaming)
             {
                 GenerationStreamingResponse response = await client.GenerateStreamingAsync(prompt);
-                await foreach (GenerationStreamingChunk chunk in response.Chunks) renderer.Answer(chunk.Text);
+                await foreach (GenerationStreamingChunk chunk in response.Chunks) { renderer.Thinking(chunk.ReasoningText); renderer.Answer(chunk.Text); }
                 if (!response.Success) throw new InvalidOperationException(response.Error);
             }
             else
             {
                 GenerationResponse response = await client.GenerateAsync(prompt);
                 if (!response.Success) throw new InvalidOperationException(response.Error);
+                if (!renderer.HasReasoning) renderer.Thinking(response.Reasoning);
                 renderer.Answer(response.Text);
             }
         }

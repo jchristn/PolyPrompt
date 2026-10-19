@@ -3019,6 +3019,132 @@
         <member name="M:PolyPrompt.Clients.VoyageAiRerankClient.RerankCoreAsync(System.String,System.Collections.Generic.List{System.String},System.String,System.Nullable{System.Int32},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="T:PolyPrompt.Clients.XAiCompletionClient">
+            <summary>xAI Grok completion client using the native Responses API for chat, tools, reasoning, and generation.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.XAiCompletionClient.Defaults">
+            <summary>xAI defaults. Model: grok-4.7. Storage is disabled; encrypted continuation output is requested.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>Initialize an xAI Responses client with required bearer authentication.</summary>
+            <param name="apiKey">Required xAI API key.</param>
+            <param name="endpoint">API root or versioned /v1 URL. Default: https://api.x.ai.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client; see <see cref="T:PolyPrompt.Clients.ClientBase"/>.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ChatCoreAsync(System.String,PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.GenerateStreamingCoreAsync(System.String,PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.CreateResponseAsync(System.Text.Json.JsonElement,PolyPrompt.Options.XAiCompletionOptions,System.Threading.CancellationToken)">
+            <summary>Create a response from a raw Responses input string or array (including image/file input and tool outputs).</summary>
+            <param name="input">Complete input string or array. For previous_response_id continuation, supply only new input.</param>
+            <param name="options">Optional xAI settings.</param>
+            <param name="token">Cancellation token.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.CreateResponseStreamingAsync(System.Text.Json.JsonElement,PolyPrompt.Options.XAiCompletionOptions,System.Threading.CancellationToken)">
+            <summary>Stream every native Responses event, including hosted tools, citations, reasoning, and function-call events.</summary>
+            <param name="input">Complete input string or array.</param>
+            <param name="options">Optional xAI settings.</param>
+            <param name="token">Cancellation token.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.GetResponseAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Retrieve a response saved with Store=true. Errors, including expired/unknown IDs, are reported on the result.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.DeleteResponseAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Delete a stored response. Inspect Data.deleted for the provider's deletion result.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.ListResponseInputItemsAsync(System.String,System.Int32,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>List a page of stored input items, preserving data/has_more/first_id/last_id and all item fields.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiCompletionClient.CompactConversationAsync(System.Text.Json.JsonElement,System.String,System.Threading.CancellationToken)">
+            <summary>Compact a full input window. Reuse Data.output verbatim as the next response's input.</summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.XAiEmbeddingClient">
+            <summary>xAI text/token embeddings, including batches, dimensions, float/base64 vectors, and usage.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.XAiEmbeddingClient.Defaults">
+            <summary>Embedding defaults. Model must be configured from the xAI embedding-model catalog.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>Initialize an xAI embedding client.</summary>
+            <param name="apiKey">Required bearer token.</param>
+            <param name="endpoint">API root or versioned /v1 URL.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.EmbedTokensAsync(System.Collections.Generic.IEnumerable{System.Int32},PolyPrompt.Options.XAiEmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>Embed a pre-tokenized input. Token IDs must be nonnegative and the input nonempty.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiEmbeddingClient.EmbedTokenBatchAsync(System.Collections.Generic.IEnumerable{System.Collections.Generic.IEnumerable{System.Int32}},PolyPrompt.Options.XAiEmbeddingOptions,System.Threading.CancellationToken)">
+            <summary>Embed up to 128 pre-tokenized inputs, retaining provider input indices.</summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.XAiModelClient">
+            <summary>xAI general and capability-specific model catalogs. Detailed metadata is retained without losing provider fields.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>Initialize an xAI model client.</summary>
+            <param name="apiKey">Required bearer token.</param>
+            <param name="endpoint">API root or versioned /v1 URL.</param>
+            <param name="logging">Optional logging module.</param>
+            <param name="httpClient">Optional HTTP client.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ListLanguageModelsAsync(System.Threading.CancellationToken)">
+            <summary>List detailed language models, including capabilities, modalities, aliases, and prices.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ListEmbeddingModelsAsync(System.Threading.CancellationToken)">
+            <summary>List detailed embedding models.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ListImageGenerationModelsAsync(System.Threading.CancellationToken)">
+            <summary>List image-generation models. Image generation is accessible as a hosted Responses tool, not an embedding/completion operation.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.ListVideoGenerationModelsAsync(System.Threading.CancellationToken)">
+            <summary>List video-generation models. The standalone video-generation API is outside the completion interface.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.GetCatalogModelInformationAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Look up detailed information in a capability catalog: language-models, embedding-models, image-generation-models, or video-generation-models.</summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.XAiModelClient.GetModelInformationCoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
             <summary>
             Source-generated JSON metadata for PolyPrompt's wire shapes and public models. It lets PolyPrompt run without
@@ -3029,6 +3155,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Boolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableBoolean">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3178,6 +3309,41 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiHostedTool">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiJsonResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiResponseEvent">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiCompletionOptions">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.XAiEmbeddingOptions">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DictionaryStringJsonElement">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.DictionaryStringObject">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -3253,6 +3419,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListXAiHostedTool">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListDictionaryStringObject">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -3264,6 +3435,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListListDictionaryStringObject">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListJsonElement">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3299,6 +3475,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.JsonElement">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableJsonElement">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3585,6 +3766,9 @@
             Content may be null for assistant messages that contain tool calls.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.ProviderState">
+            <summary>Opaque provider output to replay for this assistant turn, including xAI encrypted reasoning. Other providers ignore it.</summary>
+        </member>
         <member name="P:PolyPrompt.Models.ChatMessage.Role">
             <summary>
             Message role. Common values are system, user, assistant, and tool.
@@ -3657,6 +3841,12 @@
             Response from a non-streaming chat completion request.
             Contains the completion text, metadata, and timing information.
             </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.ResponseId">
+            <summary>Provider response identifier, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.FinishReason">
+            <summary>Provider finish reason, when reported.</summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatResponse.Text">
             <summary>
@@ -4241,6 +4431,9 @@
             Response from an embedding request containing one or more embedding vectors.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.EmbeddingResponse.Usage">
+            <summary>Token usage when the embedding provider reports it.</summary>
+        </member>
         <member name="P:PolyPrompt.Models.EmbeddingResponse.Embeddings">
             <summary>
             List of embedding vectors returned by the model.
@@ -4266,6 +4459,18 @@
             Response from a non-streaming text generation request.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Reasoning">
+            <summary>Reasoning summary returned by providers exposing a separate generation reasoning channel.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.Usage">
+            <summary>Token usage, when reported by the provider.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.ResponseId">
+            <summary>Provider response identifier.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationResponse.FinishReason">
+            <summary>Provider finish reason, such as stop, tool_calls, or length.</summary>
+        </member>
         <member name="P:PolyPrompt.Models.GenerationResponse.Text">
             <summary>
             The generated text returned by the model.
@@ -4275,6 +4480,18 @@
             <summary>
             A single chunk from a streaming text generation response.
             </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.ReasoningText">
+            <summary>Reasoning summary delta, separate from generated text.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.Usage">
+            <summary>Token usage, usually reported in the final chunk.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.ResponseId">
+            <summary>Provider response identifier.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingChunk.FinishReason">
+            <summary>Provider finish reason.</summary>
         </member>
         <member name="P:PolyPrompt.Models.GenerationStreamingChunk.Text">
             <summary>
@@ -4297,6 +4514,18 @@
             Contains metadata, timing, and an async enumerable of streaming chunks.
             Timing fields are populated as chunks are consumed through the Chunks enumerable.
             </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Reasoning">
+            <summary>Reasoning summary returned by providers exposing a separate generation reasoning channel.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Usage">
+            <summary>Token usage, when reported by the provider.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.ResponseId">
+            <summary>Provider response identifier.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GenerationStreamingResponse.FinishReason">
+            <summary>Provider finish reason, such as stop, tool_calls, or length.</summary>
         </member>
         <member name="P:PolyPrompt.Models.GenerationStreamingResponse.Chunks">
             <summary>
@@ -4679,6 +4908,12 @@
             Fields shared by every operation response. Operations report HTTP errors, malformed provider responses, and
             transport failures through <see cref="P:PolyPrompt.Models.ResponseBase.Success"/> and <see cref="P:PolyPrompt.Models.ResponseBase.Error"/> instead of throwing; they throw only for
             invalid arguments and cancellation.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ResponseBase.ProviderState">
+            <summary>
+            Opaque provider continuation output. xAI stores the Responses output array here, including encrypted
+            reasoning and hosted-tool state. Preserve unchanged; other providers leave this null.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ResponseBase.Success">
@@ -5214,6 +5449,51 @@
             <returns>A function tool definition.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
         </member>
+        <member name="T:PolyPrompt.Models.XAiHostedTool">
+            <summary>A native Responses tool definition. Parameters preserve provider-specific options. Most tools are hosted; native shell calls require caller handling through the raw API.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiHostedTool.Type">
+            <summary>Tool type, for example web_search, x_search, code_interpreter, file_search, mcp, image_generation, shell, or tool_search.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiHostedTool.Parameters">
+            <summary>Additional tool fields, excluding type. These are sent to xAI. The generic function-call loop does not execute native shell actions.</summary>
+        </member>
+        <member name="M:PolyPrompt.Models.XAiHostedTool.Create(System.String,System.Collections.Generic.Dictionary{System.String,System.Object})">
+            <summary>Create a provider tool with its complete provider-specific options.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.XAiResponse">
+            <summary>A complete Responses API result, including provider-hosted output, citations, encrypted reasoning, and raw usage.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiResponse.Status">
+            <summary>Provider response status: completed, incomplete, in_progress, or failed.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiResponse.RawResponse">
+            <summary>The complete provider JSON object, retaining all fields and hosted-tool outputs.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.XAiJsonResponse">
+            <summary>JSON result of an xAI resource operation (deletion, input listing, or compaction).</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiJsonResponse.Data">
+            <summary>Provider JSON result, retaining unknown and future fields.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.XAiResponseEvent">
+            <summary>A native Responses SSE event, retaining the complete event payload.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiResponseEvent.Type">
+            <summary>Event type, for example response.output_text.delta.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiResponseEvent.Data">
+            <summary>Complete native JSON event data.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.XAiStreamingResponse">
+            <summary>Native xAI event stream. Enumerate Events completely to populate Response and final status.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiStreamingResponse.Events">
+            <summary>Native event stream, including events not projected onto generic chat chunks.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.XAiStreamingResponse.Response">
+            <summary>Final response, available after a terminal response event.</summary>
+        </member>
         <member name="T:PolyPrompt.Options.AnthropicCompletionOptions">
             <summary>
             Anthropic settings for chat, tool chat, and generation, mapped to the Messages API request body. Use this type for
@@ -5738,6 +6018,84 @@
             Whether over-length query/document pairs are truncated to the model context length (truncation).
             Null uses the provider default (true). When false, over-length inputs cause an error.
             </summary>
+        </member>
+        <member name="T:PolyPrompt.Options.XAiCompletionOptions">
+            <summary>Responses API settings. Non-null per-call values override client defaults field by field.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.Store">
+            <summary>Persist responses for retrieval and previous_response_id continuation. Client default: false.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.PreviousResponseId">
+            <summary>Continue a stored response. Supply only new input, not the full previous history. Empty clears a default ID.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.ParallelToolCalls">
+            <summary>Allow multiple function calls per model turn.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.StrictTools">
+            <summary>Require strict function schemas when set. Applies to locally supplied function tools.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.MaxTurns">
+            <summary>Maximum provider-side agentic tool turns; must be positive.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.ReasoningEffortOverride">
+            <summary>xAI reasoning effort override: low, medium, high, or xhigh. Otherwise the common ReasoningEffort is mapped.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.ReasoningSummary">
+            <summary>Reasoning summary preference: auto, concise, or detailed. The provider may always return detailed.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.Include">
+            <summary>Additional output fields. Encrypted reasoning is requested automatically for replayable history.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.FunctionTools">
+            <summary>Local function tools for native raw/multimodal requests, also combined with ToolChatRequest.Tools when supplied.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.HostedTools">
+            <summary>Additional native tools (web/X search, code interpreter, collections, MCP, image generation, shell, or tool search). Native shell actions use the raw API.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.TextFormat">
+            <summary>Text response format object: text, json_object, or json_schema with schema/name/strict fields.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.ToolChoice">
+            <summary>Raw Responses tool_choice string/object, overriding ToolChatRequest.ToolChoice when supplied.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.TopK">
+            <summary>Top-k sampling; must be positive.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.MinP">
+            <summary>Min-p sampling, from zero to one.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.Logprobs">
+            <summary>Return output log probabilities on models supporting them.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.TopLogprobs">
+            <summary>Number of alternative log probabilities, from zero to eight; requires Logprobs=true.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.ServiceTier">
+            <summary>Processing tier: auto, priority, or fast.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.PromptCacheKey">
+            <summary>Routing/cache affinity key.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.User">
+            <summary>Opaque end-user identifier.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.SafetyIdentifier">
+            <summary>Stable hashed end-user identifier for abuse attribution.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.Guidelines">
+            <summary>Per-category output guidelines as provider JSON objects.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiCompletionOptions.AdditionalParameters">
+            <summary>Extension body fields. Cannot replace built-in request fields; values must have valid JSON.</summary>
+        </member>
+        <member name="T:PolyPrompt.Options.XAiEmbeddingOptions">
+            <summary>xAI embedding settings. Select a model from the embedding-models catalog; no model is guessed.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiEmbeddingOptions.Preview">
+            <summary>Request the provider's preview embedding format when supported by the model.</summary>
+        </member>
+        <member name="P:PolyPrompt.Options.XAiEmbeddingOptions.User">
+            <summary>Opaque end-user identifier.</summary>
         </member>
         <member name="T:PolyPrompt.Telemetry.HttpCallScope">
             <summary>

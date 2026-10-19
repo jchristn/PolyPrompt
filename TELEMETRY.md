@@ -173,7 +173,7 @@ Runtime metrics (GC, thread pool, exceptions) belong to the host: enable Radiant
 
 | Attribute | Values |
 |-----------|--------|
-| `gen_ai.provider.name` | `openai`, `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `voyageai`, `typesafe`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from a capability base is labeled by its lower-cased type name without the `...Client` suffix. |
+| `gen_ai.provider.name` | `openai`, `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `xai`, `voyageai`, `typesafe`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from a capability base is labeled by its lower-cased type name without the `...Client` suffix. |
 | `polyprompt.capability` | `completion`, `embedding`, `sparse_embedding`, `rerank`, `classification`, `decision`, `model` |
 | `polyprompt.operation` | `chat`, `chat_stream`, `tool_chat`, `tool_chat_stream`, `generate`, `generate_stream`, `embed`, `sparse_embed`, `rerank`, `classify`, `decide`, `decide_batch`, `model_info`, `model_exists`, `model_pull`, `model_delete`, `validate_connectivity` |
 | `gen_ai.operation.name` | `chat`, `text_completion`, `embeddings`, `rerank`, `classify`, `decide` (and the PolyPrompt operation on spans for non-model operations) |

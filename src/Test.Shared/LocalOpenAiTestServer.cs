@@ -186,6 +186,8 @@ namespace Test.Shared
                     _RequestHeaders.Add(headers);
                 }
 
+                if (await LocalXAiRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
+
                 if (await LocalGeminiToolRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
                 {
                     return;

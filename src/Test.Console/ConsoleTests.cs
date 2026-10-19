@@ -206,6 +206,43 @@ public sealed class ConsoleTests
         Assert.That(output.ToString(), Does.Contain("real-file-evidence").And.Contain("Inspected file:").And.Contain("--- Thinking ---").And.Contain("--- Answer ---"));
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task XAiSimulationExecutesMuxToolsAndReplaysReasoning(bool streaming)
+    {
+        string? endpoint = Environment.GetEnvironmentVariable("POLYPROMPT_XAI_SIMULATION");
+        if (string.IsNullOrEmpty(endpoint)) { Assert.Ignore("Set POLYPROMPT_XAI_SIMULATION to run the native xAI simulation."); return; }
+        File.WriteAllText(Path.Combine(_Directory, ".console-smoke.txt"), "xai-real-file-evidence");
+        using XAiCompletionClient client = new("test-key", endpoint);
+        using StringWriter output = new();
+        using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
+        await session.SendAsync("xai-console-smoke: inspect directory and read fixture", streaming);
+        Assert.That(output.ToString(), Does.Contain("Actual file:").And.Contain("xai-real-file-evidence").And.Contain("--- Thinking ---").And.Contain("--- Answer ---"));
+        Assert.That(session.Messages.Count, Is.EqualTo(6));
+        Assert.That(session.Messages[1].ProviderState!.Value.GetRawText(), Does.Contain("fixture-reasoning"));
+    }
+
+    [Test]
+    public async Task XAiSimulationStoredResponseLifecycleAndCompaction()
+    {
+        string? endpoint = Environment.GetEnvironmentVariable("POLYPROMPT_XAI_SIMULATION");
+        if (string.IsNullOrEmpty(endpoint)) { Assert.Ignore("Set POLYPROMPT_XAI_SIMULATION to run the native xAI simulation."); return; }
+        using XAiCompletionClient client = new("test-key", endpoint);
+        using JsonDocument input = JsonDocument.Parse("\"stored response fixture\"");
+        XAiResponse created = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { Store = true });
+        Assert.That(created.Success, Is.True, created.Error);
+        XAiResponse fetched = await client.GetResponseAsync(created.ResponseId!);
+        Assert.That(fetched.Text, Is.EqualTo(created.Text));
+        XAiResponse continued = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { PreviousResponseId = created.ResponseId });
+        Assert.That(continued.Success, Is.True, continued.Error);
+        Assert.That((await client.ListResponseInputItemsAsync(created.ResponseId!)).Success, Is.True);
+        Assert.That((await client.CompactConversationAsync(input.RootElement)).Data!.Value.GetProperty("output")[0].GetProperty("type").GetString(), Is.EqualTo("compaction"));
+        Assert.That((await client.DeleteResponseAsync(created.ResponseId!)).Data!.Value.GetProperty("deleted").GetBoolean(), Is.True);
+        Assert.That((await client.GetResponseAsync(created.ResponseId!)).StatusCode, Is.EqualTo(404));
+        XAiResponse transient = await client.CreateResponseAsync(input.RootElement);
+        Assert.That((await client.GetResponseAsync(transient.ResponseId!)).StatusCode, Is.EqualTo(404), "Storage defaults to false.");
+    }
+
     [Test]
     public void RendererHandlesReasoningOnlyAndInterleavedDeltasWithoutDuplicates()
     {

@@ -8,6 +8,10 @@ namespace PolyPrompt.Models
     {
         #region Public-Members
 
+        /// <summary>Opaque provider output to replay for this assistant turn, including xAI encrypted reasoning. Other providers ignore it.</summary>
+        public System.Text.Json.JsonElement? ProviderState { get; set; }
+
+
         /// <summary>
         /// Message role. Common values are system, user, assistant, and tool.
         /// </summary>

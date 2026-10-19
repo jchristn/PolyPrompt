@@ -1,8 +1,22 @@
 # Changelog
 
-## Unreleased — Console harness improvements
+## v3.4.0 (2026-10-18)
 
-No package version change; the PolyPrompt library is unchanged.
+Adds native xAI Grok support and releases the shared console improvements. Backward compatible.
+
+### Added
+
+- `XAiCompletionClient`: native Responses API for chat, streaming, tool chat, and generation; reasoning summaries, token usage/cache/reasoning counts, opaque encrypted continuation state, fragmented/parallel functions, structured output, and complete hosted/native tool definitions. Storage defaults to false; continuation state is explicit and preserved for replay.
+- Native Responses operations for raw multimodal input, complete SSE event streams, stored-response retrieval/deletion, input-item pagination, and conversation compaction. Unknown output fields, citations, encrypted hosted results, and raw response metadata are retained.
+- `XAiEmbeddingClient` and `XAiEmbeddingOptions`: text/token inputs, 128-input batches, float/base64 vectors, dimensions, preview/user settings, indices, and usage. Embedding models are explicitly selected from the catalog.
+- `XAiModelClient`: general and detailed language/embedding/image/video catalogs with provider metadata.
+- `XAiConsole`, using shared Mux tools and rendering, plus specialized catalogs and optional native tool configuration. `AotConsole --provider xai` and live-test xAI configuration are supported.
+- Official OpenAPI contract subset and runnable Postman xAI simulation; 25 xAI-specific local cases, console simulation coverage, and additional native AOT checks.
+
+### Library changes
+
+- Additive `ProviderState` on responses and chat messages preserves xAI output arrays. `ToAssistantMessage()` now preserves text, tool calls, and opaque state together; existing providers ignore xAI state.
+- Chat responses now expose response ID/finish reason. Generation responses/chunks expose separate reasoning, usage, ID, and finish reason; embedding responses expose usage. Shared wrappers and telemetry record the added metadata when supplied by a provider.
 
 ### Changed
 
@@ -15,6 +29,7 @@ No package version change; the PolyPrompt library is unchanged.
 
 ### Validation
 
+- Release checks: 270 library cases in each NUnit/xUnit framework run, 24 console cases per framework, and 120 NativeAOT checks per framework. Live xAI chat, streaming, function-call round trips, generation, model discovery, and real console filesystem-tool execution passed. Stored-response create/retrieve/continue/input-list/delete, native event streaming, and compaction also passed live. The account returned no embedding models, so embeddings were validated against local fixtures.
 - Added `Test.Console` coverage for real Mux tools, multi-round model/tool conversations, history, reasoning rendering, malformed/unknown tool calls, cancellation, round limits, native generation thinking, optional tool registration, and browser retrieval against a local page.
 - Extended the saved Postman model fixture to request real directory-listing and file-reading operations across separate rounds.
 

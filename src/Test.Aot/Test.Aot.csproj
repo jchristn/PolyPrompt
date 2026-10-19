@@ -20,6 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Test.Shared\LocalXAiRoutes.cs" Link="Shared\LocalXAiRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalOpenAiTestServer.cs" Link="Shared\LocalOpenAiTestServer.cs" />
     <Compile Include="..\Test.Shared\LocalExtendedRoutes.cs" Link="Shared\LocalExtendedRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalDecisionRoutes.cs" Link="Shared\LocalDecisionRoutes.cs" />

@@ -51,7 +51,7 @@ namespace Test.Shared
         /// </summary>
         public static readonly IReadOnlyList<string> ProviderTypes = new List<string>
         {
-            "ollama", "openai", "azure", "gemini", "vertex", "anthropic", "bedrock", "voyageai", "cohere", "tei", "typesafe"
+            "ollama", "openai", "xai", "azure", "gemini", "vertex", "anthropic", "bedrock", "voyageai", "cohere", "tei", "typesafe"
         };
 
         /// <summary>
@@ -169,6 +169,9 @@ namespace Test.Shared
         public static ProviderTestConfiguration? FromProviderSpecificEnvironment()
         {
             List<ProviderTestConfiguration> found = new List<ProviderTestConfiguration>();
+
+            if (AnySet("XAI", "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL"))
+                found.Add(CreateWithDefaults("xai", Group("XAI", "ENDPOINT"), Group("XAI", "API_KEY"), Group("XAI", "MODEL"), Group("XAI", "EMBEDDING_MODEL")));
 
             if (AnySet("OPENAI", "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL"))
                 found.Add(CreateWithDefaults("openai", Group("OPENAI", "ENDPOINT"), Group("OPENAI", "API_KEY"), Group("OPENAI", "MODEL"), Group("OPENAI", "EMBEDDING_MODEL")));
@@ -332,6 +335,7 @@ namespace Test.Shared
             switch (NormalizeProviderType(providerType))
             {
                 case "ollama": return DefaultOllamaEndpoint;
+                case "xai": return "https://api.x.ai";
                 case "openai": return DefaultOpenAiEndpoint;
                 case "gemini": return DefaultGeminiEndpoint;
                 case "anthropic": return DefaultAnthropicEndpoint;
@@ -374,6 +378,7 @@ namespace Test.Shared
         /// <exception cref="ArgumentException">Thrown when a required setting is missing.</exception>
         public void Validate()
         {
+            if (ProviderType == "xai" && string.IsNullOrWhiteSpace(ApiKey)) throw new ArgumentException("xAI live tests require an API key.");
             if (ProviderType == "azure" && string.IsNullOrWhiteSpace(InferenceModel))
                 throw new ArgumentException("Azure OpenAI live tests require the chat deployment as the model.");
             if (ProviderType == "vertex" && string.IsNullOrWhiteSpace(Project))
@@ -400,6 +405,7 @@ namespace Test.Shared
 
                 Dictionary<string, string[]> groups = new Dictionary<string, string[]>
                 {
+                    { "XAI", new[] { "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL" } },
                     { "OPENAI", new[] { "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL" } },
                     { "OLLAMA", new[] { "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL" } },
                     { "GEMINI", new[] { "API_KEY", "ENDPOINT", "MODEL", "EMBEDDING_MODEL" } },

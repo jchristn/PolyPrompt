@@ -65,6 +65,12 @@ namespace Test.Shared
 
             switch (configuration.ProviderType)
             {
+                case "xai":
+                    provider.Completion = new XAiCompletionClient(key!, endpoint);
+                    if (!string.IsNullOrWhiteSpace(configuration.EmbeddingModel)) provider.Embedding = new XAiEmbeddingClient(key!, endpoint);
+                    provider.Models = new XAiModelClient(key!, endpoint);
+                    break;
+
                 case "ollama":
                     provider.Completion = new OllamaCompletionClient(endpoint, key);
                     provider.Embedding = new OllamaEmbeddingClient(endpoint, key);

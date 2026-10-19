@@ -17,6 +17,7 @@ namespace Test.Shared
         private static readonly Dictionary<string, HashSet<string>> _Capabilities = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
         {
             { "ollama", new HashSet<string> { "completion", "embedding", "models" } },
+            { "xai", new HashSet<string> { "completion", "embedding", "models" } },
             { "openai", new HashSet<string> { "completion", "embedding", "models" } },
             { "azure", new HashSet<string> { "completion", "embedding", "models" } },
             { "gemini", new HashSet<string> { "completion", "embedding", "models" } },
@@ -126,10 +127,10 @@ namespace Test.Shared
                 skip = true;
                 reason = configuration.ProviderType + " has no " + capability + " client.";
             }
-            else if (capability == "embedding" && configuration.ProviderType == "azure" && string.IsNullOrEmpty(configuration.EmbeddingModel))
+            else if (capability == "embedding" && (configuration.ProviderType == "azure" || configuration.ProviderType == "xai") && string.IsNullOrEmpty(configuration.EmbeddingModel))
             {
                 skip = true;
-                reason = "No Azure OpenAI embedding deployment is configured.";
+                reason = "No embedding model/deployment is configured.";
             }
             else if (extraSkip)
             {

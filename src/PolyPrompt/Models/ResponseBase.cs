@@ -8,6 +8,12 @@ namespace PolyPrompt.Models
     public abstract class ResponseBase
     {
         /// <summary>
+        /// Opaque provider continuation output. xAI stores the Responses output array here, including encrypted
+        /// reasoning and hosted-tool state. Preserve unchanged; other providers leave this null.
+        /// </summary>
+        public System.Text.Json.JsonElement? ProviderState { get; set; }
+
+        /// <summary>
         /// Whether the request succeeded. For streaming responses, whether the stream was opened successfully.
         /// </summary>
         public bool Success { get; set; }

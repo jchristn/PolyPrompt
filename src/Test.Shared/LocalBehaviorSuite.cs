@@ -33,6 +33,7 @@ namespace Test.Shared
             cases.AddRange(LocalProviderDetailCases.Create(SuiteId));
             cases.AddRange(LocalTelemetryCases.Create(SuiteId));
             cases.AddRange(LocalSerializerCases.Create(SuiteId));
+            cases.AddRange(LocalXAiCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

@@ -82,12 +82,13 @@ namespace PolyPrompt.Models
         /// <returns>An assistant message containing either text or tool calls.</returns>
         public ChatMessage ToAssistantMessage()
         {
-            if (ToolCalls != null && ToolCalls.Any())
+            return new ChatMessage
             {
-                return ChatMessage.AssistantToolCalls(ToolCalls);
-            }
-
-            return ChatMessage.Assistant(Text ?? string.Empty);
+                Role = "assistant",
+                Content = Text,
+                ToolCalls = ToolCalls ?? new List<ToolCall>(),
+                ProviderState = ProviderState?.Clone()
+            };
         }
 
         private static async IAsyncEnumerable<ToolChatStreamingChunk> EmptyChunks()

@@ -17,14 +17,20 @@ public sealed class Program : ConsoleApplicationBase
         string Option(string name, string fallback) => options.GetValueOrDefault(name, fallback);
         if (args.Contains("--help") || args.Contains("-h"))
         {
-            System.Console.WriteLine("Usage: AotConsole --provider ollama|ollamacloud|openai|anthropic|gemini [--endpoint URL] [--model NAME] [--key KEY] [--prompt TEXT] [--streaming true|false] [--directory PATH] [--save PATH]");
+            System.Console.WriteLine("Usage: AotConsole --provider ollama|ollamacloud|openai|anthropic|gemini|xai [--endpoint URL] [--model NAME] [--key KEY] [--prompt TEXT] [--streaming true|false] [--directory PATH] [--save PATH]");
             return 0;
         }
         string provider = Option("provider", "ollama").ToLowerInvariant();
         string? key = options.GetValueOrDefault("key") ?? Environment.GetEnvironmentVariable(provider == "ollamacloud" ? "OLLAMA_API_KEY" : provider.ToUpperInvariant() + "_API_KEY");
         string? endpoint = options.GetValueOrDefault("endpoint");
+        if ((provider == "xai" || provider == "ollamacloud") && string.IsNullOrWhiteSpace(key))
+        {
+            Console.WriteLine("Set " + (provider == "xai" ? "XAI_API_KEY" : "OLLAMA_API_KEY") + " or pass --key.");
+            return 2;
+        }
         using CompletionClientBase? client = provider switch
         {
+            "xai" => new XAiCompletionClient(key!, endpoint ?? "https://api.x.ai", httpClient: CreateConsoleHttpClient()),
             "ollama" => new OllamaCompletionClient(endpoint ?? "http://localhost:11434", key, httpClient: CreateConsoleHttpClient()),
             "ollamacloud" => new OllamaCloudCompletionClient(key!, httpClient: CreateConsoleHttpClient()),
             "openai" => new OpenAiCompletionClient(endpoint ?? "https://api.openai.com", key, httpClient: CreateConsoleHttpClient()),
@@ -34,12 +40,12 @@ public sealed class Program : ConsoleApplicationBase
         };
         if (client == null)
         {
-            Console.WriteLine("Usage: AotConsole --provider ollama|ollamacloud|openai|anthropic|gemini [--endpoint URL] [--model NAME] [--key KEY] [--prompt TEXT] [--streaming true|false] [--directory PATH] [--save PATH]");
+            Console.WriteLine("Usage: AotConsole --provider ollama|ollamacloud|openai|anthropic|gemini|xai [--endpoint URL] [--model NAME] [--key KEY] [--prompt TEXT] [--streaming true|false] [--directory PATH] [--save PATH]");
             return 2;
         }
         client.Model = Option("model", provider switch
         {
-            "openai" => "gpt-4o-mini", "anthropic" => "claude-haiku-4-5-20251001", "gemini" => "gemini-2.5-flash",
+            "xai" => "grok-4.7", "openai" => "gpt-4o-mini", "anthropic" => "claude-haiku-4-5-20251001", "gemini" => "gemini-2.5-flash",
             "ollamacloud" => "gpt-oss:20b", _ => "qwen3:4b"
         });
         client.TimeoutMs = 120000;

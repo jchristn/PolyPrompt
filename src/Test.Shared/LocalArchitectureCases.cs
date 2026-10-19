@@ -23,13 +23,13 @@ namespace Test.Shared
 
         private static readonly Dictionary<Type, string[]> _ExpectedClients = new Dictionary<Type, string[]>
         {
-            { typeof(CompletionClientBase), new[] { "OllamaCompletionClient", "OllamaCloudCompletionClient", "OpenAiCompletionClient", "AzureOpenAiCompletionClient", "GeminiCompletionClient", "VertexAiCompletionClient", "AnthropicCompletionClient", "CohereCompletionClient", "BedrockCompletionClient" } },
-            { typeof(EmbeddingClientBase), new[] { "OllamaEmbeddingClient", "OllamaCloudEmbeddingClient", "OpenAiEmbeddingClient", "AzureOpenAiEmbeddingClient", "GeminiEmbeddingClient", "VertexAiEmbeddingClient", "BedrockEmbeddingClient", "VoyageAiEmbeddingClient", "CohereEmbeddingClient", "TeiEmbeddingClient" } },
+            { typeof(CompletionClientBase), new[] { "XAiCompletionClient", "OllamaCompletionClient", "OllamaCloudCompletionClient", "OpenAiCompletionClient", "AzureOpenAiCompletionClient", "GeminiCompletionClient", "VertexAiCompletionClient", "AnthropicCompletionClient", "CohereCompletionClient", "BedrockCompletionClient" } },
+            { typeof(EmbeddingClientBase), new[] { "XAiEmbeddingClient", "OllamaEmbeddingClient", "OllamaCloudEmbeddingClient", "OpenAiEmbeddingClient", "AzureOpenAiEmbeddingClient", "GeminiEmbeddingClient", "VertexAiEmbeddingClient", "BedrockEmbeddingClient", "VoyageAiEmbeddingClient", "CohereEmbeddingClient", "TeiEmbeddingClient" } },
             { typeof(SparseEmbeddingClientBase), new[] { "TeiSparseEmbeddingClient" } },
             { typeof(RerankClientBase), new[] { "BedrockRerankClient", "VoyageAiRerankClient", "CohereRerankClient", "TeiRerankClient" } },
             { typeof(ClassificationClientBase), new[] { "CohereClassificationClient", "TeiClassificationClient" } },
             { typeof(DecisionClientBase), new[] { "TypeSafeDecisionClient" } },
-            { typeof(ModelClientBase), new[] { "OllamaModelClient", "OllamaCloudModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
+            { typeof(ModelClientBase), new[] { "XAiModelClient", "OllamaModelClient", "OllamaCloudModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
         };
 
         public static IEnumerable<TestCaseDescriptor> Create(string suiteId)
@@ -369,6 +369,8 @@ namespace Test.Shared
 
             switch (client)
             {
+                case XAiCompletionClient:
+                    return new CompletionWire { MaxTokens = b => GetInt(b, "max_output_tokens"), Temperature = b => GetDouble(b, "temperature"), UsesModel = bodyModel };
                 case OllamaCompletionClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "options", "num_predict"), Temperature = b => GetDouble(b, "options", "temperature"), UsesModel = bodyModel };
                 case AzureOpenAiCompletionClient:

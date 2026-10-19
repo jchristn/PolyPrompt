@@ -569,7 +569,7 @@ namespace Test.Shared
                     .Select(s => Tag(s, N.Provider)!)
                     .ToHashSet(StringComparer.Ordinal);
 
-                string[] expected = new[] { "openai", "azure.ai.openai", "gcp.gemini", "gcp.vertex_ai", "anthropic", "aws.bedrock", "cohere", "ollama", "tei", "voyageai", "typesafe" };
+                string[] expected = new[] { "openai", "azure.ai.openai", "gcp.gemini", "gcp.vertex_ai", "anthropic", "aws.bedrock", "cohere", "ollama", "tei", "voyageai", "typesafe", "xai" };
                 SharedAssert.Equal(string.Join(",", expected.OrderBy(p => p, StringComparer.Ordinal)), string.Join(",", providers.OrderBy(p => p, StringComparer.Ordinal)),
                     "Connectivity spans should carry every documented provider label.");
 

@@ -51,6 +51,7 @@ namespace Test.Aot
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             await RunClientChecksAsync(server).ConfigureAwait(false);
+            await RunXAiAdvancedChecksAsync(server).ConfigureAwait(false);
 
             string digest = Digest(server);
             Console.WriteLine();
@@ -190,6 +191,34 @@ namespace Test.Aot
         #endregion
 
         #region Client-Checks
+
+        private static async Task RunXAiAdvancedChecksAsync(LocalOpenAiTestServer server)
+        {
+            using XAiCompletionClient client = new(LocalXAiRoutes.Key, server.Endpoint);
+            using JsonDocument prompt = JsonDocument.Parse("\"native xAI\"");
+            await CheckAsync("XAi: raw Responses and saved encrypted state", async () =>
+            {
+                XAiResponse response = await client.CreateResponseAsync(prompt.RootElement);
+                Ok(response);
+                Ok(await client.CreateResponseAsync(prompt.RootElement, new PolyPrompt.Options.XAiCompletionOptions { FunctionTools = WeatherToolRequest().Tools }));
+                string json = JsonSerializer.Serialize(response.ToAssistantMessage(), PolyPromptJsonContext.Default.ChatMessage);
+                ChatMessage? restored = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ChatMessage);
+                Expect(true, restored!.ProviderState.HasValue, "encrypted output survives native JSON persistence");
+            });
+            await CheckAsync("XAi: native event stream", async () =>
+            {
+                XAiStreamingResponse response = await client.CreateResponseStreamingAsync(prompt.RootElement);
+                await foreach (XAiResponseEvent _ in response.Events) { }
+                Ok(response); Expect(true, response.Response != null, "terminal response parsed");
+            });
+            await CheckAsync("XAi: stored response resources", async () =>
+            {
+                Ok(await client.GetResponseAsync("resp-test")); Ok(await client.ListResponseInputItemsAsync("resp-test"));
+                Ok(await client.CompactConversationAsync(prompt.RootElement)); Ok(await client.DeleteResponseAsync("resp-test"));
+            });
+            using XAiEmbeddingClient embedding = new(LocalXAiRoutes.Key, server.Endpoint) { Model = "test-model" };
+            await CheckAsync("XAi: token embeddings", async () => Ok(await embedding.EmbedTokensAsync(new[] { 1, 2 }, new PolyPrompt.Options.XAiEmbeddingOptions { EncodingFormat = "base64" })));
+        }
 
         private static async Task RunClientChecksAsync(LocalOpenAiTestServer server)
         {

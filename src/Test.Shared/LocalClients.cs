@@ -39,6 +39,7 @@ namespace Test.Shared
         {
             return Timed(new List<CompletionClientBase>
             {
+                new XAiCompletionClient(TestKey, endpoint, httpClient: httpClient),
                 new OllamaCompletionClient(endpoint, TestKey, httpClient: httpClient),
                 new OpenAiCompletionClient(endpoint, TestKey, httpClient: httpClient),
                 new AzureOpenAiCompletionClient(endpoint, "test-deployment", TestKey, apiVersion: "2024-10-21", httpClient: httpClient),
@@ -54,6 +55,7 @@ namespace Test.Shared
         {
             return Timed(new List<EmbeddingClientBase>
             {
+                new XAiEmbeddingClient(LocalXAiRoutes.Key, endpoint, httpClient: httpClient),
                 new OllamaEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
                 new OpenAiEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
                 new AzureOpenAiEmbeddingClient(endpoint, "test-embedding-deployment", TestKey, apiVersion: "2024-10-21", httpClient: httpClient),
@@ -90,6 +92,7 @@ namespace Test.Shared
         {
             return Timed(new List<ModelClientBase>
             {
+                new XAiModelClient(LocalXAiRoutes.Key, endpoint, httpClient: httpClient),
                 new OllamaModelClient(endpoint, TestKey, httpClient: httpClient),
                 new OpenAiModelClient(endpoint, TestKey, httpClient: httpClient),
                 new AzureOpenAiModelClient(endpoint, TestKey, apiVersion: "2024-10-21", httpClient: httpClient),

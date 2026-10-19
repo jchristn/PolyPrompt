@@ -6,12 +6,13 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **Ollama Cloud**, **OpenAI**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
+PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **Ollama Cloud**, **OpenAI**, **xAI Grok**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
 
 > **Upgrading from 2.x?** Version 3.0 splits each provider client into one client per capability. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md).
 
 | Provider | Completion | Embedding | Rerank | Classification | Decision | Models | Auth |
 |---|---|---|---|---|---|---|---|
+| xAI Grok | `XAiCompletionClient` | `XAiEmbeddingClient` | | | | `XAiModelClient` | bearer (required) |
 | OllamaCloud | `OllamaCloudCompletionClient` | `OllamaCloudEmbeddingClient` | | | | `OllamaCloudModelClient` | bearer (required) |
 | Ollama | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer |
 | OpenAI (+ compatible) | `OpenAiCompletionClient` | `OpenAiEmbeddingClient` | | | | `OpenAiModelClient` | bearer |
@@ -27,7 +28,7 @@ PolyPrompt is a lightweight, unified .NET library for chat completions, tool cal
 
 ## What It Does
 
-PolyPrompt gives you one consistent API per capability. A chat call looks the same on Ollama, OpenAI, Gemini, Claude, Bedrock, and Cohere; an embedding call looks the same on nine providers; a rerank call looks the same on four. Each client exposes only what its provider supports, so a missing capability is a compile error rather than a runtime surprise. PolyPrompt takes **no provider SDK dependencies**: AWS SigV4 signing and Google service-account token exchange are implemented in-library, and JSON handling uses the built-in `System.Text.Json` (one package dependency, for logging).
+PolyPrompt gives you one consistent API per capability. A chat call looks the same on Ollama, OpenAI, Gemini, Claude, Bedrock, and Cohere; an embedding call looks the same across providers; a rerank call looks the same on four. Each client exposes only what its provider supports, so a missing capability is a compile error rather than a runtime surprise. PolyPrompt takes **no provider SDK dependencies**: AWS SigV4 signing and Google service-account token exchange are implemented in-library, and JSON handling uses the built-in `System.Text.Json` (one package dependency, for logging).
 
 - **Chat completions**: streaming and non-streaming conversational AI with system prompts
 - **Tool calling**: provider-normalized function declarations, model tool calls, streaming tool-call deltas, and tool-result follow-up messages
@@ -73,7 +74,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.3.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.4.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -123,6 +124,81 @@ ChatResponse other = await chat.ChatAsync("Hi", new CompletionOptions { Model = 
 The same options object is used by `ChatAsync`, `GenerateAsync`, and `ToolChatAsync` (through `ToolChatRequest.Options`). When nothing sets `MaxTokens`, 4096 is sent.
 
 ## Quick Start
+
+### xAI Grok (native Responses API)
+
+`XAiCompletionClient` uses `https://api.x.ai/v1/responses` for chat, tool chat, and generation, including their streaming variants. It does not use legacy Chat Completions or `/completions`. API root and `/v1` base URLs are both accepted. All xAI clients require a nonempty bearer API key from the xAI API console.
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+using PolyPrompt.Options;
+
+using XAiCompletionClient client = new XAiCompletionClient(
+    Environment.GetEnvironmentVariable("XAI_API_KEY")!);
+client.Model = "grok-4.7";
+client.Defaults.ReasoningEffort = ReasoningEffort.Medium;
+ChatResponse answer = await client.ChatAsync("Explain the result.");
+Console.WriteLine(answer.Reasoning); // Returned reasoning summary, separate from Text
+Console.WriteLine(answer.Text);
+```
+
+The provider can expose readable reasoning summaries and encrypted reasoning. Encrypted content is opaque continuation state, not displayable thinking. Common efforts map to `low` (Minimal/Low), `medium`, and `high`; `XAiCompletionOptions.ReasoningEffortOverride = "xhigh"` selects the provider's extra-high effort on models that support it. Unsupported model features remain provider errors; reasoning cannot be disabled on models that require it.
+
+**Conversation state and tools.** `Store` defaults to `false`, and `reasoning.encrypted_content` is always requested. The returned `ProviderState` contains the complete native output array, including encrypted reasoning, citations, hosted-tool results, and unknown item fields. For tool follow-ups, use `response.ToAssistantMessage()`; it preserves the output state and replays it once in its original order. Append `ChatMessage.ToolResult(call.Id, call.Name, result)` for each local function. Streamed calls use the function's `call_id`, not the output item's `id`, and fragmented/parallel calls are assembled separately. Fully enumerate a stream before using its state or tool calls. A truncated/failed stream or incomplete function is reported as unsuccessful and must not be executed.
+
+`ToAssistantMessage()` now preserves assistant text alongside tool calls for every provider. Persisting the resulting `ChatMessage` through `PolyPromptJsonContext.Default.ChatMessage` or `ListChatMessage` also preserves xAI state under Native AOT.
+
+**Options.** `XAiCompletionOptions` adds storage and `PreviousResponseId`, parallel/strict function tools, `FunctionTools` for raw/multimodal requests, hosted/native tools, provider tool-turn limits, reasoning overrides and summary preferences, `TextFormat` for structured JSON outputs, explicit tool choice, inclusion fields, TopK/MinP, model-dependent log probabilities, service tier, cache key, end-user/safety identifiers, guidelines, and `AdditionalParameters` for future fields. Per-call settings override defaults field by field. Extensions cannot overwrite built-in request fields. For example:
+
+```csharp
+XAiCompletionOptions options = new XAiCompletionOptions
+{
+    MaxTokens = 2048,
+    HostedTools = new List<XAiHostedTool>
+    {
+        XAiHostedTool.Create("web_search"),
+        XAiHostedTool.Create("x_search", new Dictionary<string, object>
+        {
+            ["allowed_x_handles"] = new[] { "SpaceX" }
+        })
+    },
+    TextFormat = new Dictionary<string, object> { ["type"] = "json_object" }
+};
+ChatResponse result = await client.ChatAsync("Summarize recent launch news as JSON.", options);
+```
+
+Native tool definitions support `web_search`, `x_search`, `code_interpreter`, `file_search`, `mcp`, `image_generation`, `shell`, and `tool_search`, retaining all their parameter fields. Supply required provider parameters, such as collection IDs for `file_search` and the server URL/label for `mcp`. Hosted tools execute on xAI; local Mux tools remain ordinary function calls executed by the application. Native `shell_call` actions are available through the raw API and require caller handling and `shell_call_output` inputs; they are not automatically executed by the generic function-call loop. Model/account availability and provider tool charges apply to explicitly enabled tools.
+
+**Native Responses resources and rich inputs.** These methods preserve complete provider JSON, so image/file content parts, citations, hosted outputs, and encrypted continuation items are not reduced to plain text:
+
+| Method | Result / behavior |
+|---|---|
+| `CreateResponseAsync(JsonElement input, options)` | `XAiResponse`, including `RawResponse`, text, reasoning, local calls, usage, ID, status, and `ProviderState` |
+| `CreateResponseStreamingAsync(JsonElement input, options)` | Every `XAiResponseEvent` with native JSON; terminal result in `XAiStreamingResponse.Response` |
+| `GetResponseAsync(id)` | Retrieve a response originally created with `Store = true` |
+| `DeleteResponseAsync(id)` | Delete a stored response; inspect `Data.deleted` |
+| `ListResponseInputItemsAsync(id, limit, order, after)` | A native page, including data/cursors/has_more; limit 1..100 |
+| `CompactConversationAsync(input, model)` | Native compacted output; reuse `Data.output` unchanged as the next input |
+
+Raw `input` accepts a JSON string or a nonempty array of native message/output items. Use native content parts (`input_text`, `input_image`, `input_file`) to send text, image URLs, inline files, uploaded file IDs, or public file URLs. For stateful continuation, set `Store = true` on the response to retain, then pass its `ResponseId` as `PreviousResponseId` with **only new input**, rather than resending the full history. Instructions are omitted when a previous response ID is supplied because xAI reuses the earlier instructions. No previous response ID or conversation cache is hidden inside the client.
+
+**Embeddings and models.** `XAiEmbeddingClient` supports text and token inputs, batches of up to 128, dimensions, float/base64 vectors, preview/user settings, sorted input indices, and token usage. Choose an accessible model from `XAiModelClient.ListEmbeddingModelsAsync()`; the library deliberately does not guess an embedding model. Token-input methods are `EmbedTokensAsync` and `EmbedTokenBatchAsync`. General and detailed model catalogs are exposed by `ListModelsAsync`, `ListLanguageModelsAsync`, `ListEmbeddingModelsAsync`, `ListImageGenerationModelsAsync`, and `ListVideoGenerationModelsAsync`. Use `GetCatalogModelInformationAsync(catalog, model)` for detailed metadata; nested provider values are retained as JSON strings in `ModelInformation.Metadata`.
+
+The integration covers PolyPrompt's completion, embedding, and model capabilities plus the native Responses resource operations above. Standalone media/voice generation, file/collection management, and account/billing APIs are outside these capability interfaces. Image generation is available through the native Responses tool where the model supports it.
+
+**Console and validation.** Run `dotnet run --project src/XAiConsole -f net10.0` with `XAI_API_KEY` set, or enter the key at startup. The console inherits automatic Mux execution, persistent history, separate thinking/answer rendering, usage spacing, cancellation, working-directory commands, and reset. `catalog language|embedding|image|video` lists specialized models; leave the initial embedding model empty to skip embedding setup. Optional `XAI_HOSTED_TOOLS_FILE` points to a JSON array of tool definitions, for example:
+
+```json
+[
+  { "type": "web_search", "parameters": { "allowed_domains": ["wikipedia.org"] } },
+  { "type": "x_search", "parameters": { "allowed_x_handles": ["SpaceX"] } }
+]
+```
+
+`AotConsole --provider xai` uses the same native-safe client and shared tool bridge. The saved official contract subset is `postman/xai.openapi.json`. Local tests cover request mapping, auth, usage, encrypted-state persistence, fragmented/parallel function calls, native SSE framing and failures, hosted outputs, embeddings, model catalogs, response resources, and AOT.
+
+For the end-to-end model/tool simulation, start `postman simulation run postman/simulations/xai.sim.yaml --port 4912 --no-history`, then set `POLYPROMPT_XAI_SIMULATION=http://127.0.0.1:4912/xai` when running `dotnet test src/Test.Console -c Release`. These tests run actual Mux directory/file operations and replay encrypted state through the native Responses contract. They are local fixture evidence, not live-provider validation. Live suite configuration accepts `--xai-key`, `--xai-model`, and an optional `--xai-embedding-model`, or the `POLYPROMPT_TEST_XAI_*` environment group.
 
 ### Ollama Cloud
 
@@ -918,6 +994,7 @@ Hold the capability base type:
 ```csharp
 CompletionClientBase CreateChat(string provider, string? apiKey) => provider switch
 {
+    "xai" => new XAiCompletionClient(apiKey!),
     "ollama" => new OllamaCompletionClient(),
     "openai" => new OpenAiCompletionClient(apiKey: apiKey),
     "gemini" => new GeminiCompletionClient(apiKey: apiKey),
@@ -944,7 +1021,7 @@ ChatResponse reply = await chat.ChatAsync("Hello!", new CompletionOptions { Temp
 
 ### Constructors
 
-The single-key clients share one constructor shape, with every parameter optional:
+Most single-key clients share one constructor shape, with every parameter optional. xAI instead takes a required `apiKey` first, followed by optional endpoint/logging/httpClient; OllamaCloud also requires its key and fixes the endpoint:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -982,8 +1059,8 @@ Clients with provider-shaped credentials or routing:
 
 | Capability | Base options | Provider options |
 |---|---|---|
-| Completion | `CompletionOptions`: `Model`, `MaxTokens` (1 to 10,000,000), `Temperature` (0 to 2), `TopP` (0 to 1), `SystemPrompt`, `ReasoningEffort` | `OllamaCompletionOptions`, `OpenAiCompletionOptions` (also Azure), `GeminiCompletionOptions` (also Vertex AI), `AnthropicCompletionOptions`, `CohereCompletionOptions`; Bedrock uses the base type |
-| Embedding | `EmbeddingOptions`: `Model` | `OllamaEmbeddingOptions`, `OpenAiEmbeddingOptions` (also Azure), `GeminiEmbeddingOptions`, `VertexAiEmbeddingOptions`, `BedrockEmbeddingOptions`, `VoyageAiEmbeddingOptions`, `CohereEmbeddingOptions`, `TeiEmbeddingOptions` |
+| Completion | `CompletionOptions`: `Model`, `MaxTokens` (1 to 10,000,000), `Temperature` (0 to 2), `TopP` (0 to 1), `SystemPrompt`, `ReasoningEffort` | `OllamaCompletionOptions`, `XAiCompletionOptions`, `OpenAiCompletionOptions` (also Azure), `GeminiCompletionOptions` (also Vertex AI), `AnthropicCompletionOptions`, `CohereCompletionOptions`; Bedrock uses the base type |
+| Embedding | `EmbeddingOptions`: `Model` | `OllamaEmbeddingOptions`, `XAiEmbeddingOptions`, `OpenAiEmbeddingOptions` (also Azure), `GeminiEmbeddingOptions`, `VertexAiEmbeddingOptions`, `BedrockEmbeddingOptions`, `VoyageAiEmbeddingOptions`, `CohereEmbeddingOptions`, `TeiEmbeddingOptions` |
 | Sparse embedding | `SparseEmbeddingOptions`: `Model` | `TeiSparseEmbeddingOptions` |
 | Rerank | `RerankOptions`: `Model`, `TopN`, `ReturnDocuments` | `BedrockRerankOptions`, `VoyageAiRerankOptions`, `CohereRerankOptions`, `TeiRerankOptions` |
 | Classification | `ClassificationOptions`: `Model` | `CohereClassificationOptions`, `TeiClassificationOptions` |
@@ -992,6 +1069,7 @@ Clients with provider-shaped credentials or routing:
 Provider-specific parameters:
 
 - **Ollama**: `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`; embeddings add `ContextLength` and `Truncate` (bool).
+- **xAI**: Responses-specific settings are in `XAiCompletionOptions`; embeddings use `XAiEmbeddingOptions` (including Dimensions/EncodingFormat, Preview, and User). See the xAI section for the complete native API.
 - **OpenAI and Azure OpenAI**: `FrequencyPenalty`, `PresencePenalty`, `Seed`, and, for generation only, `Echo`, `Suffix`, and `Logprobs`; embeddings add `Dimensions` and `EncodingFormat` (`float` or `base64`).
 - **Gemini and Vertex AI**: `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `ToolSchemaMode`; embeddings add `TaskType` and `Title`, and Vertex AI adds `OutputDimensionality` and `AutoTruncate`.
 - **Anthropic**: `TopK`, `StopSequences`. Current Claude models (Opus 4.7 and later) reject `temperature`, `top_p`, and `top_k`; leave them unset for those models.
@@ -1004,6 +1082,7 @@ Provider-specific parameters:
 
 | Provider | Completion | Embedding | Rerank | Decision |
 |---|---|---|---|---|
+| xAI | `grok-4.7` | explicit catalog model | | |
 | Ollama | `gemma3:4b` | `all-minilm` | | |
 | OpenAI | `gpt-4o-mini` | `text-embedding-3-small` | | |
 | Azure OpenAI | the deployment | the deployment | | |
@@ -1033,7 +1112,7 @@ Cohere classification has no default model, which lets Cohere pick one for few-s
 
 ## Console Harnesses and Automatic Tools
 
-All `*Console` applications share `ConsoleApplicationBase` in `Console.Shared`. The chat-capable harnesses (Ollama, OllamaCloud, OpenAI, Anthropic, Gemini, and Cohere) use one `ConsoleSession` implementation for streaming, conversation history, reasoning display, and automatic tool execution. Both `ch/chat` and `tc/toolchat` now advertise tools, execute requested calls, send their results back, and continue until the model answers. The manual weather-result prompt has been removed. Use a tool-capable model; OllamaConsole now suggests `gpt-oss:20b`.
+All `*Console` applications share `ConsoleApplicationBase` in `Console.Shared`. The chat-capable harnesses (Ollama, OllamaCloud, OpenAI, Anthropic, Gemini, Cohere, and xAI) use one `ConsoleSession` implementation for streaming, conversation history, reasoning display, and automatic tool execution. Both `ch/chat` and `tc/toolchat` now advertise tools, execute requested calls, send their results back, and continue until the model answers. The manual weather-result prompt has been removed. Use a tool-capable model; OllamaConsole now suggests `gpt-oss:20b`.
 
 Model output appears under separate `Thinking` and `Answer` labels, with `Tool: NAME` sections for actual calls and results. Usage blocks end with a blank line before the next command prompt. Thinking is displayed as it arrives when the provider streams it, and the accumulated response is a fallback. Providers that do not return reasoning produce only an answer. Native `gen/generate` and `gens/genstream` keep their original APIs; a console-only HTTP observer displays returned Ollama, Anthropic, Gemini, and Cohere generation thinking without changing the library's generation models.
 
@@ -1104,6 +1183,7 @@ PolyPrompt/
 |   |   |-- Wire/                # AWS event-stream decoder
 |   |   |-- Models/              # Request, response, and base options models
 |   |   `-- Options/             # Provider-specific options
+|   |-- XAiConsole/              # Native Responses, model catalogs, embeddings, shared Mux tools
 |   |-- OllamaCloudConsole/      # Ollama Cloud harness (fixed URL, required bearer token)
 |   |-- OllamaConsole/           # Interactive harnesses, one per provider
 |   |-- OpenAIConsole/
@@ -1135,7 +1215,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (245 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
+The local suite (270 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest

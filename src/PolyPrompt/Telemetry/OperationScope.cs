@@ -485,6 +485,8 @@ namespace PolyPrompt.Telemetry
             {
                 case ChatResponse chat:
                     usage = chat.Usage;
+                    responseId = chat.ResponseId;
+                    finishReason = chat.FinishReason;
                     break;
                 case ChatStreamingResponse chatStream:
                     usage = chatStream.Usage;
@@ -502,6 +504,18 @@ namespace PolyPrompt.Telemetry
                     finishReason = toolChatStream.FinishReason;
                     responseId = toolChatStream.ResponseId;
                     toolCalls = toolChatStream.ToolCalls?.Count;
+                    break;
+                case GenerationResponse generation:
+                    usage = generation.Usage; responseId = generation.ResponseId; finishReason = generation.FinishReason;
+                    break;
+                case GenerationStreamingResponse generationStream:
+                    usage = generationStream.Usage; responseId = generationStream.ResponseId; finishReason = generationStream.FinishReason;
+                    break;
+                case EmbeddingResponse embedding:
+                    usage = embedding.Usage;
+                    break;
+                case XAiStreamingResponse native:
+                    usage = native.Response?.Usage; responseId = native.Response?.ResponseId; finishReason = native.Response?.FinishReason; toolCalls = native.Response?.ToolCalls?.Count;
                     break;
                 case DecisionResponse decision:
                     usage = decision.Usage;

@@ -5,6 +5,8 @@ namespace PolyPrompt.Models
     /// </summary>
     public class EmbeddingResponse : ResponseBase
     {
+        /// <summary>Token usage when the embedding provider reports it.</summary>
+        public TokenUsage? Usage { get; set; }
         /// <summary>
         /// List of embedding vectors returned by the model.
         /// </summary>
