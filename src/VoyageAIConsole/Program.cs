@@ -1,11 +1,12 @@
 namespace VoyageAIConsole
 {
     using GetSomeInput;
+    using PolyPrompt.ConsoleSupport;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
 
-    public class Program
+    public class Program : ConsoleApplicationBase
     {
         #region Private-Members
 
@@ -41,9 +42,13 @@ namespace VoyageAIConsole
 
             while (_RunForever)
             {
-                string userInput = Inputty.GetString("Command [?/help]:", null, false);
-                await ProcessCommand(userInput).ConfigureAwait(false);
+                string? userInput = ReadCommand();
+                if (userInput == null) break;
+                try { await ProcessCommand(userInput).ConfigureAwait(false); }
+                catch (Exception ex) { Console.WriteLine("Error: " + ex.Message); }
             }
+
+            ShutdownSharedConsole();
 
             _EmbeddingClient.Dispose();
             _RerankClient.Dispose();
@@ -56,6 +61,7 @@ namespace VoyageAIConsole
         private static async Task ProcessCommand(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return;
+            if (await TryHandleSharedCommandAsync(input)) return;
 
             string trimmed = input.Trim().ToLowerInvariant();
 
@@ -111,6 +117,7 @@ namespace VoyageAIConsole
         {
             Console.WriteLine("");
             Console.WriteLine("Available commands:");
+            PrintSharedHelp();
             Console.WriteLine("  ?/help          Show this help menu");
             Console.WriteLine("  c/cls           Clear the screen");
             Console.WriteLine("  em/embed        Generate a single embedding");

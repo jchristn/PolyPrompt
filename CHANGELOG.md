@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — Console harness improvements
+
+No package version change; the PolyPrompt library is unchanged.
+
+### Changed
+
+- All console harnesses derive from `ConsoleApplicationBase`; chat providers share `ConsoleSession` for conversation history, streaming, and bounded automatic tool execution. Both `chat` and `toolchat` execute actual Mux tools instead of requesting manual weather-result JSON.
+- Added a shared Mux tool-host process for file operations, search, process execution, browser retrieval, and persistent task plans; configured web search and subagents are also supported. The companion is copied on build/publish and is usable from the native AotConsole.
+- Thinking and answers render separately for streaming and non-streaming chat/tool chat. A console-only observer also displays reasoning returned by native generation endpoints without modifying library models.
+- Added shared tool listing/toggle, working-directory, conversation-reset, reasoning-effort, cancellation, and EOF handling. OllamaConsole suggests the tool-capable `gpt-oss:20b` model.
+- AotConsole supports one-shot tool prompts, working-directory selection, the shared renderer/runtime, and saved conversations.
+
+### Validation
+
+- Added `Test.Console` coverage for real Mux tools, multi-round model/tool conversations, history, reasoning rendering, malformed/unknown tool calls, cancellation, round limits, native generation thinking, optional tool registration, and browser retrieval against a local page.
+- Extended the saved Postman model fixture to request real directory-listing and file-reading operations across separate rounds.
+
 ## v3.3.0 (2026-10-18)
 
 ### Added

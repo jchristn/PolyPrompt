@@ -40,7 +40,9 @@ internal partial class AppJsonContext : JsonSerializerContext { }
 Serializer.AddTypeInfoResolver(AppJsonContext.Default);
 ```
 
-[src/AotConsole](src/AotConsole/Program.cs) is a complete sample: chat, streaming, a tool-calling loop with typed arguments, and saving the conversation, published as a native binary.
+[src/AotConsole](src/AotConsole/Program.cs) is a native sample using the same shared conversation runner, thinking/answer renderer, automatic Mux tools, and conversation saving as the interactive harnesses. Pass `--prompt "What files are in this directory?" --directory .` for a one-shot turn.
+
+The application and PolyPrompt client run natively. Mux tools execute in the companion JIT `Console.Tools` process, copied into the publish output's `tools/` directory. Keep that directory with the native executable and install the matching .NET runtime; browser retrieval additionally requires Playwright's browser installation. This design preserves Native AOT compatibility without adding Mux dependencies to the library. See the README's console section for configuration and validation.
 
 ## What works without any setup
 

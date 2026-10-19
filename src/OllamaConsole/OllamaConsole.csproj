@@ -16,4 +16,5 @@
     <ProjectReference Include="..\PolyPrompt\PolyPrompt.csproj" />
   </ItemGroup>
 
+  <Import Project="../Console.Shared/Console.Tools.targets" />
 </Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <PublishAot>false</PublishAot>
+    <!-- A build-only companion process, never loaded into the native parent. -->
+    <ShouldBeValidatedAsExecutableReference>false</ShouldBeValidatedAsExecutableReference>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Mux.Core" Version="1.1.1" />
+    <ProjectReference Include="../PolyPrompt/PolyPrompt.csproj" />
+  </ItemGroup>
+</Project>

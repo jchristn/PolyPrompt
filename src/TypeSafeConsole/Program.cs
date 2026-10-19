@@ -1,10 +1,11 @@
 namespace TypeSafeConsole
 {
     using GetSomeInput;
+    using PolyPrompt.ConsoleSupport;
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
 
-    public class Program
+    public class Program : ConsoleApplicationBase
     {
         #region Private-Members
 
@@ -38,9 +39,13 @@ namespace TypeSafeConsole
 
             while (_RunForever)
             {
-                string userInput = Inputty.GetString("Command [?/help]:", null, false);
-                await ProcessCommand(userInput).ConfigureAwait(false);
+                string? userInput = ReadCommand();
+                if (userInput == null) break;
+                try { await ProcessCommand(userInput).ConfigureAwait(false); }
+                catch (Exception ex) { Console.WriteLine("Error: " + ex.Message); }
             }
+
+            ShutdownSharedConsole();
 
             _Client.Dispose();
         }
@@ -52,6 +57,7 @@ namespace TypeSafeConsole
         private static async Task ProcessCommand(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return;
+            if (await TryHandleSharedCommandAsync(input)) return;
 
             string trimmed = input.Trim().ToLowerInvariant();
 
@@ -115,6 +121,7 @@ namespace TypeSafeConsole
         {
             Console.WriteLine("");
             Console.WriteLine("Available commands:");
+            PrintSharedHelp();
             Console.WriteLine("  ?/help           Show this help menu");
             Console.WriteLine("  c/cls            Clear the screen");
             Console.WriteLine("  de/decide        Enter a state and binary, choice, or score questions, then decide");

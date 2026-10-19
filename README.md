@@ -1031,6 +1031,64 @@ Cohere classification has no default model, which lets Cohere pick one for few-s
 - Ollama tool calling depends on the model. `gemma3:4b` does not support tools; use a tool-capable model such as `gpt-oss:20b`.
 - A TEI server hosts one model, and its type (`ModelInformation.Metadata["model_type"]`: `embedding`, `reranker`, or `classifier`) decides which TEI clients succeed. The others return an unsuccessful response with TEI's HTTP 424 error.
 
+## Console Harnesses and Automatic Tools
+
+All `*Console` applications share `ConsoleApplicationBase` in `Console.Shared`. The chat-capable harnesses (Ollama, OllamaCloud, OpenAI, Anthropic, Gemini, and Cohere) use one `ConsoleSession` implementation for streaming, conversation history, reasoning display, and automatic tool execution. Both `ch/chat` and `tc/toolchat` now advertise tools, execute requested calls, send their results back, and continue until the model answers. The manual weather-result prompt has been removed. Use a tool-capable model; OllamaConsole now suggests `gpt-oss:20b`.
+
+Model output appears under separate `Thinking` and `Answer` labels, with `Tool: NAME` sections for actual calls and results. Thinking is displayed as it arrives when the provider streams it, and the accumulated response is a fallback. Providers that do not return reasoning produce only an answer. Native `gen/generate` and `gens/genstream` keep their original APIs; a console-only HTTP observer displays returned Ollama, Anthropic, Gemini, and Cohere generation thinking without changing the library's generation models.
+
+| Command | Behavior |
+|---|---|
+| `ch/chat`, `tc/toolchat` | Chat with automatic tools and persistent conversation history |
+| `tools` | List the configured Mux tools and current execution setting |
+| `tools off`, `tools on` | Disable or enable automatic tools (enabled by default) |
+| `pwd`, `cd PATH` | Show or change the working directory used by tools |
+| `reset` | Clear conversation history |
+| `reasoning LEVEL` | Set model-dependent reasoning effort; `default` leaves the provider default |
+| Ctrl+C during chat | Cancel the model turn and terminate its running tool-host process tree |
+
+Automatic tools run with the console user's filesystem and process permissions. `cd` supplies working-directory context; it does not confine tools to that directory. `tools off` is available for plain chat. The loop is bounded to 12 model rounds and 64 tool calls per round; errors become tool results when possible, and failed or canceled turns are removed from conversation history.
+
+The shared tool runtime reuses **Mux.Core 1.1.1's built-in registry**, including `read_file`, `write_file`, `edit_file`, `multi_edit`, `delete_file`, `file_metadata`, `list_directory`, `manage_directory`, `glob`, `grep`, `run_process`, `web_retrieve`, `plan_tasks`, and `update_task`. Task-plan state is retained by the host across calls. Optional `web_search` and `spawn_subagent` tools are supported when configured:
+
+- `POLYPROMPT_MUX_SETTINGS`: absolute path to a Mux settings JSON object, including `externalSearch.enabled` and its configured providers/API keys for web search, tool timeouts, and task-planning settings.
+- `POLYPROMPT_MUX_SUBAGENTS`: absolute path to a JSON array of Mux subagent definitions (`name`, `systemPrompt`, optional `endpointName`, `allowedTools`, and `maxIterations`).
+- `POLYPROMPT_MUX_ENDPOINTS`: absolute path to a JSON array of Mux endpoint configurations, required when subagents are configured. The default endpoint (or first entry) is inherited unless a definition selects another. Configured subagents use automatic tool execution, matching the console.
+
+For example, web search can use a settings file with this shape (supply your own provider endpoint and API key, outside source control):
+
+```json
+{
+  "externalSearch": {
+    "enabled": true,
+    "providers": [
+      { "name": "search", "providerType": "tavily", "endpoint": "https://api.tavily.com", "apiKey": "$TAVILY_API_KEY", "isDefault": true }
+    ]
+  }
+}
+```
+
+`Console.Tools` is a companion JIT process, copied into each console's `tools/` output and publish directory. This keeps Mux dependencies out of the PolyPrompt library and lets AotConsole use the same tools without loading Mux into its native process. Keep the companion directory alongside the console and install the matching .NET runtime. `POLYPROMPT_TOOL_HOST` can override the full path to `Console.Tools.dll`. Browser retrieval uses Playwright and requires an installed browser; from a console output directory, run `dotnet tools/Console.Tools.dll --install-browser chromium` if Chromium is not installed.
+
+VoyageAI, TEI, and TypeSafe retain their capability-specific commands and expose shared tool configuration/help, but their providers do not offer chat or model-driven tool calls. These harnesses do not send tools to embedding, reranking, classification, or decision endpoints.
+
+The native console accepts a one-shot tool prompt, for example:
+
+```bash
+dotnet publish src/AotConsole -c Release -f net10.0 -r osx-arm64 -o out/aot
+./out/aot/AotConsole --provider ollama --model gpt-oss:20b \
+  --prompt "What files do you see in the current directory?" --directory .
+```
+
+Run the shared console tests with `dotnet test src/Test.Console -c Release`. They exercise real Mux file/process/task/browser tools against temporary files and a local page. Browser tests require Playwright Chromium. To include the saved multi-round model simulation, start `postman simulation run postman/simulations/ollamacloud.sim.yaml --port 4911 --no-history`, then run:
+
+```bash
+POLYPROMPT_CONSOLE_SIMULATION=http://127.0.0.1:4911/ollamacloud \
+  dotnet test src/Test.Console -c Release
+```
+
+The simulation asks the console to list a temporary directory, read an actual fixture file, and return its contents through separate tool-result rounds. It is a local model fixture, not evidence of a live provider's model capabilities.
+
 ## Project Structure
 
 ```
@@ -1055,7 +1113,10 @@ PolyPrompt/
 |   |-- CohereConsole/
 |   |-- TeiConsole/
 |   |-- TypeSafeConsole/
-|   |-- AotConsole/              # Native AOT sample: chat, streaming, typed tool calls, saved conversation
+|   |-- AotConsole/              # Native console: shared tools, thinking display, saved conversation
+|   |-- Console.Shared/          # Shared base, conversation/tool loop, rendering, native-safe tool bridge
+|   |-- Console.Tools/           # Companion Mux built-in tool host (JIT)
+|   |-- Test.Console/            # Shared console and real tool execution tests
 |   |-- Test.Shared/             # Shared Touchstone test descriptors and the local mock server
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Aot/                # Native AOT verification: every client, JIT vs native binary (verify-aot.sh)
@@ -1074,7 +1135,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (244 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
+The local suite (245 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest

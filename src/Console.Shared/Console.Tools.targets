@@ -1,0 +1,18 @@
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Console.Shared/Console.Shared.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../Console.Tools/Console.Tools.csproj" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+  </ItemGroup>
+  <Target Name="CopyConsoleToolHost" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+    <ItemGroup>
+      <ConsoleToolFiles Include="$(MSBuildThisFileDirectory)../Console.Tools/bin/$(Configuration)/$(TargetFramework)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ConsoleToolFiles)" DestinationFiles="@(ConsoleToolFiles->'$(OutDir)tools/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishConsoleToolHost" AfterTargets="Publish" Condition="'$(TargetFramework)' != ''">
+    <ItemGroup>
+      <ConsoleToolPublishFiles Include="$(MSBuildThisFileDirectory)../Console.Tools/bin/$(Configuration)/$(TargetFramework)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ConsoleToolPublishFiles)" DestinationFiles="@(ConsoleToolPublishFiles->'$(PublishDir)tools/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

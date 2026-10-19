@@ -16,8 +16,28 @@ const server = http.createServer((req, res) => {
 
   // @endpoint POST /api/chat
   if (req.method === 'POST' && pathname === '/api/chat') {
-    res.writeHead(200, {"Content-Type":"application/json"});
-    return res.end(JSON.stringify({"model":"test-model","message":{"role":"assistant","content":"pong"},"done":true}));
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      let request;
+      try { request = JSON.parse(body); }
+      catch { res.writeHead(400); return res.end('{"error":"invalid JSON"}'); }
+      const messages = request.messages || [];
+      const smoke = messages.some(m => (m.content || '').includes('console-smoke'));
+      const results = messages.filter(m => m.role === 'tool');
+      let message = { role: 'assistant', content: 'pong' };
+      if (smoke && results.length < 2) {
+        const name = results.length === 0 ? 'list_directory' : 'read_file';
+        const args = results.length === 0 ? { path: '.' } : { file_path: '.console-smoke.txt' };
+        message = { role: 'assistant', thinking: 'Inspect the actual files.', content: '', tool_calls: [{ function: { name, arguments: args } }] };
+      } else if (smoke) {
+        message = { role: 'assistant', thinking: 'The tools returned evidence.', content: 'Inspected file: ' + results[1].content };
+      }
+      const response = { model: 'test-model', message, done: true };
+      res.writeHead(200, { 'Content-Type': request.stream ? 'application/x-ndjson' : 'application/json' });
+      return res.end(JSON.stringify(response) + (request.stream ? '\n' : ''));
+    });
+    return;
   }
 
   // @endpoint POST /api/generate
