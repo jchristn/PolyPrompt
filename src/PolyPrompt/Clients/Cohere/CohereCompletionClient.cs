@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Text;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -10,7 +11,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Cohere completion client using the v2 Chat API (<c>/v2/chat</c>) for chat, tool chat, and generation (sent as a
     /// single user turn, since Cohere retired its generate endpoint), each streaming (typed SSE events) or not. The model's
-    /// tool plan and thinking are surfaced as <c>Reasoning</c> and never sent back. Cohere's <c>tool_choice</c> accepts only
+    /// tool plan and thinking are surfaced as <c>Reasoning</c> and preserved separately for tool follow-ups. Cohere's <c>tool_choice</c> accepts only
     /// <c>REQUIRED</c> and <c>NONE</c>, so "auto" omits it and a specific tool name sends only that tool with <c>REQUIRED</c>.
     /// </summary>
     public class CohereCompletionClient : CompletionClientBase
@@ -120,7 +121,7 @@ namespace PolyPrompt.Clients
         {
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", BuildUrl("/v2/chat"), BuildToolChatBody(request, messages, settings, true),
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -307,6 +308,8 @@ namespace PolyPrompt.Clients
                     };
                     if (!string.IsNullOrEmpty(message.Content)) assistant["content"] = message.Content;
 
+                    if (ToolTurnState.TryGet(message, "cohere", out var state))
+                        foreach (var field in state.EnumerateObject()) assistant[field.Name] = field.Value;
                     result.Add(assistant);
                     continue;
                 }
@@ -315,7 +318,10 @@ namespace PolyPrompt.Clients
                     : string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "model", StringComparison.OrdinalIgnoreCase) ? "assistant"
                     : "user";
 
-                result.Add(new Dictionary<string, object> { { "role", normalized }, { "content", message.Content ?? string.Empty } });
+                var item = new Dictionary<string, object> { { "role", normalized }, { "content", message.Content ?? string.Empty } };
+                if (ToolTurnState.TryGet(message, "cohere", out var nativeState))
+                    foreach (var field in nativeState.EnumerateObject()) item[field.Name] = field.Value;
+                result.Add(item);
             }
 
             return result;
@@ -339,6 +345,13 @@ namespace PolyPrompt.Clients
                 return parsed;
             }
 
+            if (response is ToolChatResponse)
+            {
+                var state = new Dictionary<string, object>();
+                foreach (string key in new[] { "tool_plan", "content" })
+                    if (message.TryGetValue(key, out object? value) && value != null) state[key] = value;
+                if (state.Count > 0) ToolTurnState.Set(response, "cohere", state);
+            }
             parsed.ResponseId = responseObj.ContainsKey("id") ? responseObj["id"]?.ToString() : null;
             parsed.FinishReason = responseObj.ContainsKey("finish_reason") ? responseObj["finish_reason"]?.ToString() : null;
             parsed.Usage = ParseUsage(ParseNestedObject(responseObj, "usage"));
@@ -500,10 +513,24 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            string plan = "";
+            var contents = new SortedDictionary<int, System.Text.Json.Nodes.JsonObject>();
             await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
             {
+                if (type == ToolPlanDeltaEvent) plan += ReadToolPlanDelta(evt);
+                if ((type == ContentDeltaEvent || type == "content-start") && DeltaMessage(evt) is Dictionary<string, object> m && ParseNestedObject(m, "content") is Dictionary<string, object> c)
+                {
+                    int index = TryGetInt(evt, "index") ?? 0;
+                    if (!contents.TryGetValue(index, out var block)) contents[index] = block = new();
+                    foreach (string key in new[] { "text", "thinking" })
+                        if (c.TryGetValue(key, out object? v) && v != null)
+                        {
+                            block["type"] = key;
+                            block[key] = (block[key]?.GetValue<string>() ?? "") + v.ToString();
+                        }
+                }
                 ToolChatStreamingChunk chunk = new ToolChatStreamingChunk { CreatedUtc = DateTime.UtcNow };
 
                 if (type == MessageStartEvent) chunk.ResponseId = evt.ContainsKey("id") ? evt["id"]?.ToString() : null;
@@ -524,6 +551,10 @@ namespace PolyPrompt.Clients
 
                 yield return chunk;
             }
+            var continuation = new Dictionary<string, object>();
+            if (plan.Length > 0) continuation["tool_plan"] = plan;
+            if (contents.Count > 0) continuation["content"] = new System.Text.Json.Nodes.JsonArray(contents.Values.Select(c => (System.Text.Json.Nodes.JsonNode)c.DeepClone()).ToArray());
+            if (continuation.Count > 0) ToolTurnState.Set(result, "cohere", continuation);
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerationChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)

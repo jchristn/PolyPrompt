@@ -4,6 +4,7 @@ namespace PolyPrompt.Clients
     using System.Runtime.CompilerServices;
     using System.Text;
     using PolyPrompt.Auth;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Wire;
     using SyslogLogging;
@@ -125,7 +126,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = BuildToolChatBody(request, messages, settings);
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", ConverseUrl(settings.Model, true), body,
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -296,6 +297,11 @@ namespace PolyPrompt.Clients
                 }
 
                 FlushToolResults(result, ref pendingToolResults);
+                if (ToolTurnState.TryGet(message, "bedrock", out var nativeContent))
+                {
+                    result.Add(new Dictionary<string, object> { ["role"] = "assistant", ["content"] = nativeContent });
+                    continue;
+                }
 
                 List<object> content = new List<object>();
                 if (message.ToolCalls != null && message.ToolCalls.Count > 0)
@@ -375,6 +381,8 @@ namespace PolyPrompt.Clients
                 response.Error = "Response missing 'output.message.content' field";
                 return parsed;
             }
+
+            ToolTurnState.Set(response, "bedrock", blocks);
 
             StringBuilder text = new StringBuilder();
             StringBuilder reasoning = new StringBuilder();
@@ -498,10 +506,12 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            var native = new ToolTurnState.BedrockBlocks();
             await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token).ConfigureAwait(false))
             {
+                native.Apply(type, payload);
                 ToolChatStreamingChunk chunk = new ToolChatStreamingChunk();
 
                 if (type == "contentBlockStart")
@@ -528,6 +538,7 @@ namespace PolyPrompt.Clients
 
                 yield return chunk;
             }
+            ToolTurnState.Set(result, "bedrock", native.Content());
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)

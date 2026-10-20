@@ -468,7 +468,7 @@ namespace Test.Shared
             SharedAssert.Equal("call-weather-1", second.Str("messages.2.tool_calls.0.id"), "Cohere follow-up should replay the tool call id.");
             SharedAssert.Equal("get_weather", second.Str("messages.2.tool_calls.0.function.name"), "Cohere follow-up should replay the tool call name.");
             SharedAssert.Equal("String", second.Kind("messages.2.tool_calls.0.function.arguments"), "Cohere tool call arguments should be sent as a JSON string.");
-            SharedAssert.False(second.Has("messages.2.tool_plan"), "Cohere tool plan (reasoning) should never be resent.");
+            SharedAssert.Equal(response.Reasoning, second.Str("messages.2.tool_plan"), "Cohere native tool plan is replayed.");
             SharedAssert.False(second.Str("messages.2.content")?.Contains("look up") == true, "Cohere tool plan should not be resent as content.");
             SharedAssert.Equal("tool", second.Str("messages.3.role"), "Cohere tool results should be tool-role messages.");
             SharedAssert.Equal("call-weather-1", second.Str("messages.3.tool_call_id"), "Cohere tool results should reference the tool call id.");

@@ -34,6 +34,7 @@ namespace Test.Shared
             cases.AddRange(LocalTelemetryCases.Create(SuiteId));
             cases.AddRange(LocalSerializerCases.Create(SuiteId));
             cases.AddRange(LocalXAiCases.Create(SuiteId));
+            cases.AddRange(LocalToolTurnCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

@@ -15,8 +15,8 @@ namespace PolyPrompt.Models
 
         /// <summary>
         /// Reasoning ("thinking") content returned by the model, kept separate from <see cref="Text"/>. Null
-        /// when the model produced no reasoning. Returned to the caller for display or logging; it is not
-        /// carried into a follow-up request.
+        /// when the model produced no reasoning. Returned for display or logging. Provider-specific continuation state is preserved separately
+        /// in ProviderState and carried by ToAssistantMessage().
         /// </summary>
         public string? Reasoning { get; set; } = null;
 

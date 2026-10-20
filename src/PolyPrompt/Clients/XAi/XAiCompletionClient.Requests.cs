@@ -1,6 +1,7 @@
 namespace PolyPrompt.Clients
 {
     using System.Text.Json;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
 
@@ -122,7 +123,8 @@ namespace PolyPrompt.Clients
             List<object> input = new();
             foreach (ChatMessage message in messages)
             {
-                if (message.Role == "assistant" && message.ProviderState.HasValue)
+                if (message.Role == "assistant" && message.ProviderState.HasValue
+                    && !ToolTurnState.IsTagged(message.ProviderState.Value))
                 {
                     JsonElement state = message.ProviderState.Value;
                     if (state.ValueKind != JsonValueKind.Array) throw new ArgumentException("xAI assistant ProviderState must be a Responses output array.");

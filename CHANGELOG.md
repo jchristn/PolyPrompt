@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.4.1 (2026-10-19)
+
+### Fixed
+
+- Preserve native assistant continuation state through `ToAssistantMessage()` in streaming and non-streaming tool loops: Ollama/Ollama Cloud thinking; OpenAI-compatible/Azure reasoning extensions; Anthropic signed thinking and redacted blocks; Bedrock signed/redacted reasoning; Gemini/Vertex signed parts; and Cohere thinking and tool plans. Native whitespace, block order, and signatures remain intact, separate from visible answer text.
+- Isolate provider-specific state by protocol while retaining xAI's existing Responses output-array format. Foreign native state is ignored; OpenAI reasoning extensions stay scoped to the configured endpoint that returned them.
+- Include native Ollama `tool_name` on tool-result messages.
+- Correct follow-up reasoning documentation. Archive the original Armada report at `archive/ARMADA_BUG_REPORT.md`; its loss-of-state diagnosis is confirmed, while its latency hypothesis remains unproven.
+
+### Validation
+
+- Added 19 shared regression cases covering all nine chat client variants, multi-turn and parallel tool loops, fragmented signatures/thinking, redacted content, assistant thinking without tools, turns without thinking, generated-metadata JSON persistence, and cross-protocol isolation including xAI.
+- Native AOT runs the continuation regressions on .NET 8 and .NET 10, with request digests compared against the JIT. The saved Ollama Postman simulation now rejects missing assistant thinking and tool-result names.
+- Release checks passed on both .NET 8 and .NET 10: 289 library cases per NUnit/xUnit run, 24 console cases per framework with Ollama/xAI Postman simulations, and 138 Native AOT checks per framework with matching JIT/native request digests. Full solution Release build: zero warnings and errors. Validation uses local fixtures, without live-provider credentials.
+- Patch release: uses existing public models and `ProviderState`; no new public library API.
+
 ## v3.4.0 (2026-10-18)
 
 Adds native xAI Grok support and releases the shared console improvements. Backward compatible.

@@ -15,7 +15,7 @@ namespace PolyPrompt.Models
         /// <summary>
         /// Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
         /// <see cref="Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
-        /// This is returned to the caller for display or logging; it is not carried into a follow-up request.
+        /// Returned for display or logging; native continuation state is carried separately by ToAssistantMessage().
         /// </summary>
         public string? Reasoning { get; set; } = null;
 

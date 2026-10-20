@@ -2,6 +2,7 @@ namespace PolyPrompt.Clients
 {
     using System.IO;
     using System.Runtime.CompilerServices;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -131,7 +132,7 @@ namespace PolyPrompt.Clients
         {
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", BuildUrl("/v1/messages"), BuildToolChatBody(request, messages, settings, true),
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -260,6 +261,11 @@ namespace PolyPrompt.Clients
                 }
 
                 FlushPendingToolResults(result, ref pendingToolResults);
+                if (ToolTurnState.TryGet(message, "anthropic", out var nativeContent))
+                {
+                    result.Add(new Dictionary<string, object> { ["role"] = "assistant", ["content"] = nativeContent });
+                    continue;
+                }
 
                 if (message.ToolCalls != null && message.ToolCalls.Count > 0)
                 {
@@ -405,6 +411,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object>? responseObj = TryDeserializeObject(responseBody);
             List<Dictionary<string, object>>? blocks = ReadBlocks(responseObj, response);
             if (blocks == null) return;
+            ToolTurnState.Set(response, "anthropic", blocks);
 
             response.ResponseId = responseObj!.ContainsKey("id") ? responseObj["id"]?.ToString() : null;
             if (responseObj.ContainsKey("model")) response.Model = responseObj["model"]?.ToString() ?? response.Model;
@@ -563,12 +570,14 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            var native = new ToolTurnState.AnthropicBlocks();
             StreamState state = new StreamState();
 
             await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
             {
+                native.Apply(type, evt);
                 ToolChatStreamingChunk chunk = new ToolChatStreamingChunk { CreatedUtc = DateTime.UtcNow };
 
                 if (type == MessageStartEvent)
@@ -627,6 +636,7 @@ namespace PolyPrompt.Clients
 
                 yield return chunk;
             }
+            ToolTurnState.Set(result, "anthropic", native.Content());
         }
 
         private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)

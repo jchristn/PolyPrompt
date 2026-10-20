@@ -24,6 +24,7 @@ namespace Test.Aot
         private const string Model = "test-model";
         private const string RerankModel = "test-rerank-model";
         private static int _Passed = 0;
+        private static readonly List<string> _ContinuationBodies = new();
         private static readonly List<string> _Failures = new List<string>();
 
         #endregion
@@ -52,10 +53,16 @@ namespace Test.Aot
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             await RunClientChecksAsync(server).ConfigureAwait(false);
             await RunXAiAdvancedChecksAsync(server).ConfigureAwait(false);
+            foreach (string provider in new[] { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere", "ollamacloud", "azure", "vertex" })
+                foreach (bool streaming in new[] { false, true })
+                {
+                    try { await LocalToolTurnCases.RunAsync(provider, streaming, CancellationToken.None, _ContinuationBodies); _Passed++; }
+                    catch (Exception ex) { _Failures.Add("Continuation " + provider + " stream=" + streaming + ": " + ex.Message); }
+                }
 
             string digest = Digest(server);
             Console.WriteLine();
-            Console.WriteLine("Requests sent:  " + server.RequestBodies.Count);
+            Console.WriteLine("Requests sent:  " + (server.RequestBodies.Count + _ContinuationBodies.Count));
             Console.WriteLine("Request digest: " + digest);
             if (digestPath != null) File.WriteAllText(digestPath, digest);
 
@@ -408,6 +415,7 @@ namespace Test.Aot
                 all.Append(server.RequestUrls[i]).Append('\n').Append(server.RequestBodies[i]).Append('\n');
             }
 
+            foreach (string body in _ContinuationBodies) all.Append(body).Append('\n');
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(all.ToString())));
         }
 

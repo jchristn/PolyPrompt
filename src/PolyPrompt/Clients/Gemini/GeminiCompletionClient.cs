@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Text.Json;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -123,7 +124,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = BuildToolChatBody(request, messages, settings);
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", ContentUrl(settings.Model, true), body,
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -293,6 +294,8 @@ namespace PolyPrompt.Clients
         private List<Dictionary<string, object>> BuildParts(ChatMessage message, int messageIndex, Dictionary<string, string> callNames)
         {
             List<Dictionary<string, object>> parts = new List<Dictionary<string, object>>();
+            if (ToolTurnState.TryGet(message, "gemini", out var nativeParts))
+                return nativeParts.EnumerateArray().Select(p => _Serializer.DeserializeJson<Dictionary<string, object>>(p.GetRawText())!).ToList();
 
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {
@@ -559,6 +562,7 @@ namespace PolyPrompt.Clients
 
             List<Dictionary<string, object>>? parts = ReadParts(responseObj, response, out Dictionary<string, object>? candidate);
             if (parts == null) return;
+            if (parts.Any(p => p.ContainsKey(ThoughtSignatureKey) || p.ContainsKey(ThoughtKey))) ToolTurnState.Set(response, "gemini", parts);
 
             response.FinishReason = candidate!.ContainsKey("finishReason") ? candidate["finishReason"]?.ToString() : null;
 
@@ -670,8 +674,9 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            var nativeParts = new List<Dictionary<string, object>>();
             int nextToolCallIndex = 0;
 
             await foreach (Dictionary<string, object> chunk in ReadEvents(response, token).ConfigureAwait(false))
@@ -690,6 +695,7 @@ namespace PolyPrompt.Clients
 
                 if (parts != null)
                 {
+                    nativeParts.AddRange(parts);
                     SplitText(parts, true, out string? text, out string? reasoning);
                     streamChunk.Text = text;
                     streamChunk.ReasoningText = reasoning;
@@ -714,6 +720,7 @@ namespace PolyPrompt.Clients
                 streamChunk.Usage = ParseUsage(chunk);
                 yield return streamChunk;
             }
+            if (nativeParts.Any(p => p.ContainsKey(ThoughtSignatureKey) || p.ContainsKey(ThoughtKey))) ToolTurnState.Set(result, "gemini", nativeParts);
         }
 
         private ToolCallDelta? ParseToolCallDelta(Dictionary<string, object> part, int fallbackIndex)

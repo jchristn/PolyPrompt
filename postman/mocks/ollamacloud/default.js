@@ -25,6 +25,16 @@ const server = http.createServer((req, res) => {
       const messages = request.messages || [];
       const smoke = messages.some(m => (m.content || '').includes('console-smoke'));
       const results = messages.filter(m => m.role === 'tool');
+      // Ollama requires the complete assistant thinking/tool turn on each follow-up.
+      if (smoke && messages.some(m => m.role === 'assistant' &&
+          (m.thinking !== 'Inspect the actual files.' || !m.tool_calls?.length))) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'assistant continuation state missing' }));
+      }
+      if (smoke && results.some(m => !m.tool_name)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'native tool_name missing' }));
+      }
       let message = { role: 'assistant', content: 'pong' };
       if (smoke && results.length < 2) {
         const name = results.length === 0 ? 'list_directory' : 'read_file';

@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.IO;
     using System.Runtime.CompilerServices;
     using System.Text.Json;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -110,7 +111,7 @@ namespace PolyPrompt.Clients
         {
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", BuildApiUrl("chat/completions", settings.Model), BuildToolChatBody(request, messages, settings, true),
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -256,6 +257,9 @@ namespace PolyPrompt.Clients
                 {
                     item["tool_calls"] = BuildToolCalls(message.ToolCalls);
                 }
+
+                if (ToolTurnState.TryGet(message, "openai", out var state, Endpoint))
+                    foreach (var field in state.EnumerateObject()) item[field.Name] = field.Value;
 
                 result.Add(item);
             }
@@ -416,6 +420,10 @@ namespace PolyPrompt.Clients
             }
 
             response.Reasoning = ReadReasoning(message);
+            var continuation = new Dictionary<string, object>();
+            foreach (string key in new[] { ReasoningContentKey, ReasoningKey })
+                if (message.TryGetValue(key, out object? value) && ToolTurnState.IsString(value)) continuation[key] = value!;
+            if (continuation.Count > 0) ToolTurnState.Set(response, "openai", continuation, Endpoint);
 
             List<Dictionary<string, object>>? toolCalls = ParseNestedList(message, "tool_calls");
             if (toolCalls != null)
@@ -581,12 +589,14 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            var continuation = new Dictionary<string, object>();
             await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token).ConfigureAwait(false))
             {
                 if (chunk == null)
                 {
+                    if (continuation.Count > 0) ToolTurnState.Set(result, "openai", continuation, Endpoint);
                     yield return new ToolChatStreamingChunk { Done = true };
                     yield break;
                 }
@@ -612,6 +622,9 @@ namespace PolyPrompt.Clients
                     {
                         if (delta.ContainsKey("content")) streamChunk.Text = delta["content"]?.ToString();
                         streamChunk.ReasoningText = ReadReasoning(delta);
+                        foreach (string key in new[] { ReasoningContentKey, ReasoningKey })
+                            if (delta.TryGetValue(key, out object? value) && ToolTurnState.IsString(value))
+                                continuation[key] = (continuation.GetValueOrDefault(key)?.ToString() ?? "") + value.ToString();
 
                         List<Dictionary<string, object>>? toolCalls = ParseNestedList(delta, "tool_calls");
                         if (toolCalls != null) streamChunk.ToolCallDeltas.AddRange(ParseToolCallDeltas(toolCalls));
@@ -625,6 +638,7 @@ namespace PolyPrompt.Clients
 
                 yield return streamChunk;
             }
+            if (continuation.Count > 0) ToolTurnState.Set(result, "openai", continuation, Endpoint);
         }
 
         private List<ToolCallDelta> ParseToolCallDeltas(List<Dictionary<string, object>> toolCalls)

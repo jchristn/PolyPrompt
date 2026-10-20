@@ -8,7 +8,7 @@ namespace PolyPrompt.Models
     {
         #region Public-Members
 
-        /// <summary>Opaque provider output to replay for this assistant turn, including xAI encrypted reasoning. Other providers ignore it.</summary>
+        /// <summary>Opaque native continuation state for this assistant turn. Preserve unchanged; incompatible protocols ignore it.</summary>
         public System.Text.Json.JsonElement? ProviderState { get; set; }
 
 

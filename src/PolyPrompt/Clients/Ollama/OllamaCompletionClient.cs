@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Diagnostics;
     using System.IO;
     using System.Runtime.CompilerServices;
+    using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
     using SyslogLogging;
@@ -98,7 +99,7 @@ namespace PolyPrompt.Clients
         {
             ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "tool chat", BuildUrl("/api/chat"), BuildToolChatBody(request, messages, settings, true),
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -219,10 +220,15 @@ namespace PolyPrompt.Clients
                     { "content", message.Content ?? string.Empty }
                 };
 
+                if (NormalizeRole(message.Role) == "tool" && !string.IsNullOrEmpty(message.ToolName)) item["tool_name"] = message.ToolName;
+
                 if (message.ToolCalls != null && message.ToolCalls.Count > 0)
                 {
                     item["tool_calls"] = BuildToolCalls(message.ToolCalls);
                 }
+
+                if (ToolTurnState.TryGet(message, "ollama", out var state))
+                    foreach (var field in state.EnumerateObject()) item[field.Name] = field.Value;
 
                 result.Add(item);
             }
@@ -326,9 +332,10 @@ namespace PolyPrompt.Clients
                 response.Text = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
             }
 
-            if (message.ContainsKey(ThinkingKey))
+            if (message.ContainsKey(ThinkingKey) && ToolTurnState.IsString(message[ThinkingKey]))
             {
                 response.Reasoning = NormalizeReasoning(message[ThinkingKey]?.ToString());
+                ToolTurnState.Set(response, "ollama", new Dictionary<string, object> { [ThinkingKey] = message[ThinkingKey] });
             }
 
             List<Dictionary<string, object>>? toolCalls = ParseNestedList(message, "tool_calls");
@@ -440,8 +447,10 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            string thinking = "";
+            bool hasThinking = false;
             await foreach (Dictionary<string, object> chunk in ReadLines(response, token).ConfigureAwait(false))
             {
                 ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
@@ -454,6 +463,11 @@ namespace PolyPrompt.Clients
                 {
                     if (msg.ContainsKey("content")) streamChunk.Text = msg["content"]?.ToString();
                     if (msg.ContainsKey(ThinkingKey)) streamChunk.ReasoningText = NormalizeReasoning(msg[ThinkingKey]?.ToString());
+                    if (msg.ContainsKey(ThinkingKey) && ToolTurnState.IsString(msg[ThinkingKey]))
+                    {
+                        hasThinking = true;
+                        thinking += msg[ThinkingKey]?.ToString();
+                    }
 
                     List<Dictionary<string, object>>? toolCalls = ParseNestedList(msg, "tool_calls");
                     if (toolCalls != null) streamChunk.ToolCallDeltas.AddRange(ParseToolCallDeltas(toolCalls));
@@ -468,6 +482,7 @@ namespace PolyPrompt.Clients
 
                 yield return streamChunk;
             }
+            if (hasThinking) ToolTurnState.Set(result, "ollama", new Dictionary<string, object> { [ThinkingKey] = thinking });
         }
 
         private List<ToolCallDelta> ParseToolCallDeltas(List<Dictionary<string, object>> toolCalls)

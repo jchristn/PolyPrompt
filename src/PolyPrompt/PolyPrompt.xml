@@ -1827,7 +1827,7 @@
             <summary>
             Cohere completion client using the v2 Chat API (<c>/v2/chat</c>) for chat, tool chat, and generation (sent as a
             single user turn, since Cohere retired its generate endpoint), each streaming (typed SSE events) or not. The model's
-            tool plan and thinking are surfaced as <c>Reasoning</c> and never sent back. Cohere's <c>tool_choice</c> accepts only
+            tool plan and thinking are surfaced as <c>Reasoning</c> and preserved separately for tool follow-ups. Cohere's <c>tool_choice</c> accepts only
             <c>REQUIRED</c> and <c>NONE</c>, so "auto" omits it and a specific tool name sends only that tool with <c>REQUIRED</c>.
             </summary>
         </member>
@@ -3767,7 +3767,7 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatMessage.ProviderState">
-            <summary>Opaque provider output to replay for this assistant turn, including xAI encrypted reasoning. Other providers ignore it.</summary>
+            <summary>Opaque native continuation state for this assistant turn. Preserve unchanged; incompatible protocols ignore it.</summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatMessage.Role">
             <summary>
@@ -4912,8 +4912,8 @@
         </member>
         <member name="P:PolyPrompt.Models.ResponseBase.ProviderState">
             <summary>
-            Opaque provider continuation output. xAI stores the Responses output array here, including encrypted
-            reasoning and hosted-tool state. Preserve unchanged; other providers leave this null.
+            Opaque provider continuation output, including thinking, signatures, and hosted-tool state.
+            Preserve unchanged through ToAssistantMessage() and JSON persistence; incompatible protocols ignore it.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ResponseBase.Success">
@@ -5247,8 +5247,8 @@
         <member name="P:PolyPrompt.Models.ToolChatResponse.Reasoning">
             <summary>
             Reasoning ("thinking") content returned by the model, kept separate from <see cref="P:PolyPrompt.Models.ToolChatResponse.Text"/>. Null
-            when the model produced no reasoning. Returned to the caller for display or logging; it is not
-            carried into a follow-up request.
+            when the model produced no reasoning. Returned for display or logging. Provider-specific continuation state is preserved separately
+            in ProviderState and carried by ToAssistantMessage().
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ToolChatResponse.ToolCalls">
@@ -5348,7 +5348,7 @@
             <summary>
             Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
             <see cref="P:PolyPrompt.Models.ToolChatStreamingResponse.Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
-            This is returned to the caller for display or logging; it is not carried into a follow-up request.
+            Returned for display or logging; native continuation state is carried separately by ToAssistantMessage().
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCalls">

@@ -74,7 +74,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.4.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.4.1**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -627,7 +627,23 @@ await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 }
 ```
 
-Reasoning is return-only: `ToAssistantMessage()` never sends it back.
+Use `ToAssistantMessage()` for tool follow-ups. It carries native continuation state in the existing `ProviderState` property while keeping displayable `Reasoning` separate from `Content`. Fully enumerate streaming responses before converting them. Preserve the returned assistant message unchanged, including its state, text, and tool calls; copying only text and tool calls loses signed or encrypted context. Persist conversations with `PolyPromptJsonContext.Default.ListChatMessage` (or `.ChatMessage` for a single turn), including in Native AOT applications.
+
+| Protocol / clients | State preserved for the assistant turn |
+|---|---|
+| Ollama / Ollama Cloud | Original `thinking`, including whitespace; tool results also include native `tool_name` |
+| OpenAI-compatible / Azure OpenAI | Returned `reasoning_content` and `reasoning` extensions; existing Gemini-compatible tool signatures remain supported |
+| Anthropic | Ordered content blocks, including thinking signatures and `redacted_thinking` |
+| Bedrock Converse | Ordered content blocks, signed reasoning text, and binary redacted reasoning |
+| Gemini / Vertex AI | Native parts with thought state or signatures, including signatures on text parts |
+| Cohere | Thinking content blocks and tool plans |
+| xAI | Existing complete Responses output array, including encrypted reasoning and hosted-tool state |
+
+Native state is tagged by protocol (xAI retains its existing array format). An incompatible provider ignores it; reasoning is never copied into visible assistant text. OpenAI reasoning extensions are replayed only to the configured endpoint that returned them; moving a conversation to another OpenAI-compatible endpoint omits those extensions. Responses without reasoning do not acquire another turn's thinking.
+
+The continuation rules follow the native [Ollama tool loop](https://docs.ollama.com/capabilities/tool-calling), [Anthropic thinking preservation](https://platform.claude.com/docs/en/build-with-claude/thinking), [Bedrock Converse signatures](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html), [Gemini thought signatures](https://ai.google.dev/gemini-api/docs/thought-signatures), [DeepSeek thinking-mode tool calls](https://api-docs.deepseek.com/guides/thinking_mode/), and [Cohere tool-loop state management](https://docs.cohere.com/docs/tool-use-usage-patterns/). Embedding, reranking, classification, model discovery, and TypeSafe decision APIs have no assistant tool-turn replay path.
+
+Local regressions inspect the second and third HTTP requests across all nine chat client variants, with parallel tools, fragmented thinking/signatures, redacted blocks, JSON persistence, turns without thinking, reasoning without tool calls, and cross-protocol isolation including xAI. Native AOT runs the same round trips and compares request digests against the JIT. The saved Ollama Postman console simulation rejects follow-ups missing thinking or tool-result names. These are deterministic local protocol checks; they do not establish a cause for Armada's observed latency or mission failures.
 
 ### Token Usage
 
