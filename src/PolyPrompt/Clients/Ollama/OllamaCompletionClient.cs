@@ -3,6 +3,7 @@ namespace PolyPrompt.Clients
     using System.Diagnostics;
     using System.IO;
     using System.Runtime.CompilerServices;
+    using System.Text;
     using PolyPrompt.Helpers;
     using PolyPrompt.Models;
     using PolyPrompt.Options;
@@ -407,7 +408,7 @@ namespace PolyPrompt.Clients
         private async IAsyncEnumerable<Dictionary<string, object>> ReadLines(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-            using StreamReader reader = new StreamReader(stream);
+            using StreamReader reader = new StreamReader(stream, new UTF8Encoding(false, true));
 
             string? line;
             while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
@@ -415,9 +416,15 @@ namespace PolyPrompt.Clients
                 token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
-                Dictionary<string, object>? chunk = TryDeserializeObject(line);
-                if (chunk != null) yield return chunk;
+                Dictionary<string, object> chunk = ParseStreamingObject(line, "Ollama");
+                if (!chunk.TryGetValue("done", out object? done) ||
+                    done is not System.Text.Json.JsonElement doneElement ||
+                    (doneElement.ValueKind != System.Text.Json.JsonValueKind.True && doneElement.ValueKind != System.Text.Json.JsonValueKind.False))
+                    throw new InvalidDataException("Ollama stream record requires a boolean done property.");
+                yield return chunk;
+                if (doneElement.GetBoolean()) yield break;
             }
+            throw new InvalidDataException("Ollama stream ended before a valid terminal event.");
         }
 
         private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
@@ -528,6 +535,11 @@ namespace PolyPrompt.Clients
                 streamChunk.Model = chunk.ContainsKey("model") ? chunk["model"]?.ToString() : null;
                 streamChunk.Text = chunk.ContainsKey("response") ? chunk["response"]?.ToString() : null;
                 streamChunk.Done = IsTruthy(chunk, "done");
+                if (streamChunk.Done)
+                {
+                    streamChunk.FinishReason = chunk.ContainsKey("done_reason") ? chunk["done_reason"]?.ToString() : null;
+                    streamChunk.Usage = ParseUsage(chunk);
+                }
                 yield return streamChunk;
             }
         }

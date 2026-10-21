@@ -224,7 +224,7 @@ namespace PolyPrompt.Telemetry
                 return;
             }
 
-            if (response.Success)
+            if (response.Success && (response is not IStreamingResponse streaming || streaming.State == StreamingState.Completed))
             {
                 End(PolyPromptTelemetryNames.OutcomeSuccess, null, response);
                 return;

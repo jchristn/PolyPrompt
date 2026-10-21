@@ -434,9 +434,9 @@ namespace PolyPrompt.Clients
                 if (data.Length == 0) continue;
                 if (data == "[DONE]") yield break;
 
-                Dictionary<string, object>? evt = TryDeserializeObject(data);
-                string? type = evt != null && evt.ContainsKey("type") ? evt["type"]?.ToString() : null;
-                if (evt == null || type == null) continue;
+                Dictionary<string, object> evt = ParseStreamingObject(data, "Cohere");
+                string? type = evt.ContainsKey("type") ? evt["type"]?.ToString() : null;
+                if (type == null) throw new InvalidDataException("Cohere stream event requires a type.");
 
                 yield return (type, evt);
                 if (type == MessageEndEvent) yield break;

@@ -5,7 +5,7 @@ namespace PolyPrompt.Models
     /// Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
     /// Timing and accumulated output fields are populated as chunks are consumed.
     /// </summary>
-    public class ToolChatStreamingResponse : ResponseBase
+    public class ToolChatStreamingResponse : StreamingResponseBase
     {
         /// <summary>
         /// Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
@@ -77,7 +77,8 @@ namespace PolyPrompt.Models
 
         /// <summary>
         /// Convert this response into an assistant message that can be appended to the next ToolChatRequest.
-        /// Enumerate Chunks before calling this method so streamed tool calls are fully accumulated.
+        /// Enumerate Chunks and require State == StreamingState.Completed before accepting the turn or executing tools.
+        /// This accessor preserves partial output for compatibility and does not enforce completion or validate arguments.
         /// </summary>
         /// <returns>An assistant message containing either text or tool calls.</returns>
         public ChatMessage ToAssistantMessage()

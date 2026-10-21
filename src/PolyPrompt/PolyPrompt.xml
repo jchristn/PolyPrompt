@@ -4590,6 +4590,15 @@
             The response body as a string.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.IStreamingResponse">
+            <summary>Final-outcome contract shared by completion and native event streams.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.IStreamingResponse.State">
+            <summary>Current lifecycle state. Final after enumeration is disposed. Not thread safe.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.IStreamingResponse.StreamError">
+            <summary>Failure diagnostic, or null. Partial output remains provisional unless State is Completed.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.ModelInformation">
             <summary>
             Normalized model information returned by ListModelsAsync across all providers.
@@ -4906,8 +4915,9 @@
         <member name="T:PolyPrompt.Models.ResponseBase">
             <summary>
             Fields shared by every operation response. Operations report HTTP errors, malformed provider responses, and
-            transport failures through <see cref="P:PolyPrompt.Models.ResponseBase.Success"/> and <see cref="P:PolyPrompt.Models.ResponseBase.Error"/> instead of throwing; they throw only for
-            invalid arguments and cancellation.
+            transport failures through response fields. Streaming responses expose final integrity through
+            <see cref="P:PolyPrompt.Models.IStreamingResponse.State"/> and <see cref="P:PolyPrompt.Models.IStreamingResponse.StreamError"/> after enumeration.
+            Invalid arguments, caller cancellation, and request timeouts can throw; timeouts use OperationCanceledException.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ResponseBase.ProviderState">
@@ -5046,6 +5056,43 @@
             <summary>
             Weight of the entry.
             </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.StreamingResponseBase">
+            <summary>
+            Shared streaming lifecycle. Enumerate once and dispose the enumerator to finalize state.
+            Instances are not thread safe. Success retains each provider's existing open-success behavior;
+            use State to determine final completion. Caller cancellation is rethrown after recording Cancelled.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.StreamingResponseBase.State">
+            <inheritdoc />
+        </member>
+        <member name="P:PolyPrompt.Models.StreamingResponseBase.StreamError">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Models.StreamingState">
+            <summary>Lifecycle of a single-consumer streaming operation, independent of telemetry.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.NotStarted">
+            <summary>No stream has opened.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Open">
+            <summary>HTTP headers were accepted; enumeration has not started.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Streaming">
+            <summary>The consumer is enumerating the stream.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Completed">
+            <summary>Enumeration ended normally with a provider completion signal.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Failed">
+            <summary>The HTTP request, transport, provider, or protocol failed.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Cancelled">
+            <summary>The caller cancelled the operation.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.StreamingState.Abandoned">
+            <summary>The consumer disposed enumeration before it finished.</summary>
         </member>
         <member name="T:PolyPrompt.Models.TokenUsage">
             <summary>
@@ -5410,7 +5457,8 @@
         <member name="M:PolyPrompt.Models.ToolChatStreamingResponse.ToAssistantMessage">
             <summary>
             Convert this response into an assistant message that can be appended to the next ToolChatRequest.
-            Enumerate Chunks before calling this method so streamed tool calls are fully accumulated.
+            Enumerate Chunks and require State == StreamingState.Completed before accepting the turn or executing tools.
+            This accessor preserves partial output for compatibility and does not enforce completion or validate arguments.
             </summary>
             <returns>An assistant message containing either text or tool calls.</returns>
         </member>

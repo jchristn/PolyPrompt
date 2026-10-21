@@ -499,9 +499,9 @@ namespace PolyPrompt.Clients
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
 
-                Dictionary<string, object>? evt = TryDeserializeObject(line.Substring(5).TrimStart());
-                string? type = evt != null && evt.ContainsKey("type") ? evt["type"]?.ToString() : null;
-                if (evt == null || type == null) continue;
+                Dictionary<string, object> evt = ParseStreamingObject(line.Substring(5).TrimStart(), "Anthropic");
+                string? type = evt.ContainsKey("type") ? evt["type"]?.ToString() : null;
+                if (type == null) throw new InvalidDataException("Anthropic stream event requires a type.");
 
                 yield return (type, evt);
                 if (string.Equals(type, MessageStopEvent, StringComparison.Ordinal)) yield break;

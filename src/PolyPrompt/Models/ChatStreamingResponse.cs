@@ -5,7 +5,7 @@ namespace PolyPrompt.Models
     /// Contains metadata, timing, and an async enumerable of streaming chunks.
     /// Timing fields are populated as chunks are consumed through the Chunks enumerable.
     /// </summary>
-    public class ChatStreamingResponse : ResponseBase
+    public class ChatStreamingResponse : StreamingResponseBase
     {
         /// <summary>
         /// The async enumerable of streaming chunks.

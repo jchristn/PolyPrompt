@@ -48,6 +48,7 @@ namespace Test.Shared
                     var response = await client.ToolChatStreamingAsync(request, token);
                     await foreach (var _ in response.Chunks.WithCancellation(token)) { }
                     SharedAssert.True(response.Success, response.Error ?? "Stream failed");
+                    SharedAssert.Equal(StreamingState.Completed, response.State, "Provider continuation stream completed");
                     assistant = response.ToAssistantMessage();
                 }
                 else
@@ -277,7 +278,7 @@ namespace Test.Shared
                 {
                     string thought = message[key]!.GetValue<string>(); message.Remove(key);
                     foreach (string fragment in new[] { thought[..5], thought[5..] })
-                        events.Add(("", provider == "ollama" ? new JsonObject { ["message"] = new JsonObject { [key] = fragment } } : new JsonObject { ["choices"] = new JsonArray(new JsonObject { ["delta"] = new JsonObject { [key] = fragment } }) }));
+                        events.Add(("", provider == "ollama" ? new JsonObject { ["message"] = new JsonObject { [key] = fragment }, ["done"] = false } : new JsonObject { ["choices"] = new JsonArray(new JsonObject { ["delta"] = new JsonObject { [key] = fragment } }) }));
                 }
                 if (provider == "ollama") events.Add(("", new JsonObject { ["message"] = message, ["done"] = true }));
                 else
@@ -289,6 +290,7 @@ namespace Test.Shared
             else if (provider == "gemini")
             {
                 foreach (var part in content) events.Add(("", new JsonObject { ["candidates"] = new JsonArray(new JsonObject { ["content"] = new JsonObject { ["parts"] = new JsonArray(part!.DeepClone()) } }) }));
+                events.Add(("", new JsonObject { ["candidates"] = new JsonArray(new JsonObject { ["finishReason"] = "STOP" }) }));
             }
             else if (provider == "cohere")
             {

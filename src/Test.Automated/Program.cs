@@ -26,6 +26,18 @@ namespace Test.Automated
                 return 0;
             }
 
+            if (args.Length == 1 && string.Equals(args[0], "ollamacloud-streaming", StringComparison.OrdinalIgnoreCase))
+            {
+                string? key = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_OLLAMACLOUD_API_KEY");
+                string model = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_OLLAMACLOUD_MODEL") ?? "gpt-oss:20b";
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    Console.WriteLine("Set POLYPROMPT_TEST_OLLAMACLOUD_API_KEY for the opt-in Cloud streaming suite.");
+                    return 1;
+                }
+                return await ConsoleRunner.RunAsync(new[] { OllamaCloudStreamingLiveSuite.Create(key, model) }, resultsPath: resultsPath).ConfigureAwait(false);
+            }
+
             if (args.Length == 1 && string.Equals(args[0], "selftest", StringComparison.OrdinalIgnoreCase))
             {
                 return await ConsoleRunner.RunAsync(PolyPromptSuites.LocalOnly, resultsPath: resultsPath).ConfigureAwait(false);
@@ -230,6 +242,7 @@ namespace Test.Automated
             Console.WriteLine("Usage: Test.Automated [provider options] [--results path]");
             Console.WriteLine("       Test.Automated <provider> <endpoint> [apikey] [model] [embedding-model] [--results path]");
             Console.WriteLine("       Test.Automated selftest [--results path]");
+            Console.WriteLine("       Test.Automated ollamacloud-streaming [--results path] (POLYPROMPT_TEST_OLLAMACLOUD_API_KEY required)");
             Console.WriteLine("       Test.Automated [--results path]  # Uses POLYPROMPT_TEST_* environment variables");
             Console.WriteLine();
             Console.WriteLine("Provider options: either the generic form");

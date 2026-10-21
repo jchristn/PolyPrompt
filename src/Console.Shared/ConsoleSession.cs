@@ -39,7 +39,7 @@ public sealed class ConsoleSession(CompletionClientBase client, IConsoleToolRunt
                             renderer.Thinking(chunk.ReasoningText);
                             renderer.Answer(chunk.Text);
                         }
-                        if (!response.Success) throw new InvalidOperationException(response.Error ?? "Streaming chat failed.");
+                        if (response.State != StreamingState.Completed) throw new InvalidOperationException(response.StreamError ?? "Streaming chat did not complete.");
                         if (!renderer.HasReasoning) renderer.Thinking(response.Reasoning);
                         if (!renderer.HasAnswer) renderer.Answer(response.Text);
                     }

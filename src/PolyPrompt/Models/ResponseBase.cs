@@ -2,8 +2,9 @@ namespace PolyPrompt.Models
 {
     /// <summary>
     /// Fields shared by every operation response. Operations report HTTP errors, malformed provider responses, and
-    /// transport failures through <see cref="Success"/> and <see cref="Error"/> instead of throwing; they throw only for
-    /// invalid arguments and cancellation.
+    /// transport failures through response fields. Streaming responses expose final integrity through
+    /// <see cref="IStreamingResponse.State"/> and <see cref="IStreamingResponse.StreamError"/> after enumeration.
+    /// Invalid arguments, caller cancellation, and request timeouts can throw; timeouts use OperationCanceledException.
     /// </summary>
     public abstract class ResponseBase
     {

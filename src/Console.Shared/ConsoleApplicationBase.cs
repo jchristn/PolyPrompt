@@ -47,7 +47,7 @@ public abstract class ConsoleApplicationBase
             {
                 GenerationStreamingResponse response = await client.GenerateStreamingAsync(prompt);
                 await foreach (GenerationStreamingChunk chunk in response.Chunks) { renderer.Thinking(chunk.ReasoningText); renderer.Answer(chunk.Text); }
-                if (!response.Success) throw new InvalidOperationException(response.Error);
+                if (response.State != StreamingState.Completed) throw new InvalidOperationException(response.StreamError ?? "Generation stream did not complete.");
             }
             else
             {

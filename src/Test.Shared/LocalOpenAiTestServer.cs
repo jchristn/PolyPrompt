@@ -186,6 +186,8 @@ namespace Test.Shared
                     _RequestHeaders.Add(headers);
                 }
 
+                if (await StreamingFaultRoutes.TryHandleAsync(context, path, requestBody, _Cancellation.Token).ConfigureAwait(false)) return;
+
                 if (await LocalToolTurnCases.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
 
                 if (await LocalXAiRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
@@ -874,6 +876,11 @@ namespace Test.Shared
                             return;
                         }
 
+                        if (request.Stream == true)
+                        {
+                            await WriteStreamingOpenAiGenerateAsync(context).ConfigureAwait(false);
+                            return;
+                        }
                         await WriteJsonAsync(context, 200, "{\"choices\":[{\"text\":\"generated text\"}]}").ConfigureAwait(false);
                         return;
                     }

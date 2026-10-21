@@ -74,7 +74,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.4.1**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.5.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -95,7 +95,7 @@ ClientBase                     HTTP transport, timeouts, credentials, CallDetail
 Three rules hold for every client:
 
 1. **Arguments are validated before any request**, identically on every provider. Null prompts or inputs throw `ArgumentNullException`; empty lists, null list elements, empty tool-chat messages, and invalid decision questions throw `ArgumentException`; an operation that needs a model throws `InvalidOperationException` when neither the call nor `Defaults` sets one.
-2. **HTTP errors do not throw.** A provider error returns `Success = false` with `StatusCode` and `Error` set. Cancellation and `TimeoutMs` timeouts propagate as `OperationCanceledException`.
+2. **HTTP errors do not throw.** An HTTP failure returns `Success = false` with `StatusCode` and `Error` set. Streaming failures after headers use final `State` and `StreamError`; partial output remains provisional. Cancellation and `TimeoutMs` timeouts propagate as `OperationCanceledException`.
 3. **Credentials are attached per request.** No client modifies `HttpClient.DefaultRequestHeaders`, so clients for different providers can share one `HttpClient`.
 
 ### Settings: Defaults and per-call options
@@ -529,7 +529,7 @@ Always give a tool result its tool name; `ChatMessage.ToolResult` does. Gemini r
 
 ### Streaming Tool Calling
 
-`ToolChatStreamingAsync` streams assistant text and tool-call deltas and accumulates the final `Text` and `ToolCalls` on the response as you enumerate `Chunks`.
+`ToolChatStreamingAsync` streams assistant text and tool-call deltas and accumulates the final `Text` and `ToolCalls` on the response as you enumerate `Chunks`. In 3.5, all completion streaming response types expose `State` and `StreamError` through `IStreamingResponse`. Require `State == StreamingState.Completed` after full enumeration before accepting a turn or executing tools. `Success` alone only establishes that the stream opened. See [Streaming lifecycle](https://github.com/jchristn/Polyprompt/blob/main/STREAMING.md) for states, error handling, cancellation, and migration guidance.
 
 ```csharp
 ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request);
@@ -539,7 +539,7 @@ await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
     if (!string.IsNullOrEmpty(chunk.Text)) Console.Write(chunk.Text);
 }
 
-if (stream.ToolCalls.Count > 0)
+if (stream.State == StreamingState.Completed && stream.ToolCalls.Count > 0)
 {
     request.Messages.Add(stream.ToAssistantMessage());
     foreach (ToolCall call in stream.ToolCalls)
@@ -627,7 +627,7 @@ await foreach (ToolChatStreamingChunk chunk in stream.Chunks)
 }
 ```
 
-Use `ToAssistantMessage()` for tool follow-ups. It carries native continuation state in the existing `ProviderState` property while keeping displayable `Reasoning` separate from `Content`. Fully enumerate streaming responses before converting them. Preserve the returned assistant message unchanged, including its state, text, and tool calls; copying only text and tool calls loses signed or encrypted context. Persist conversations with `PolyPromptJsonContext.Default.ListChatMessage` (or `.ChatMessage` for a single turn), including in Native AOT applications.
+Use `ToAssistantMessage()` for tool follow-ups. It carries native continuation state in the existing `ProviderState` property while keeping displayable `Reasoning` separate from `Content`. Fully enumerate streaming responses and require `State == StreamingState.Completed` before accepting their converted messages. Preserve the returned assistant message unchanged, including its state, text, and tool calls; copying only text and tool calls loses signed or encrypted context. Persist conversations with `PolyPromptJsonContext.Default.ListChatMessage` (or `.ChatMessage` for a single turn), including in Native AOT applications.
 
 | Protocol / clients | State preserved for the assistant turn |
 |---|---|
@@ -1231,7 +1231,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (270 cases, including the telemetry and serializer cases) runs against an in-process mock server and needs no credentials:
+The local suite (616 cases, including streaming lifecycle, telemetry, and serializer cases) runs against an in-process mock server and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest

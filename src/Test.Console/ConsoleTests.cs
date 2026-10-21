@@ -191,6 +191,22 @@ public sealed class ConsoleTests
         Assert.That(output.ToString().Split("generation thought").Length, Is.EqualTo(2), "Thinking should appear exactly once.");
     }
 
+    /// <summary>Invalid streamed turns must never reach the tool execution loop.</summary>
+    [TestCase("missing-terminal")]
+    [TestCase("provider-error")]
+    [TestCase("corrupt-record")]
+    public async Task InvalidStreamingTurnsDoNotExecuteTools(string fault)
+    {
+        using ModelServer server = new ModelServer(fault);
+        using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint);
+        client.Model = "test-model";
+        using StringWriter output = new StringWriter();
+        using ConsoleSession session = new ConsoleSession(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await session.SendAsync("inspect directory", true).ConfigureAwait(false)).ConfigureAwait(false);
+        Assert.That(server.Bodies.Count, Is.EqualTo(1), "A failed turn must not trigger tool continuation or a retry.");
+        Assert.That(session.Messages.Any(message => message.Role == "tool"), Is.False, "No tool output may be accepted.");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task PostmanSimulationRunsMultipleRealToolRounds(bool streaming)
@@ -319,6 +335,12 @@ public sealed class ConsoleTests
                         string json = generation
                             ? JsonSerializer.Serialize(new { model = "test-model", thinking = "generation thought", response = "generated answer", done = true })
                             : JsonSerializer.Serialize(new { model = "test-model", message, done = true, prompt_eval_count = 2775, eval_count = 270 });
+                        if (streaming && mode is "missing-terminal" or "provider-error" or "corrupt-record")
+                        {
+                            json = json.Replace("\"done\":true", "\"done\":false", StringComparison.Ordinal);
+                            if (mode == "provider-error") json += "\n{\"error\":\"synthetic failure\"}\n{\"done\":true}";
+                            if (mode == "corrupt-record") json += "\n{broken\n{\"done\":true}";
+                        }
                         context.Response.ContentType = streaming ? "application/x-ndjson" : "application/json";
                         byte[] bytes = Encoding.UTF8.GetBytes(json + (streaming ? "\n" : ""));
                         await context.Response.OutputStream.WriteAsync(bytes); context.Response.Close();

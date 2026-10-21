@@ -628,8 +628,8 @@ namespace PolyPrompt.Clients
                 string data = line.Substring(5).TrimStart();
                 if (data == "[DONE]") yield break;
 
-                Dictionary<string, object>? chunk = TryDeserializeObject(data);
-                if (chunk != null) yield return chunk;
+                Dictionary<string, object> chunk = ParseStreamingObject(data, "Gemini");
+                yield return chunk;
             }
         }
 

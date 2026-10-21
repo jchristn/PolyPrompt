@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.5.0 (2026-10-20)
+
+### Added
+
+- Public `StreamingState`, `IStreamingResponse`, and `StreamingResponseBase` across chat, tool chat, generation, and native xAI event responses. Lifecycle reporting works without telemetry and distinguishes open, streaming, completed, failed, cancelled, and abandoned responses.
+- Opt-in live Ollama Cloud streaming suite, configured through environment credentials, covering chat, generation, a validated tool call, and native continuation.
+- [Streaming contract and migration guidance](STREAMING.md). `Success` retains existing opening behavior; require final `State == Completed` before accepting streamed turns. Partial output and `ToAssistantMessage()` remain accessible for compatibility.
+
+### Fixed
+
+- Ollama/Ollama Cloud no longer silently accept malformed/non-object NDJSON, invalid UTF-8, non-boolean completion flags, native provider errors, or EOF without terminal completion. The first valid terminal record ends the reader; subsequent records cannot append output. Terminal-only and no-trailing-newline streams remain valid.
+- Shared JSON streaming readers reject corrupt records and native error objects; Bedrock exception frames are surfaced. Final streaming failures populate `StreamError` and `Error`; caller cancellation and timeout exceptions retain their existing behavior.
+- Streaming telemetry uses final integrity rather than HTTP opening success. Partial tool calls stay provisional; the shared console requires completed streams before executing or continuing a turn.
+- Preserve final Ollama generation usage and finish reason. Provider diagnostics are bounded and redact the configured API key. Injected HTTP clients remain caller-owned.
+
+### Validation
+
+- 616 local library descriptors on .NET 8 and .NET 10, including 300 Ollama/Cloud fault-matrix cases and 27 cross-provider lifecycle descriptors. Includes HTTP errors, corrupt/error records before later completion, missing completion, cancellation, timeout, abandonment, redaction, transport cuts, native thinking/tools, usage, and telemetry.
+- NUnit and xUnit adapters, 27 console checks per framework with saved Ollama and xAI Postman simulations, and Native AOT/JIT checks on both target frameworks. Release solution build has zero warnings or errors.
+- Live Ollama Cloud integration passed on both frameworks using `gpt-oss:20b`, including validated tool arguments and a follow-up native turn. Controlled fault tests use local HTTP fixtures; no claim is made about historical Armada failures or every hosted model.
+
 ## v3.4.1 (2026-10-19)
 
 ### Fixed

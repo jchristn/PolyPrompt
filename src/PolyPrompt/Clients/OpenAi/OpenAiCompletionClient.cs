@@ -535,8 +535,8 @@ namespace PolyPrompt.Clients
                     yield break;
                 }
 
-                Dictionary<string, object>? chunk = TryDeserializeObject(data);
-                if (chunk != null) yield return chunk;
+                Dictionary<string, object> chunk = ParseStreamingObject(data, "OpenAI");
+                yield return chunk;
             }
         }
 

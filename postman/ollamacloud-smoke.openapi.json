@@ -48,10 +48,40 @@
                   },
                   "done": true
                 }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                },
+                "examples": {
+                  "complete": {
+                    "value": "{\"done\":false}\n{\"done\":true}\n"
+                  },
+                  "providerError": {
+                    "value": "{\"error\":\"synthetic provider failure\"}\n"
+                  }
+                }
               }
             }
           }
-        }
+        },
+        "description": "Native Ollama JSON or NDJSON. Streaming HTTP 200 can contain an error object. A valid stream ends with a boolean done:true record; clients must reject corruption or EOF without completion. Terminal-only and no-trailing-newline records are valid.",
+        "parameters": [
+          {
+            "name": "x-stream-fault",
+            "in": "header",
+            "required": false,
+            "description": "Local simulation fixture only. Never send this header to the hosted provider.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "missing-done",
+                "error-then-done",
+                "malformed-then-done"
+              ]
+            }
+          }
+        ]
       }
     },
     "/api/generate": {
@@ -69,10 +99,24 @@
                   "response": "generated text",
                   "done": true
                 }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                },
+                "examples": {
+                  "complete": {
+                    "value": "{\"done\":false}\n{\"done\":true}\n"
+                  },
+                  "providerError": {
+                    "value": "{\"error\":\"synthetic provider failure\"}\n"
+                  }
+                }
               }
             }
           }
-        }
+        },
+        "description": "Native Ollama JSON or NDJSON. Streaming HTTP 200 can contain an error object. A valid stream ends with a boolean done:true record; clients must reject corruption or EOF without completion. Terminal-only and no-trailing-newline records are valid."
       }
     },
     "/api/embed": {

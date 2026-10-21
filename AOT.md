@@ -166,3 +166,7 @@ The hermetic test suite (`Test.Automated`, `Test.Xunit`, `Test.Nunit`) includes 
 - PolyPrompt's only package dependency, `SyslogLogging` 2.4.0 and later, is also AOT compatible.
 - The interactive console harnesses (`OllamaConsole` and the others) use an input library that is not verified for Native AOT; use them on the JIT. `AotConsole` is the native sample.
 - `UtcDateTimeConverter`, previously private, is now public so source-generated contexts (including your own) can use PolyPrompt's date format: `[JsonSourceGenerationOptions(Converters = new[] { typeof(UtcDateTimeConverter) })]`.
+
+## Streaming lifecycle in 3.5
+
+The shared `StreamingState`/`IStreamingResponse` contract uses ordinary typed properties and async iterators, without runtime reflection. It applies to generic completion streams and native xAI events in Native AOT. Continuation checks assert completed lifecycle state on the JIT and native builds. See [STREAMING.md](STREAMING.md) for final-state gating and cancellation behavior.

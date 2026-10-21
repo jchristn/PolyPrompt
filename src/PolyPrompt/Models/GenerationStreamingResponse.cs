@@ -5,7 +5,7 @@ namespace PolyPrompt.Models
     /// Contains metadata, timing, and an async enumerable of streaming chunks.
     /// Timing fields are populated as chunks are consumed through the Chunks enumerable.
     /// </summary>
-    public class GenerationStreamingResponse : ResponseBase
+    public class GenerationStreamingResponse : StreamingResponseBase
     {
         /// <summary>Reasoning summary returned by providers exposing a separate generation reasoning channel.</summary>
         public string? Reasoning { get; set; }

@@ -20,6 +20,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Test.Shared\StreamingFaultRoutes.cs" Link="Shared\StreamingFaultRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalXAiRoutes.cs" Link="Shared\LocalXAiRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalToolTurnCases.cs" Link="Shared\LocalToolTurnCases.cs" />
     <Compile Include="..\Test.Shared\TestFailureException.cs" Link="Shared\TestFailureException.cs" />

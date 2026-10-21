@@ -87,7 +87,7 @@ All spans come from the `PolyPrompt` activity source. Each span sets its status 
 | `GET`, `POST`, `DELETE` | Client | Every outbound HTTP request to a provider | The operation span | `http.request.method`, `http.response.status_code`, `url.full` (query string removed), `server.address`, `server.port`, `gen_ai.provider.name`, `error.type` |
 | `{credential source} token` (for example `service_account token`, `adc token`) | Client | A credential cache miss that fetches a new OAuth token (Vertex AI) | The operation that needed the token | `polyprompt.credential.source`, outcome, `error.type` |
 
-A streaming operation's span stays open until the stream ends, so its duration covers the whole response. It ends as `success` when the stream completes, `error` or `timeout` when enumeration throws, `cancelled` when the caller cancels, and `abandoned` when the caller stops enumerating early. The streaming HTTP span ends when the response is disposed.
+A streaming operation's span stays open until the stream ends, so its duration covers the whole response. It ends as `success` only when the final streaming `State` is `Completed`, `error` when protocol/provider/transport validation fails, `timeout` when the request times out, `cancelled` when the caller cancels, and `abandoned` when the caller stops enumerating early. The streaming HTTP span ends when the response is disposed.
 
 Batch items run on background tasks; the batch span is captured in the execution context, so every `decide` and `stage:queued` span nests under it. The HTTP span is current while the request is sent, so HttpClient's W3C propagation sends a `traceparent` in your trace to the provider.
 

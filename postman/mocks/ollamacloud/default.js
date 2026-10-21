@@ -22,6 +22,19 @@ const server = http.createServer((req, res) => {
       let request;
       try { request = JSON.parse(body); }
       catch { res.writeHead(400); return res.end('{"error":"invalid JSON"}'); }
+      const fault = req.headers['x-stream-fault'];
+      if (request.stream && fault) {
+        const partial = JSON.stringify({ message: { content: 'partial' }, done: false });
+        const terminal = JSON.stringify({ done: true });
+        const payloads = {
+          'missing-done': partial,
+          'error-then-done': partial + '\n' + JSON.stringify({ error: 'synthetic provider failure' }) + '\n' + terminal,
+          'malformed-then-done': partial + '\n{broken\n' + terminal
+        };
+        if (!(fault in payloads)) { res.writeHead(501); return res.end('unknown stream fixture'); }
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+        return res.end(payloads[fault]);
+      }
       const messages = request.messages || [];
       const smoke = messages.some(m => (m.content || '').includes('console-smoke'));
       const results = messages.filter(m => m.role === 'tool');

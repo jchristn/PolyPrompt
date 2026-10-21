@@ -35,6 +35,7 @@ namespace Test.Shared
             cases.AddRange(LocalSerializerCases.Create(SuiteId));
             cases.AddRange(LocalXAiCases.Create(SuiteId));
             cases.AddRange(LocalToolTurnCases.Create(SuiteId));
+            cases.AddRange(LocalStreamingLifecycleCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

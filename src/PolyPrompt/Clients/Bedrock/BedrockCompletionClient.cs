@@ -439,8 +439,10 @@ namespace PolyPrompt.Clients
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             await foreach (EventStreamMessage message in EventStreamDecoder.DecodeAsync(stream, token).ConfigureAwait(false))
             {
-                Dictionary<string, object>? payload = TryDeserializeObject(message.PayloadString);
-                if (payload != null) yield return (message.EventType, payload);
+                Dictionary<string, object> payload = ParseStreamingObject(message.PayloadString, "Bedrock");
+                if (message.ExceptionType != null || message.EventType?.EndsWith("Exception", StringComparison.Ordinal) == true)
+                    throw new InvalidDataException("Bedrock streaming provider exception: " + (message.ExceptionType ?? message.EventType));
+                yield return (message.EventType, payload);
             }
         }
 

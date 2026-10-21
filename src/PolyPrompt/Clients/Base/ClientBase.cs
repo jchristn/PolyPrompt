@@ -1050,7 +1050,7 @@ namespace PolyPrompt.Clients
         /// <param name="attach">Wraps the response's chunk stream with the scope.</param>
         /// <param name="token">Caller cancellation token.</param>
         /// <returns>The operation's response.</returns>
-        private protected Task<TResponse> InstrumentStreamingAsync<TResponse>(
+        private protected async Task<TResponse> InstrumentStreamingAsync<TResponse>(
             string operation,
             string? model,
             Action<OperationScope>? enrich,
@@ -1059,8 +1059,33 @@ namespace PolyPrompt.Clients
             CancellationToken token)
             where TResponse : ResponseBase
         {
-            if (!PolyPromptTelemetry.IsEnabled) return core();
-            return InstrumentResponseCoreAsync(operation, model, enrich, core, attach, token);
+            async Task<TResponse> OpenAsync()
+            {
+                TResponse response = await core().ConfigureAwait(false);
+                if (response is StreamingResponseBase streaming)
+                {
+                    streaming.State = response.Success ? StreamingState.Open : StreamingState.Failed;
+                    streaming.StreamError = response.Error;
+                    switch (response)
+                    {
+                        case ChatStreamingResponse chat:
+                            chat.Chunks = StreamingLifecycle.Wrap(chat.Chunks, chat, c => c.Done, token);
+                            break;
+                        case ToolChatStreamingResponse tools:
+                            tools.Chunks = StreamingLifecycle.Wrap(tools.Chunks, tools, c => c.Done, token);
+                            break;
+                        case GenerationStreamingResponse generation:
+                            generation.Chunks = StreamingLifecycle.Wrap(generation.Chunks, generation, c => c.Done, token);
+                            break;
+                        case XAiStreamingResponse native:
+                            native.Events = StreamingLifecycle.Wrap(native.Events, native, e => e.Type == "response.completed" || e.Type == "response.incomplete", token);
+                            break;
+                    }
+                }
+                return response;
+            }
+            if (!PolyPromptTelemetry.IsEnabled) return await OpenAsync().ConfigureAwait(false);
+            return await InstrumentResponseCoreAsync(operation, model, enrich, OpenAsync, attach, token).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -1094,6 +1119,21 @@ namespace PolyPrompt.Clients
         }
 
         #endregion
+
+        private protected Dictionary<string, object> ParseStreamingObject(string json, string provider)
+        {
+            Dictionary<string, object>? record = TryDeserializeObject(json);
+            if (record == null) throw new InvalidDataException(provider + " stream contains malformed or non-object JSON.");
+            if (record.TryGetValue("error", out object? error))
+            {
+                string diagnostic = error?.ToString() ?? "Unspecified provider error";
+                if (!string.IsNullOrEmpty(_ApiKey)) diagnostic = diagnostic.Replace(_ApiKey, "[redacted]", StringComparison.Ordinal);
+                diagnostic = diagnostic.Replace("\r", " ").Replace("\n", " ");
+                if (diagnostic.Length > 1024) diagnostic = diagnostic.Substring(0, 1024);
+                throw new InvalidDataException(provider + " provider error: " + diagnostic);
+            }
+            return record;
+        }
 
         #region Private-Methods
 

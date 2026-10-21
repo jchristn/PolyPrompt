@@ -157,6 +157,7 @@ namespace Test.Shared
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
             var r = await c.CreateResponseStreamingAsync(J("\"hello\""), token: token); List<string> events = new();
             await foreach (var evt in r.Events.WithCancellation(token)) events.Add(evt.Type);
+            SharedAssert.Equal(StreamingState.Completed, r.State, "Native events share final lifecycle.");
             SharedAssert.True(r.Success, r.Error ?? "Native streaming failed."); SharedAssert.True(events.Contains("response.future_event"), "Future events retained.");
             SharedAssert.Equal("pong", r.Response?.Text, "Final native response parsed."); SharedAssert.True(r.Response?.RawResponse.HasValue == true, "Raw terminal response retained.");
         }
