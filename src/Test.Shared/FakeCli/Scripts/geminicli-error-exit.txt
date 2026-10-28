@@ -1,0 +1,8 @@
+# Constructed from the documented Gemini CLI 0.66.0 stream-json contract (docs/cli/headless.md, packages/core/src/output/types.ts,
+# packages/cli/src/utils/errors.ts in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# An API error is reported as a result event with status "error" (handleError), then exit code 1.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"0b6f5e4d-3c2b-4a19-8f7e-6d5c4b3a2910","model":"no-such-model-xyz"}
+out {"type":"message","timestamp":"2026-10-28T16:00:00.010Z","role":"user","content":"fail"}
+out {"type":"result","timestamp":"2026-10-28T16:00:00.500Z","status":"error","error":{"type":"Error","message":"[API Error: models/no-such-model-xyz is not found for API version v1beta, or is not supported for generateContent. (Status: 404 Not Found)]"},"stats":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0,"duration_ms":0,"tool_calls":0,"models":{}}}
+exit 1

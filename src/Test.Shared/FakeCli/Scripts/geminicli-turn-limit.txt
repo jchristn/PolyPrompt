@@ -1,0 +1,7 @@
+# Constructed from Gemini CLI 0.66.0 source (handleMaxTurnsExceededError in packages/cli/src/utils/errors.ts and
+# FatalTurnLimitedError in packages/core/src/utils/errors.ts, google-gemini/gemini-cli tag v0.66.0); NOT recorded from a live run.
+# The turn limit is reported as a result event with status "error", then exit code 53.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c84","model":"gemini-2.5-pro"}
+out {"type":"result","timestamp":"2026-10-28T16:00:05.000Z","status":"error","error":{"type":"FatalTurnLimitedError","message":"Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json."},"stats":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0,"duration_ms":0,"tool_calls":0,"models":{}}}
+exit 53

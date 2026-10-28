@@ -1,0 +1,8 @@
+# Constructed from the documented Gemini CLI 0.66.0 stream-json contract (docs/cli/headless.md, packages/core/src/output/types.ts,
+# packages/cli/src/utils/errors.ts in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# A quota error from the API surfaces as a result event with status "error", then exit code 1.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"4f5a6b7c-8d9e-4f0a-9b1c-2d3e4f5a6b73","model":"gemini-2.5-pro"}
+out {"type":"message","timestamp":"2026-10-28T16:00:00.010Z","role":"user","content":"hello"}
+out {"type":"result","timestamp":"2026-10-28T16:00:01.000Z","status":"error","error":{"type":"Error","message":"[API Error: Quota exceeded for quota metric 'Generate Content API requests per minute' (Status: 429 Too Many Requests)]"},"stats":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0,"duration_ms":0,"tool_calls":0,"models":{}}}
+exit 1

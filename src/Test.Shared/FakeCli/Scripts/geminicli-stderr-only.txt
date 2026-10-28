@@ -1,0 +1,5 @@
+# Constructed from the Gemini CLI 0.66.0 argument parser (packages/cli/src/config/config.ts in the google-gemini/gemini-cli
+# repository at tag v0.66.0: yargs strict mode, error message then help, exit code 1); NOT recorded from a live run.
+err Unknown argument: bogus
+err Usage: gemini [options] [command]
+exit 1

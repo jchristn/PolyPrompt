@@ -1,0 +1,11 @@
+# Constructed from Gemini CLI 0.66.0 source (packages/cli/src/validateNonInterActiveAuth.ts and
+# packages/core/src/utils/exitCodes.ts in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# No auth method configured: the CLI logs to stderr and exits with code 41 (FATAL_AUTHENTICATION_ERROR). The message alone
+# does not look like an authentication error; the exit code does.
+ifarg --version
+out 0.66.0
+exit 0
+endif
+stdin
+err Please set an Auth method in your ~/.gemini/settings.json or specify one of the following environment variables before running: GEMINI_API_KEY, GOOGLE_GENAI_USE_VERTEXAI, GOOGLE_GENAI_USE_GCA
+exit 41

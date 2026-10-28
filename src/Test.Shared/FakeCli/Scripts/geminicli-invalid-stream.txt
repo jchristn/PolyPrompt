@@ -1,0 +1,12 @@
+# Constructed from the documented Gemini CLI 0.66.0 stream-json contract (docs/cli/headless.md, packages/core/src/output/types.ts,
+# packages/cli/src/nonInteractiveCli.ts in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# Non-fatal error events (severity warning and error) and a failed tool call, then an invalid model stream: the CLI emits
+# an error event, a result event with status "error" and no error object, and exits 0.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"6b7c8d9e-0f1a-4b2c-9d3e-4f5a6b7c8d95","model":"gemini-2.5-pro"}
+out {"type":"error","timestamp":"2026-10-28T16:00:00.100Z","severity":"warning","message":"Agent execution blocked: policy denied the shell command"}
+out {"type":"tool_use","timestamp":"2026-10-28T16:00:00.200Z","tool_name":"read_file","tool_id":"read_file-1761667200200-0","parameters":{"file_path":"missing.txt"}}
+out {"type":"tool_result","timestamp":"2026-10-28T16:00:00.300Z","tool_id":"read_file-1761667200200-0","status":"error","error":{"type":"file_not_found","message":"File not found: missing.txt"}}
+out {"type":"error","timestamp":"2026-10-28T16:00:01.000Z","severity":"error","message":"Model stream ended with an invalid chunk or missing finish reason."}
+out {"type":"result","timestamp":"2026-10-28T16:00:01.100Z","status":"error","stats":{"total_tokens":300,"input_tokens":250,"output_tokens":10,"cached":0,"input":250,"duration_ms":1100,"tool_calls":1,"models":{"gemini-2.5-pro":{"total_tokens":300,"input_tokens":250,"output_tokens":10,"cached":0,"input":250}}}}
+exit 0

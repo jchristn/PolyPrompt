@@ -1,0 +1,9 @@
+# Constructed from the documented Gemini CLI 0.66.0 stream-json contract (docs/cli/headless.md, packages/core/src/output/types.ts
+# in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# Starts a session, spawns a long-running child (to prove the whole tree is killed), then hangs.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f61","model":"gemini-2.5-pro"}
+child 30
+sleep 30
+out {"type":"result","timestamp":"2026-10-28T16:00:30.000Z","status":"success","stats":{"total_tokens":2,"input_tokens":1,"output_tokens":1,"cached":0,"input":1,"duration_ms":30000,"tool_calls":0,"models":{}}}
+exit 0

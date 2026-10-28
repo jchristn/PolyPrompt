@@ -1,0 +1,7 @@
+# Constructed from the documented Gemini CLI 0.66.0 stream-json contract (docs/cli/headless.md, packages/core/src/output/types.ts
+# in the google-gemini/gemini-cli repository at tag v0.66.0); NOT recorded from a live run.
+# A runaway harness writing one enormous line.
+stdin
+out {"type":"init","timestamp":"2026-10-28T16:00:00.000Z","session_id":"3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a62","model":"gemini-2.5-pro"}
+spam 5000000
+exit 0

@@ -1,0 +1,6 @@
+# Constructed from Gemini CLI 0.66.0 source (session resolution in packages/cli/src/gemini.tsx and
+# packages/cli/src/utils/sessionUtils.ts, google-gemini/gemini-cli tag v0.66.0); NOT recorded from a live run.
+# An unknown session passed to --resume is a fatal input error: a message on stderr and exit code 42 (FATAL_INPUT_ERROR).
+stdin
+err Error resuming session: Invalid session identifier "no-such-session".
+exit 42
