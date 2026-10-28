@@ -1,0 +1,11 @@
+# Recorded from mux v1.5.0 under the read-only sandbox: the model asks to write a file, the call is refused, the model
+# answers, and the run ends completed_with_errors with exit code 2. Text deltas merged; sanitized.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:18:15.348000Z","runId":"334773c0b1204521848e816e45e63569","sessionId":"","endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","model":"gpt-oss:20b","commandName":"print","approvalPolicy":"AutoApprove","workingDirectory":"/work/project","configDirectory":"/work/.mux","sandboxPosture":"read-only"}
+out {"contractVersion":2,"eventType":"tool_call_proposed","timestampUtc":"2026-10-28T16:18:17.244757Z","toolCall":{"id":"call_7lzz2uct","name":"write_file","arguments":{"file_path":"b.txt","content":"hi"}}}
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T16:18:17.246396Z","code":"tool_call_denied","errorCode":"tool_call_denied","message":"Tool 'write_file' is blocked by the read-only sandbox posture.","failureCategory":"approval","endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","model":"gpt-oss:20b","commandName":"print","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":["sandbox","approvalPolicy"]}
+out {"contractVersion":2,"eventType":"heartbeat","timestampUtc":"2026-10-28T16:18:17.247992Z","stepNumber":1}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:18:18.100000Z","text":"I\u2019m sorry, but I can\u2019t create or modify files in this environment"}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:18:18.900000Z","text":" because the sandbox is read\u2011only."}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:18:19.34633Z","runId":"334773c0b1204521848e816e45e63569","sessionId":"","status":"completed_with_errors","resumable":false,"iterationsCompleted":2,"toolCallCount":1,"errorCount":1,"assistantTextChars":153,"durationMs":3998,"finalEstimatedTokens":6433,"compactionCount":0,"usage":{"inputTokens":9442,"outputTokens":208,"cachedTokens":0,"reasoningTokens":0,"totalTokens":9650,"estimatedTokens":6433}}
+exit 2

@@ -1,0 +1,7 @@
+# Starts a run, spawns a long-running child (to prove the whole tree is killed), then hangs.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:30:00.000000Z","runId":"00000000000000000000000000000003","sessionId":"","endpointName":"local-gpt-oss","model":"gpt-oss:20b","commandName":"print"}
+child 30
+sleep 30
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:30:30.000000Z","runId":"00000000000000000000000000000003","sessionId":"","status":"completed"}
+exit 0

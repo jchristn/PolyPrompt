@@ -1,0 +1,7 @@
+# Recorded from mux v1.5.0 without a session flag: the run is not persisted, so sessionId is empty.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:15:07.745592Z","runId":"74a0a3f427b24a59b882811f47f43c35","sessionId":"","endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","model":"gpt-oss:20b","commandName":"print","approvalPolicy":"AutoApprove","workingDirectory":"/work/project","maxIterations":50,"toolsEnabled":true,"configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","sandboxPosture":"read-only"}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:15:11.199367Z","text":"P"}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:15:11.225558Z","text":"ONG"}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:15:11.306331Z","runId":"74a0a3f427b24a59b882811f47f43c35","sessionId":"","status":"completed","resumable":false,"iterationsCompleted":1,"toolCallCount":0,"errorCount":0,"assistantTextChars":4,"durationMs":3567,"finalEstimatedTokens":6327,"compactionCount":0,"usage":{"inputTokens":4638,"outputTokens":31,"cachedTokens":0,"reasoningTokens":0,"totalTokens":4669,"estimatedTokens":6327}}
+exit 0

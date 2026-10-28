@@ -1,0 +1,6 @@
+# Rate-limit failure. Shape of the recorded 401 llm_error (mux v1.5.0) with a 429 status; not recorded live.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:40:00.000000Z","runId":"00000000000000000000000000000001","sessionId":"","endpointName":"openai","adapterType":"OpenAi","baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini","commandName":"print"}
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T16:40:01.000000Z","code":"llm_error","errorCode":"llm_error","message":"LLM request to https://api.openai.com/v1 failed with status 429: HTTP 429: Rate limit reached for requests","failureCategory":"backend","endpointName":"openai","adapterType":"OpenAi","model":"gpt-4o-mini","commandName":"print"}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:40:01.100000Z","runId":"00000000000000000000000000000001","sessionId":"","status":"failed","resumable":false,"iterationsCompleted":1,"toolCallCount":0,"errorCount":1,"assistantTextChars":0,"durationMs":1100,"usage":{"inputTokens":0,"outputTokens":0,"cachedTokens":0,"reasoningTokens":0,"totalTokens":0,"estimatedTokens":8035}}
+exit 1

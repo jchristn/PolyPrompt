@@ -1,0 +1,5 @@
+# A runaway harness writing one enormous line.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:30:00.000000Z","runId":"00000000000000000000000000000004","sessionId":"","endpointName":"local-gpt-oss","model":"gpt-oss:20b","commandName":"print"}
+spam 5000000
+exit 0

@@ -1,0 +1,32 @@
+# Recorded from mux v1.5.0 (mux print --output-format jsonl --approval-policy auto --sandbox read-only --deny-tools
+# web_search,web_retrieve --show-thinking --session-id <id>), trimmed and sanitized (endpoint, URLs, and paths).
+ifarg --version
+out mux v1.5.0
+exit 0
+endif
+ifarg probe
+out {"success":true,"endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","model":"gpt-oss:20b","responsePreview":"OK. I am in mux probe mode.","commandName":"probe","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":[],"endpointsFilePresent":true,"settingsFilePresent":true,"mcpServersFilePresent":true,"toolsEnabled":true,"maxAgentIterations":50,"builtInToolCount":14,"effectiveToolCount":14,"mcpSupported":false,"mcpConfigured":true,"mcpServerCount":2,"requireTools":false,"ignoreCertErrors":false,"errorCode":"","failureCategory":"","errorMessage":"","durationMs":4458,"contractVersion":2}
+exit 0
+endif
+ifarg models
+# Shape from the mux v1.5.0 source (EndpointCommand, endpoint models --output-format json); values are illustrative.
+out {"success":true,"configDirectory":"/work/.mux","endpoints":[{"name":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","configuredModel":"gpt-oss:20b","isDefault":true,"success":true,"models":["gpt-oss:20b","qwen3:8b"],"modelCount":2,"errorCode":"","errorMessage":""},{"name":"vllm-coder","adapterType":"Vllm","baseUrl":"http://localhost:8000/v1/","configuredModel":"qwen3-coder:30b","isDefault":false,"success":true,"models":["qwen3-coder:30b"],"modelCount":1,"errorCode":"","errorMessage":""}],"contractVersion":2}
+exit 0
+endif
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:20:56.609295Z","runId":"da6fa95c339e46b0a8cf6b768e9d1df1","sessionId":"7d1c5e2a-4b8f-4e21-9a3c-0f6b2d8e1a57","endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","model":"gpt-oss:20b","commandName":"print","approvalPolicy":"AutoApprove","workingDirectory":"/work/project","maxIterations":50,"toolsEnabled":true,"configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":["showThinking","denyTools","sandbox","approvalPolicy"],"builtInToolCount":14,"effectiveToolCount":16,"contextWindow":131072,"contextWindowSource":"endpoint","reservedOutputTokens":8192,"usableInputLimit":103220,"warningThresholdTokens":82576,"tokenEstimationRatio":3.5,"compactionStrategy":"summary","ignoreCertErrors":false,"sandboxPosture":"read-only","reasoningEffort":null,"showThinking":true,"mcp":{"enabled":false,"supported":false,"configured":true,"serverCount":2}}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:58.88069Z","text":"We"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:58.892269Z","text":" need"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:58.969457Z","text":" to"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:59.034738Z","text":" call"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:59.074138Z","text":" list"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:59.111355Z","text":"_directory"}
+out {"contractVersion":2,"eventType":"assistant_thinking","timestampUtc":"2026-10-28T16:20:59.148399Z","text":"."}
+out {"contractVersion":2,"eventType":"tool_call_proposed","timestampUtc":"2026-10-28T16:21:00.268189Z","toolCall":{"id":"call_aihkdtec","name":"list_directory","arguments":{"path":"."}}}
+out {"contractVersion":2,"eventType":"tool_call_approved","timestampUtc":"2026-10-28T16:21:00.269887Z","toolCallId":"call_aihkdtec"}
+out {"contractVersion":2,"eventType":"tool_call_completed","timestampUtc":"2026-10-28T16:21:00.272048Z","toolCallId":"call_aihkdtec","toolName":"list_directory","elapsedMs":1,"result":{"toolCallId":"call_aihkdtec","success":true,"content":"[FILE] a.txt\n"}}
+out {"contractVersion":2,"eventType":"heartbeat","timestampUtc":"2026-10-28T16:21:00.274733Z","stepNumber":1}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:21:00.744753Z","text":"a"}
+out {"contractVersion":2,"eventType":"assistant_text","timestampUtc":"2026-10-28T16:21:00.784173Z","text":".txt"}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:21:00.822948Z","runId":"da6fa95c339e46b0a8cf6b768e9d1df1","sessionId":"7d1c5e2a-4b8f-4e21-9a3c-0f6b2d8e1a57","status":"completed","resumable":true,"iterationsCompleted":2,"toolCallCount":1,"errorCount":0,"assistantTextChars":5,"durationMs":4223,"finalEstimatedTokens":6100,"compactionCount":0,"usage":{"inputTokens":8990,"outputTokens":37,"cachedTokens":0,"reasoningTokens":0,"totalTokens":9027,"estimatedTokens":6100}}
+exit 0

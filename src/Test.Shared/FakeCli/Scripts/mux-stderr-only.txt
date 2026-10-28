@@ -1,0 +1,3 @@
+# Recorded from mux v1.5.0: an unknown option is rejected before any JSON is written; stderr only, exit code 1.
+err Unknown option '--bogus'.
+exit 1

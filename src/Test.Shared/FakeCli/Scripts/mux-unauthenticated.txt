@@ -1,0 +1,19 @@
+# Recorded from mux v1.5.0 against an OpenAI-compatible endpoint with no API key (run and probe) and against a proxy
+# that rejects the model listing (endpoint models), trimmed and sanitized.
+ifarg --version
+out mux v1.5.0
+exit 0
+endif
+ifarg probe
+out {"success":false,"endpointName":"openai","adapterType":"OpenAi","baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini","responsePreview":"","commandName":"probe","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":[],"endpointsFilePresent":true,"settingsFilePresent":true,"mcpServersFilePresent":false,"toolsEnabled":true,"maxAgentIterations":50,"builtInToolCount":14,"effectiveToolCount":14,"mcpSupported":false,"mcpConfigured":false,"mcpServerCount":0,"requireTools":false,"ignoreCertErrors":false,"errorCode":"auth_error","failureCategory":"authentication","errorMessage":"LLM request to https://api.openai.com/v1 failed with status 401: HTTP 401: You didn't provide an API key.","durationMs":280,"contractVersion":2}
+exit 1
+endif
+ifarg models
+out {"success":false,"configDirectory":"/work/.mux","endpoints":[{"name":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://localhost:11434/v1/","configuredModel":"gpt-oss:20b","isDefault":true,"success":false,"models":[],"modelCount":0,"errorCode":"auth_error","errorMessage":"Response status code does not indicate success: 401 (Unauthorized)."}],"contractVersion":2}
+exit 1
+endif
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:18:04.676161Z","runId":"174b6b4e388f4ec08a78dfeb9cbd4769","sessionId":"","endpointName":"openai","adapterType":"OpenAi","baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini","commandName":"print","approvalPolicy":"AutoApprove","workingDirectory":"/work/project","maxIterations":50,"toolsEnabled":true,"configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","sandboxPosture":"read-only"}
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T16:18:05.021662Z","code":"llm_error","errorCode":"llm_error","message":"LLM request to https://api.openai.com/v1 failed with status 401: HTTP 401: {\n    \"error\": {\n        \"message\": \"You didn't provide an API key.\",\n        \"type\": \"invalid_request_error\"\n    }\n}\n","failureCategory":"backend","endpointName":"openai","adapterType":"OpenAi","baseUrl":"https://api.openai.com/v1","model":"gpt-4o-mini","commandName":"print","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint"}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:18:05.025473Z","runId":"174b6b4e388f4ec08a78dfeb9cbd4769","sessionId":"","status":"failed","resumable":false,"iterationsCompleted":1,"toolCallCount":0,"errorCount":1,"assistantTextChars":0,"durationMs":360,"finalEstimatedTokens":8035,"compactionCount":0,"usage":{"inputTokens":0,"outputTokens":0,"cachedTokens":0,"reasoningTokens":0,"totalTokens":0,"estimatedTokens":8035,"costUsd":0}}
+exit 1

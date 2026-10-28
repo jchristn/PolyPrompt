@@ -1,0 +1,10 @@
+# The iteration limit stops the run (mux v1.5.0 error code max_iterations_reached, status max_iterations_reached,
+# exit code 1 per docs/USAGE.md "Run statuses"); not recorded live.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T17:10:00.000000Z","runId":"00000000000000000000000000000011","sessionId":"","endpointName":"local-gpt-oss","model":"gpt-oss:20b","commandName":"print","maxIterations":1}
+out {"contractVersion":2,"eventType":"tool_call_proposed","timestampUtc":"2026-10-28T17:10:01.000000Z","toolCall":{"id":"call_9","name":"glob","arguments":{"pattern":"**/*.cs"}}}
+out {"contractVersion":2,"eventType":"tool_call_approved","timestampUtc":"2026-10-28T17:10:01.100000Z","toolCallId":"call_9"}
+out {"contractVersion":2,"eventType":"tool_call_completed","timestampUtc":"2026-10-28T17:10:01.200000Z","toolCallId":"call_9","toolName":"glob","elapsedMs":3,"result":{"toolCallId":"call_9","success":true,"content":"src/a.cs"}}
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T17:10:01.300000Z","code":"max_iterations_reached","errorCode":"max_iterations_reached","message":"Maximum iterations (1) reached.","failureCategory":"runtime","commandName":"print"}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T17:10:01.400000Z","runId":"00000000000000000000000000000011","sessionId":"","status":"max_iterations_reached","resumable":false,"iterationsCompleted":1,"toolCallCount":1,"errorCount":1,"usage":{"inputTokens":100,"outputTokens":10,"cachedTokens":0,"reasoningTokens":0,"totalTokens":110,"estimatedTokens":120}}
+exit 1

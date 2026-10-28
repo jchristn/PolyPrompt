@@ -1,0 +1,9 @@
+# Recorded from mux v1.5.0 with an ad-hoc endpoint whose backend refuses connections: structured error, exit code 1.
+stdin
+out {"contractVersion":2,"eventType":"run_started","timestampUtc":"2026-10-28T16:18:14.401102Z","runId":"467b94e1b40e429888d3095f0bf9bdfa","sessionId":"","endpointName":"ollama-local","adapterType":"OpenAi","baseUrl":"http://127.0.0.1:9/v1","model":"x","commandName":"print","approvalPolicy":"AutoApprove","workingDirectory":"/work/project","maxIterations":50,"toolsEnabled":true,"configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":["model","baseUrl","adapterType"],"sandboxPosture":"read-only","showThinking":true}
+err Retry 1/3: Connection refused (127.0.0.1:9)
+err Retry 2/3: Connection refused (127.0.0.1:9)
+err Retry 3/3: Connection refused (127.0.0.1:9)
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T16:18:15.164226Z","code":"llm_connection_error","errorCode":"llm_connection_error","message":"Failed to connect to http://127.0.0.1:9/v1: Connection refused (127.0.0.1:9)","failureCategory":"network","endpointName":"ollama-local","adapterType":"OpenAi","baseUrl":"http://127.0.0.1:9/v1","model":"x","commandName":"print","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":["model","baseUrl","adapterType"]}
+out {"contractVersion":2,"eventType":"run_completed","timestampUtc":"2026-10-28T16:18:15.168047Z","runId":"467b94e1b40e429888d3095f0bf9bdfa","sessionId":"","status":"failed","resumable":false,"iterationsCompleted":1,"toolCallCount":0,"errorCount":1,"assistantTextChars":0,"durationMs":745,"finalEstimatedTokens":8035,"compactionCount":0,"usage":{"inputTokens":0,"outputTokens":0,"cachedTokens":0,"reasoningTokens":0,"totalTokens":0,"estimatedTokens":8035}}
+exit 1

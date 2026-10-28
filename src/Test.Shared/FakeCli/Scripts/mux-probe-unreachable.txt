@@ -1,0 +1,11 @@
+# mux probe against a backend that cannot be reached (mux v1.5.0 ProbeCommand: backend_unreachable, category network).
+# Payload shape from the recorded probe output; values are illustrative.
+ifarg --version
+out mux v1.5.0
+exit 0
+endif
+ifarg probe
+out {"success":false,"endpointName":"local-gpt-oss","adapterType":"Ollama","baseUrl":"http://127.0.0.1:9/v1/","model":"gpt-oss:20b","responsePreview":"","commandName":"probe","configDirectory":"/work/.mux","endpointSelectionSource":"default_endpoint","cliOverridesApplied":[],"errorCode":"backend_unreachable","failureCategory":"network","errorMessage":"Connection refused (127.0.0.1:9)","durationMs":12,"contractVersion":2}
+exit 1
+endif
+exit 1

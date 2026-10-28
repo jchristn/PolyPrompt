@@ -1,0 +1,4 @@
+# Recorded from mux v1.5.0 with --endpoint naming an endpoint that is not configured: only an error event, exit code 1.
+stdin
+out {"contractVersion":2,"eventType":"error","timestampUtc":"2026-10-28T16:17:59.510426Z","code":"endpoint_not_found","errorCode":"endpoint_not_found","message":"No endpoint named 'no-such-endpoint' was found in /work/.mux/endpoints.json.","failureCategory":"configuration","endpointName":"no-such-endpoint","commandName":"print","configDirectory":"/work/.mux","endpointSelectionSource":"named_endpoint","cliOverridesApplied":["endpoint"]}
+exit 1
