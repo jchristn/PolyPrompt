@@ -1,0 +1,16 @@
+# A rate limit that outlasts Pi's automatic retries. Event shapes follow docs/json.md (auto_retry_start/auto_retry_end)
+# and the recorded error-message shape; the 429 body is constructed.
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-000000000007","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+out {"type":"agent_start"}
+out {"type":"message_end","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of request tokens has exceeded your per-minute rate limit\"}}"}}
+out {"type":"agent_end","messages":[],"willRetry":true}
+out {"type":"auto_retry_start","attempt":1,"maxAttempts":1,"delayMs":2000,"errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of request tokens has exceeded your per-minute rate limit\"}}"}
+out {"type":"message_end","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","errorMessage":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of request tokens has exceeded your per-minute rate limit\"}}"}}
+out {"type":"auto_retry_end","success":false,"attempt":1,"finalError":"429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Number of request tokens has exceeded your per-minute rate limit\"}}"}
+out {"type":"agent_end","messages":[],"willRetry":false}
+out {"type":"agent_settled","aborted":false}
+readline
+exit 0

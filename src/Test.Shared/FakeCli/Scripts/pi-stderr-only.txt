@@ -1,0 +1,4 @@
+# The pi launcher fails before Pi starts: only stderr and a non-zero exit code (message from the pi 1.4.0 launcher
+# script, path neutralized).
+err Managed Pi executable is missing: /opt/pi/agent/install/releases/1.4.0/node_modules/.bin/pi
+exit 1

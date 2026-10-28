@@ -1,0 +1,11 @@
+# Accepts the prompt, spawns a long-running child (to prove the whole tree is killed), then hangs.
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-000000000004","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+out {"type":"agent_start"}
+child 30
+sleep 30
+out {"type":"agent_settled","aborted":false}
+readline
+exit 0

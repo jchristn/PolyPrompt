@@ -1,0 +1,7 @@
+# Recorded from pi 1.4.0: input Pi rejects on stderr before it starts (exit code 1).
+ifarg --session
+err No session found matching '99999999-dead-beef-0000-000000000000'
+exit 1
+endif
+err Error: Model "no-such-model-xyz" not found. Use --list-models to see available models.
+exit 1

@@ -1,0 +1,12 @@
+# A run that Pi reports as aborted (agent_settled aborted=true, shapes from docs/json.md).
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-000000000009","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+out {"type":"agent_start"}
+out {"type":"message_update","usage":{"input":10,"output":1},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"Partial"}}
+out {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"Partial"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":10,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":11,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"aborted","errorMessage":"Request was aborted"}}
+out {"type":"agent_end","messages":[],"willRetry":false}
+out {"type":"agent_settled","aborted":true}
+readline
+exit 0

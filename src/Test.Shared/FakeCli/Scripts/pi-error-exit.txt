@@ -1,0 +1,16 @@
+# A provider error after the prompt was accepted. Event shapes recorded from pi 1.4.0 with a rejected API key (an
+# assistant message with stopReason "error" and errorMessage "<status> <body>"); the 400 body is constructed. Pi exits 0
+# once standard input closes, so the failure comes from the stream, not the exit code.
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-000000000002","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+out {"type":"agent_start"}
+out {"type":"turn_start"}
+out {"type":"message_start","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","timestamp":1793204453936,"errorMessage":"400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"prompt is too long: 215000 tokens > 200000 maximum\"},\"request_id\":\"req_01\"}"}}
+out {"type":"message_end","message":{"role":"assistant","content":[],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"error","timestamp":1793204453936,"errorMessage":"400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"prompt is too long: 215000 tokens > 200000 maximum\"},\"request_id\":\"req_01\"}","durationMs":437}}
+out {"type":"turn_end","message":{"role":"assistant","content":[],"stopReason":"error"},"toolResults":[]}
+out {"type":"agent_end","messages":[],"willRetry":false}
+out {"type":"agent_settled","aborted":false}
+readline
+exit 0

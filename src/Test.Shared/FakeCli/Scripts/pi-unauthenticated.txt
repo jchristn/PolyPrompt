@@ -1,0 +1,28 @@
+# Recorded from pi 1.4.0 with an empty PI_CODING_AGENT_DIR (no credentials), paths neutralized: get_state reports the
+# placeholder model "unknown" and the prompt command is rejected. The auth check output is from
+# "pi auth check --provider anthropic --json" in the same setup.
+ifarg --version
+out 1.4.0
+exit 0
+endif
+ifarg --no-tools
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"unknown","name":"unknown","api":"unknown","provider":"unknown","baseUrl":"","reasoning":false,"input":[],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":0,"maxTokens":0},"thinkingLevel":"off","isStreaming":false,"sessionId":"01a18351-0000-7000-8000-000000000006","messageCount":0}}
+exit 0
+endif
+ifarg auth
+out {"status":"not_ready","provider":"anthropic","reason":"credentials_not_configured"}
+exit 1
+endif
+ifarg --list-models
+out No models available. Use /login to log into a provider via OAuth or API key. See:
+out   /opt/pi/docs/providers.md
+out   /opt/pi/docs/models.md
+exit 0
+endif
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"unknown","name":"unknown","api":"unknown","provider":"unknown","baseUrl":"","reasoning":false,"input":[],"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"contextWindow":0,"maxTokens":0},"thinkingLevel":"off","isStreaming":false,"isCompacting":false,"steeringMode":"one-at-a-time","followUpMode":"one-at-a-time","sessionId":"01a18351-0000-7000-8000-000000000006","autoCompactionEnabled":true,"messageCount":0,"pendingMessageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":false,"error":"No API key found for the selected model.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /opt/pi/docs/providers.md\n  /opt/pi/docs/models.md"}
+readline
+exit 0

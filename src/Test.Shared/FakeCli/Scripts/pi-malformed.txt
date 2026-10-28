@@ -1,0 +1,13 @@
+# A truncated JSON line mid-stream; the run continues and settles.
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-000000000003","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"started"}}
+out {"type":"agent_start"}
+out {"type":"message_update","usage":{"input":2505,"output":1},"assistantMessageEvent":{"type":"text_del
+out {"type":"message_update","usage":{"input":2505,"output":1},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"PONG"}}
+out {"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"PONG"}],"api":"anthropic-messages","provider":"anthropic","model":"claude-haiku-4-5","usage":{"input":2505,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":2510,"cost":{"input":0.002505,"output":0.000025,"cacheRead":0,"cacheWrite":0,"total":0.00253}},"stopReason":"stop"}}
+out {"type":"agent_end","messages":[],"willRetry":false}
+out {"type":"agent_settled","aborted":false}
+readline
+exit 0

@@ -1,0 +1,8 @@
+# An extension command consumed the prompt (disposition "handled", docs/rpc-commands.md): no run starts and no
+# agent_settled follows, so the run completes on the response. The process then waits for standard input to close.
+readline
+readline
+out {"id":"polyprompt-state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"claude-haiku-4-5","provider":"anthropic"},"sessionId":"01a18352-0000-7000-8000-00000000000a","messageCount":0}}
+out {"id":"polyprompt-prompt","type":"response","command":"prompt","success":true,"data":{"disposition":"handled"}}
+readline
+exit 0
