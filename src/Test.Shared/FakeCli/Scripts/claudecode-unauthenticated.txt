@@ -1,0 +1,16 @@
+# Recorded from Claude Code 2.1.312 with an empty CLAUDE_CONFIG_DIR and no ANTHROPIC_API_KEY, sanitized.
+# claude auth status exits 1 when not logged in.
+ifarg --version
+out 2.1.312 (Claude Code)
+exit 0
+endif
+ifarg auth
+out {"loggedIn":false,"authMethod":"none","apiProvider":"firstParty"}
+exit 1
+endif
+stdin
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"b8206a96-e5c1-4972-a7dc-174ee7cc37c0","tools":["Task","Bash","DesignSync","Edit","EnterWorktree","ExitWorktree"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk","apiKeySource":"none","claude_code_version":"2.1.312","output_style":"default","uuid":"a2cbd681-d354-48f6-a1ee-089ebaf0b319"}
+out {"type":"system","subtype":"status","status":"requesting","session_id":"b8206a96-e5c1-4972-a7dc-174ee7cc37c0","uuid":"b7e8cba9-1e7e-4ad2-933a-8e237d324cf4"}
+out {"type":"assistant","message":{"diagnostics":null,"id":"0e083c73-8b80-4d4c-8d7c-0347a8c7a9f8","container":null,"model":"<synthetic>","role":"assistant","stop_details":null,"stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"output_tokens_details":null,"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":null,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":null,"iterations":null,"speed":null,"fallback_credit":null},"content":[{"type":"text","text":"Not logged in \u00b7 Please run /login"}],"context_management":null},"parent_tool_use_id":null,"session_id":"b8206a96-e5c1-4972-a7dc-174ee7cc37c0","uuid":"b2877643-87d2-4ffa-accc-ccd52f9d485e","timestamp":"2026-10-28T16:16:23.583Z","error":"authentication_failed","is_api_error_message":true}
+out {"duration_api_ms":0,"stop_reason":"stop_sequence","session_id":"b8206a96-e5c1-4972-a7dc-174ee7cc37c0","total_cost_usd":0,"usage":{"output_tokens_details":{"thinking_tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"inference_geo":"","speed":"standard","fallback_credit":null},"permission_denials":[],"terminal_reason":"api_error","fast_mode_state":"off","fast_mode_disabled_reason":"sdk_opt_in_required","safety_stops":0,"is_error":true,"num_turns":1,"subtype":"success","api_error_status":null,"result":"Not logged in \u00b7 Please run /login","type":"result","duration_ms":46,"uuid":"d4548057-1d40-49c8-8668-7d4d34e3ad00","queued_turn_count":0,"result_index":0}
+exit 1

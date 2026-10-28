@@ -1,0 +1,3 @@
+# Recorded from Claude Code 2.1.312: an unknown option is rejected before any JSON, stderr only and exit code 1.
+err error: unknown option '--bogus'
+exit 1

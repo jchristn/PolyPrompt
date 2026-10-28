@@ -1,0 +1,5 @@
+# A runaway harness writing one enormous line.
+stdin
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"6f1b2c3d-0000-4000-8000-000000000004","tools":[],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk"}
+spam 5000000
+exit 0

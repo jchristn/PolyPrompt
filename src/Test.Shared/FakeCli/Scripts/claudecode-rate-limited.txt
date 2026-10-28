@@ -1,0 +1,9 @@
+# Constructed (a usage limit was not reproduced live) from the Claude Code 2.1.312 stream shapes: a rejected
+# rate_limit_event, a synthetic assistant message with error "rate_limit" (a documented SDKAssistantMessageError value),
+# and a result with is_error true and api_error_status 429; exit code 1.
+stdin
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"6f1b2c3d-0000-4000-8000-000000000005","tools":["Glob","Grep","Read"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk"}
+out {"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1793214600,"rateLimitType":"five_hour","overageStatus":"rejected","isUsingOverage":false},"session_id":"6f1b2c3d-0000-4000-8000-000000000005"}
+out {"type":"assistant","message":{"id":"6f1b2c3d-0000-4000-8000-0000000000a5","model":"<synthetic>","role":"assistant","type":"message","content":[{"type":"text","text":"You've hit your session limit, resets 3pm"}]},"parent_tool_use_id":null,"session_id":"6f1b2c3d-0000-4000-8000-000000000005","error":"rate_limit","is_api_error_message":true,"api_error_status":429}
+out {"type":"result","subtype":"success","is_error":true,"api_error_status":429,"result":"You've hit your session limit, resets 3pm","session_id":"6f1b2c3d-0000-4000-8000-000000000005","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0},"permission_denials":[]}
+exit 1

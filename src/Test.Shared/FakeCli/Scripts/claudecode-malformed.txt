@@ -1,0 +1,9 @@
+# A truncated JSON line mid-stream; the run continues and completes.
+stdin
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"6f1b2c3d-0000-4000-8000-000000000002","tools":["Glob","Grep","Read"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk"}
+out {"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_de
+out {"type":"stream_event","event":{"type":"message_start","message":{"model":"claude-haiku-5-5","id":"msg_malformed","type":"message","role":"assistant","content":[]}},"session_id":"6f1b2c3d-0000-4000-8000-000000000002","parent_tool_use_id":null}
+out {"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"PONG"}},"session_id":"6f1b2c3d-0000-4000-8000-000000000002","parent_tool_use_id":null}
+out {"type":"assistant","message":{"model":"claude-haiku-5-5","id":"msg_malformed","type":"message","role":"assistant","content":[{"type":"text","text":"PONG"}]},"parent_tool_use_id":null,"session_id":"6f1b2c3d-0000-4000-8000-000000000002"}
+out {"type":"result","subtype":"success","is_error":false,"result":"PONG","session_id":"6f1b2c3d-0000-4000-8000-000000000002","total_cost_usd":0.00395956,"usage":{"input_tokens":2,"cache_creation_input_tokens":19147,"cache_read_input_tokens":11246,"output_tokens":35}}
+exit 0

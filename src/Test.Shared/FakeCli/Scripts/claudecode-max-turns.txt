@@ -1,0 +1,12 @@
+# Constructed from the documented SDKResultMessage error shape (subtype error_max_turns, errors[], no result field):
+# a hook event and a compaction boundary, a tool call denied by the permission mode, a subagent message (ignored for
+# the final text), then the turn limit ends the run with exit code 1.
+stdin
+out {"type":"system","subtype":"hook_started","hook_id":"h1","hook_name":"SessionStart:startup","hook_event":"SessionStart","session_id":"6f1b2c3d-0000-4000-8000-000000000006"}
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"6f1b2c3d-0000-4000-8000-000000000006","tools":["Glob","Grep","Read","Bash"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk"}
+out {"type":"system","subtype":"compact_boundary","session_id":"6f1b2c3d-0000-4000-8000-000000000006","compact_metadata":{"trigger":"auto","pre_tokens":180000}}
+out {"type":"assistant","message":{"model":"claude-haiku-5-5","id":"msg_turns","type":"message","role":"assistant","content":[{"type":"text","text":"Running it now."},{"type":"tool_use","id":"toolu_turns","name":"Bash","input":{"command":"touch b.txt"}}]},"parent_tool_use_id":null,"session_id":"6f1b2c3d-0000-4000-8000-000000000006"}
+out {"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_turns","content":[{"type":"text","text":"Permission to use Bash has been denied because Claude Code is running in don't ask mode."}],"is_error":true}]},"parent_tool_use_id":null,"session_id":"6f1b2c3d-0000-4000-8000-000000000006"}
+out {"type":"assistant","message":{"model":"claude-haiku-5-5","id":"msg_sub","type":"message","role":"assistant","content":[{"type":"text","text":"subagent text"}]},"parent_tool_use_id":"toolu_task","session_id":"6f1b2c3d-0000-4000-8000-000000000006"}
+out {"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":2,"errors":["Reached maximum number of turns (2)"],"session_id":"6f1b2c3d-0000-4000-8000-000000000006","total_cost_usd":0.0012,"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":5,"output_tokens":7},"permission_denials":[{"tool_name":"Bash","tool_use_id":"toolu_turns","tool_input":{"command":"touch b.txt"}}]}
+exit 1

@@ -1,0 +1,7 @@
+# Starts a session, spawns a long-running child (to prove the whole tree is killed), then hangs.
+stdin
+out {"type":"system","subtype":"init","cwd":"/work/project","session_id":"6f1b2c3d-0000-4000-8000-000000000003","tools":["Glob","Grep","Read"],"mcp_servers":[],"model":"claude-haiku-5-5","permissionMode":"dontAsk"}
+child 30
+sleep 30
+out {"type":"result","subtype":"success","is_error":false,"result":"late","session_id":"6f1b2c3d-0000-4000-8000-000000000003","total_cost_usd":0,"usage":{"input_tokens":1,"output_tokens":1}}
+exit 0
