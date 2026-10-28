@@ -254,7 +254,7 @@ namespace Test.Shared
                 SharedAssert.Equal(3, invocations.Count, "Version, state probe, auth check. Invocations: " + string.Join(" / ", invocations));
                 SharedAssert.Equal("--mode rpc --no-session --no-tools --no-mcp --no-approve --offline", invocations[1], "The probe starts no run and saves no session.");
                 SharedAssert.Equal("auth check --provider anthropic --json", invocations[2], "The auth check uses the probed provider.");
-                SharedAssert.Equal(StateCommand, fake.StandardInput, "The probe sends only get_state.");
+                SharedAssert.Equal(StateCommand, ((ProcessCallDetail)client.CallDetails[1]).StandardInput, "The probe sends only get_state.");
 
                 fake.ClearRecord();
                 client.Model = "anthropic/claude-haiku-4-5";

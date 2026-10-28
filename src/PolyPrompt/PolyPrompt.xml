@@ -2340,6 +2340,105 @@
         <member name="M:PolyPrompt.Clients.BedrockRerankClient.RerankCoreAsync(System.String,System.Collections.Generic.List{System.String},System.String,System.Nullable{System.Int32},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="T:PolyPrompt.Clients.ClaudeCodeAgentClient">
+            <summary>
+            Agent harness client for Anthropic's Claude Code CLI (<c>claude</c>). Each run is
+            <c>claude -p --output-format stream-json --verbose --include-partial-messages</c> with the prompt on standard input;
+            a session is resumed with <c>--resume &lt;session_id&gt;</c>. The system prompt (and any system messages in the
+            history) is passed with <c>--append-system-prompt</c>, so Claude Code keeps its own system prompt. Authentication
+            is the CLI's own (<c>claude auth login</c>, or <c>ANTHROPIC_API_KEY</c> in the environment); connectivity checks it
+            with <c>claude auth status --json</c>. Claude Code has no model-listing command, so this client has no
+            <c>ListModelsAsync</c>.
+            <para>
+            Permission mapping (verified against Claude Code 2.1.312): <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> uses
+            <c>--permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config</c>: only the built-in file-reading tools
+            exist, no MCP server is loaded, and anything that would prompt is denied.
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> uses <c>--permission-mode dontAsk --disallowedTools Edit,Write,NotebookEdit</c>:
+            reads and the read-only shell commands Claude Code approves without asking run, the editing tools are denied, and
+            anything else that would prompt is denied (allow rules in the user's own Claude Code settings still apply).
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses <c>--permission-mode acceptEdits</c>: file edits inside the
+            working directory run without asking and, since nobody can answer a prompt in print mode, everything else that
+            would prompt is denied. <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> uses <c>--permission-mode bypassPermissions</c>;
+            no other mode passes it or <c>--dangerously-skip-permissions</c>.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.ClaudeCodeAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClaudeCodeAgentClient.SupportsSessionResume">
+            <summary>
+            Claude Code resumes sessions with <c>--resume &lt;session_id&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClaudeCodeAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.ClaudeCodeAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Claude Code client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>claude</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClaudeCodeAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>claude -p --output-format stream-json --verbose --include-partial-messages ...</c>; the prompt travels on
+            standard input (plain text, the default <c>--input-format</c>), so long prompts never reach the argument list.
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClaudeCodeAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>claude -p --output-format stream-json --verbose --include-partial-messages</c> line. Only top-level
+            messages (<c>parent_tool_use_id</c> null) produce text, reasoning, and tool events; subagent traffic is ignored.
+            <code>
+            system/init {session_id, model}                 -> Started (session id; model is the reported model)
+            system/compact_boundary                         -> Notice
+            system/api_retry                                -> Notice (IsError)
+            system/hook_*, status, thinking_tokens, other   -> (none)
+            stream_event message_start                      -> (none; remembers the message id)
+            stream_event content_block_delta text_delta     -> TextDelta
+            stream_event content_block_delta thinking_delta -> ReasoningDelta
+            stream_event other (tool input, signature, ...) -> (none)
+            assistant {error, content[text]}                -> Notice (IsError); the error code is kept for the result
+            assistant content[text|thinking]                -> TextDelta / ReasoningDelta only when no partial delta of that
+                                                               kind arrived for the message (partial deltas are the source)
+            assistant content[tool_use]                     -> ToolUse (name, id, JSON input)
+            user content[tool_result]                       -> ToolResult (ToolUse first if unseen; is_error)
+            rate_limit_event status allowed                 -> (none)
+            rate_limit_event other status                   -> Notice (IsError when rejected)
+            result is_error false                           -> final text = result; usage, cost; Completed at exit
+            result is_error true                            -> failure (error_max_turns is TurnLimitReached); usage, cost
+            result permission_denials[]                     -> Notice (IsError) per denied tool call
+            </code>
+            Text: partial <c>text_delta</c> events build the streamed text and the assistant message repeats it, so the
+            assistant copy is used only when no delta arrived for that message (for example a synthetic message); the
+            final text is <c>result.result</c>. Usage (from <c>result.usage</c>): input_tokens -> PromptTokens,
+            cache_read_input_tokens -> CachedPromptTokens, cache_creation_input_tokens -> CacheCreationTokens,
+            output_tokens -> CompletionTokens, output_tokens_details.thinking_tokens -> ReasoningTokens. Claude Code reports
+            no total, so TotalTokens stays null. total_cost_usd -> CostUsd exactly as reported.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClaudeCodeAgentClient.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check the login with <c>claude auth status --json</c> (exit code zero when logged in). The message names the
+            authentication method and provider only; account details in the output are not copied.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClaudeCodeAgentClient.ClassifyResultError(System.String,System.String,System.Nullable{System.Int32})">
+            <summary>
+            Kinds from the structured fields: the documented assistant error codes and HTTP status. Null leaves the
+            message-based classification (then ProviderError) to the base.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.CodexAgentClient">
             <summary>
             Agent harness client for the OpenAI Codex CLI (<c>codex</c>). Each run is <c>codex exec --json</c> with the prompt
@@ -2622,6 +2721,155 @@
         <member name="M:PolyPrompt.Clients.CohereRerankClient.RerankCoreAsync(System.String,System.Collections.Generic.List{System.String},System.String,System.Nullable{System.Int32},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="T:PolyPrompt.Clients.CursorAgentClient">
+            <summary>
+            Agent harness client for the Cursor CLI (<c>cursor-agent</c>). Each run is
+            <c>cursor-agent -p --output-format stream-json --stream-partial-output</c> with the prompt on standard input (print
+            mode reads standard input to end of file when no prompt argument is given); a session is resumed with
+            <c>--resume &lt;chatId&gt;</c>. The installer links the same binary as both <c>agent</c> and <c>cursor-agent</c>;
+            <c>cursor-agent</c> is the default here and callers can set <see cref="P:PolyPrompt.Clients.CliAgentClientBase.Executable"/> to
+            <c>agent</c>. Authentication is the CLI's own (<c>cursor-agent login</c>, or <c>CURSOR_API_KEY</c> in the
+            environment).
+            <para>
+            Permission mapping: <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> and <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> use
+            <c>--mode ask</c> (Cursor's read-only Q&amp;A mode; it has no separate read-only-commands level) with
+            <c>--sandbox enabled</c>. <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses the default agent mode with
+            <c>--sandbox enabled</c>: Cursor has no flag that allows workspace writes short of <c>--force</c>, so writes and
+            commands run only where the user's or project's permission allow list (<c>cli-config.json</c>,
+            <c>.cursor/cli.json</c>) permits them and anything that would need an approval is denied. Only
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> passes <c>--force</c> (Cursor's "Run Everything"; <c>--yolo</c> is an
+            alias), together with <c>--sandbox disabled</c>. <c>--sandbox</c> is a per-run override; the CLI exits with an
+            error where its sandbox is unavailable, and a caller can append <c>--sandbox disabled</c> through
+            <see cref="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments"/> (the last value wins). Note that Cursor also auto-approves in print
+            mode when the user has saved "Run Everything" as their approval mode; PolyPrompt does not change the CLI's
+            configuration, so the read-only modes rely on <c>--mode ask</c> in that case.
+            </para>
+            <para>
+            Workspace trust: print mode refuses to run in a directory the user has not trusted unless <c>--trust</c> or
+            <c>--force</c> is passed. <c>--trust</c> records a saved trust decision, so this client never passes it; trust the
+            directory once interactively, or add <c>--trust</c> through <see cref="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments"/>.
+            </para>
+            <para>
+            Contract sources: https://cursor.com/docs/cli/reference/parameters, https://cursor.com/docs/cli/reference/output-format,
+            https://cursor.com/docs/cli/headless, https://cursor.com/docs/cli/reference/permissions,
+            https://cursor.com/docs/cli/reference/authentication, https://cursor.com/docs/cli/changelog, and the command-line
+            parser, print-mode writer, <c>status</c> and <c>models</c> commands of the published CLI package 2026.10.22-27dcf5f.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CursorAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name. The installer also links the binary as <c>agent</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CursorAgentClient.SupportsSessionResume">
+            <summary>
+            Cursor resumes sessions with <c>--resume &lt;chatId&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CursorAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Cursor CLI client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>cursor-agent</c> (also installed as <c>agent</c>).</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List the models available to the signed-in account (<c>cursor-agent models</c>). <see cref="P:PolyPrompt.Models.ModelInformation.Name"/>
+            is the id to pass as the model and <see cref="P:PolyPrompt.Models.ModelInformation.DisplayName"/> its display name; the account's
+            default and currently selected models carry <c>default</c> and <c>current</c> set to <c>true</c> in
+            <see cref="P:PolyPrompt.Models.ModelInformation.Metadata"/>.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the CLI is missing or the command fails.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>cursor-agent -p --output-format stream-json --stream-partial-output ...</c>; the prompt travels on
+            standard input. Cursor has no documented system-prompt option, so the system prompt is prepended to the prompt.
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>stream-json</c> line.
+            <code>
+            system init {session_id, model}                     -> Started (session id; model is the display name)
+            system task_notification {title, status}            -> Notice
+            system background_shell_timeout                    -> Notice (IsError)
+            user                                                -> (none; echo of the prompt)
+            assistant with timestamp_ms, without model_call_id  -> TextDelta (a streamed delta)
+            assistant with model_call_id, or without timestamp  -> (none; duplicate flush of text already streamed)
+            thinking delta {text}                               -> ReasoningDelta
+            thinking completed                                  -> (none)
+            tool_call started {call_id, tool_call}              -> ToolUse (name is the tool_call key, or function.name)
+            tool_call completed {call_id, tool_call.result}     -> ToolResult (IsError unless the result is "success")
+            retry starting {attempt}                            -> Notice (IsError)
+            connection reconnecting {attempt}                   -> Notice (IsError)
+            result success {result, session_id, usage}          -> final text, usage; Completed is emitted by the base at exit
+            result with is_error true                           -> failure; Failed is emitted by the base at exit
+            interaction_query, retry resuming, connection reconnected, unknown types -> (none)
+            </code>
+            Cursor reports run errors only on standard error, after the session started; see <see cref="M:PolyPrompt.Clients.CursorAgentClient.ClassifyFailure(PolyPrompt.Clients.CliRunState,PolyPrompt.Helpers.ProcessRunResult)"/>.
+            Usage (result.usage, the whole turn): inputTokens -> PromptTokens (Cursor reports the uncached input only),
+            cacheReadTokens -> CachedPromptTokens, cacheWriteTokens -> CacheCreationTokens, outputTokens -> CompletionTokens.
+            Cursor reports no total, no reasoning count, and no cost, so TotalTokens, ReasoningTokens and CostUsd stay null.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ClassifyFailure(PolyPrompt.Clients.CliRunState,PolyPrompt.Helpers.ProcessRunResult)">
+            <summary>
+            Cursor writes a run error to standard error (not as an event) and exits non-zero. When that happens after the
+            session started, the harness reached its backend and the error is the harness's report, so it becomes the
+            structured failure message (and is then classified as authentication, rate limit, or provider error). Without a
+            started session the failure is classified from standard error by the base (for example a rejected argument is
+            a crash, a missing login is not authenticated).
+            </summary>
+            <param name="state">Run state.</param>
+            <param name="process">Process outcome.</param>
+            <returns>The failure kind.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check the login with <c>cursor-agent status --format json</c>. The command exits with code zero whether or not
+            a user is logged in, so the JSON <c>isAuthenticated</c> field decides. Account details (email, user id) are
+            not copied into the message.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ParseAssistant(System.Text.Json.JsonElement,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            With <c>--stream-partial-output</c>, deltas carry <c>timestamp_ms</c> and no <c>model_call_id</c>; the text of a
+            segment is flushed again (with <c>model_call_id</c> before a tool call, without <c>timestamp_ms</c> at the end
+            of the turn). The CLI also flushes the segment with a timestamp and no <c>model_call_id</c> before retry and
+            interaction events, so a "delta" whose text equals the whole segment streamed so far is treated as a flush.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ToolEntry(System.Text.Json.JsonElement)">
+            <summary>
+            A tool call is an object keyed by its kind (<c>readToolCall</c>, <c>writeToolCall</c>, <c>shellToolCall</c>,
+            ...), or a <c>function</c> object with <c>name</c> and <c>arguments</c>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ReportedError(System.String)">
+            <summary>
+            The error Cursor printed to standard error, without its warnings.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CursorAgentClient.ParseModels(System.String)">
+            <summary>
+            Parse <c>cursor-agent models</c>: an "Available models" heading, then one <c>id - Display Name</c> line per model
+            with an optional <c>(current, default)</c> suffix, then a "Tip:" line.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.GeminiCompletionClient">
             <summary>
             Gemini (Google AI Studio) completion client using <c>generateContent</c> and <c>streamGenerateContent</c> for chat,
@@ -2853,6 +3101,228 @@
         </member>
         <member name="M:PolyPrompt.Clients.VertexAiEmbeddingClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.GeminiCliAgentClient">
+            <summary>
+            Agent harness client for Google's Gemini CLI (<c>gemini</c>). This runs the CLI as a process and is unrelated to
+            the HTTP <see cref="T:PolyPrompt.Clients.GeminiCompletionClient"/>. Each run is a headless <c>gemini --output-format stream-json</c>
+            with the prompt on standard input (the CLI reads piped standard input as the prompt when no <c>-p</c> is given; it
+            truncates standard input beyond 8 MB). A session is resumed with <c>--resume &lt;session id&gt;</c>; sessions are
+            stored per project, so resume from the same working directory. Authentication is the CLI's own (Google login
+            cached by an interactive run, or <c>GEMINI_API_KEY</c>/<c>GOOGLE_GENAI_USE_VERTEXAI</c>/<c>GOOGLE_GENAI_USE_GCA</c>
+            in the environment); the CLI has no login-status command, so connectivity cannot verify the login.
+            <para>
+            Permission mapping: <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> and <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> use
+            <c>--approval-mode default</c>, under which a headless run denies every tool call that would need approval, so
+            only the CLI's read-only tools run. (<c>--approval-mode plan</c> is deliberately not used: in headless runs the CLI
+            switches from plan mode to YOLO mode when the plan is executed.) <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses
+            <c>--approval-mode auto_edit</c> (file edits are approved; shell commands still need approval and are denied).
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> uses <c>--approval-mode yolo</c>. The CLI itself downgrades any mode to
+            <c>default</c> in a folder the user has not trusted, and allow rules in the user's own Gemini CLI policy still
+            apply. <c>--sandbox</c> is not added because it needs a container runtime or macOS Seatbelt; pass it through
+            <see cref="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments"/> to opt in.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.GeminiCliAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.GeminiCliAgentClient.SupportsSessionResume">
+            <summary>
+            Gemini CLI resumes sessions with <c>--resume &lt;session id&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.GeminiCliAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiCliAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Gemini CLI client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>gemini</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiCliAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>gemini --output-format stream-json --approval-mode &lt;mode&gt; [-m &lt;model&gt;] [--resume &lt;id&gt;]</c>;
+            the prompt travels on standard input.
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiCliAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>gemini --output-format stream-json</c> line.
+            <code>
+            init {session_id, model}                           -> Started (session id); model is the reported model
+            message role=user                                  -> (none; echo of the prompt)
+            message role=assistant {content, delta}            -> TextDelta (the text after the last tool round is the final text)
+            tool_use {tool_name, tool_id, parameters}          -> ToolUse
+            tool_result {tool_id, status, output, error}       -> ToolResult (IsError when status is "error")
+            error {severity, message}                          -> Notice (IsError); the CLI uses it for non-fatal warnings and errors
+            result status=success {stats}                      -> usage; Completed is emitted by the base at exit
+            result status=error {error.message, stats}         -> usage; failure (message from error, else the last error event)
+            </code>
+            Usage (from <c>result.stats</c>): input_tokens -> PromptTokens, cached -> CachedPromptTokens, output_tokens ->
+            CompletionTokens, total_tokens -> TotalTokens. The CLI reports no reasoning, cache-creation, or cost figures in
+            stream-json, so ReasoningTokens, CacheCreationTokens, and CostUsd stay null. Usage is null when stats are absent.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiCliAgentClient.ClassifyFailure(PolyPrompt.Clients.CliRunState,PolyPrompt.Helpers.ProcessRunResult)">
+            <summary>
+            Classify a failed run using Gemini CLI's documented exit codes first: 41 (authentication error) is
+            <see cref="F:PolyPrompt.Models.CliFailureKind.NotAuthenticated"/>, 42 (input error: invalid prompt, arguments, or session to resume)
+            is <see cref="F:PolyPrompt.Models.CliFailureKind.InvalidInput"/>, and 53 (turn limit exceeded) is
+            <see cref="F:PolyPrompt.Models.CliFailureKind.TurnLimitReached"/>. Other exits use the base classification.
+            </summary>
+            <param name="state">Run state.</param>
+            <param name="process">Process outcome.</param>
+            <returns>The failure kind.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.MuxAgentClient">
+            <summary>
+            Agent harness client for the Mux CLI (<c>mux</c>). Each run is <c>mux print --output-format jsonl</c> with the
+            prompt on standard input; the final text is assembled from the streamed <c>assistant_text</c> events (the same
+            text <c>--output-last-message</c> would write), so no temporary file is used. Mux talks to whichever endpoint its
+            own configuration (<c>~/.mux/endpoints.json</c>, or <c>MUX_CONFIG_DIR</c>) selects; <see cref="P:PolyPrompt.Clients.MuxAgentClient.Endpoint"/> picks a
+            named endpoint and the model overrides that endpoint's model name. Mux has no login: credentials live in the
+            endpoint configuration, and the connectivity check runs <c>mux probe</c>, which sends one small request to the
+            endpoint.
+            <para>
+            This client always runs the <c>mux</c> CLI as a subprocess (decision D4). Hosting Mux in-process through the
+            <c>Mux.Core</c> package is a possible future opt-in fast path; PolyPrompt does not reference it.
+            </para>
+            <para>
+            Sessions: <c>mux print</c> is stateless unless a session flag is given. A run resumes a session with
+            <c>--resume &lt;id&gt;</c> (from <see cref="P:PolyPrompt.Models.CliAgentRequest.SessionId"/> or the provider state in the history).
+            When <see cref="P:PolyPrompt.Clients.MuxAgentClient.PersistSessions"/> is true, a new run is started under <c>--session-id &lt;new id&gt;</c> so a
+            later run can resume it; otherwise the run reports no session id and history is replayed into the prompt.
+            </para>
+            <para>
+            Permission mapping (Mux's <c>--sandbox</c> is an application-level confinement of its own tools; it does not
+            OS-sandbox subprocesses): <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> uses
+            <c>--approval-policy auto --sandbox read-only --deny-tools web_search,web_retrieve</c>, so only workspace reads
+            and searches run, every mutating tool (write, edit, delete, directory changes, <c>run_process</c>) is refused, and
+            the network tools are removed. <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> uses
+            <c>--approval-policy auto --sandbox read-only</c> (reads, searches, and web reads run; mutating tools are refused).
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses
+            <c>--approval-policy auto --sandbox workspace-write --deny-tools run_process</c>: file writes are confined to the
+            working directory, and <c>run_process</c> is removed because Mux cannot confine a subprocess.
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> uses <c>--yolo --sandbox none</c>. <c>--approval-policy auto</c> is
+            not a bypass here: with a sandbox posture, any tool that would otherwise need an approval is refused before it
+            runs (the equivalent of Codex's <c>approval_policy=never</c> inside its read-only sandbox). Subagents inherit the
+            sandbox posture and the denied tools. A refused tool call ends the run with exit code 2, which this client reports
+            as a failure.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.MuxAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.MuxAgentClient.SupportsSessionResume">
+            <summary>
+            Mux resumes persisted sessions with <c>mux print --resume &lt;id&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.MuxAgentClient.Endpoint">
+            <summary>
+            Named endpoint from the Mux configuration (<c>--endpoint</c>), or null for Mux's default endpoint. Also used by
+            the connectivity check and <see cref="M:PolyPrompt.Clients.MuxAgentClient.ListModelsAsync(System.Threading.CancellationToken)"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.MuxAgentClient.ShowThinking">
+            <summary>
+            True to pass <c>--show-thinking</c> so the model's reasoning streams as
+            <see cref="F:PolyPrompt.Models.CliAgentEventKind.ReasoningDelta"/> events. Default: true.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.MuxAgentClient.PersistSessions">
+            <summary>
+            True to start each new run under a fresh <c>--session-id</c> so it is saved and can be resumed. Default: false,
+            matching <c>mux print</c>, which does not persist sessions unless asked.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.MuxAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Mux client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>mux</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List the models the configured endpoints serve (<c>mux endpoint models [endpoint] --output-format json</c>),
+            queried live from each backend: the endpoint named by <see cref="P:PolyPrompt.Clients.MuxAgentClient.Endpoint"/>, or every configured endpoint.
+            <see cref="P:PolyPrompt.Models.ModelInformation.Name"/> is the model id to pass as the model; the endpoint name, adapter type,
+            whether it is the default endpoint, and whether the model is the endpoint's configured model are in
+            <see cref="P:PolyPrompt.Models.ModelInformation.Metadata"/>. Mux exits non-zero when any endpoint cannot be queried.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the CLI is missing or the command fails.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>mux print --output-format jsonl ...</c>; the prompt travels on standard input and system instructions
+            use <c>--append-system-prompt</c>, which keeps Mux's own system prompt (tool guidance, project instructions).
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>mux print --output-format jsonl</c> line (contract version 2).
+            <code>
+            run_started {sessionId, model}                 -> Started (session id when not empty; model is the reported model)
+            assistant_text {text}                          -> TextDelta (the concatenation is the final text)
+            assistant_thinking {text}                      -> ReasoningDelta (only with --show-thinking)
+            tool_call_proposed {toolCall{id,name,arguments}} -> ToolUse
+            tool_call_approved                             -> (none)
+            tool_call_completed {toolCallId,toolName,result{success,content}} -> ToolResult (IsError when success is false)
+            error, before run_started                      -> failure (bad flag value, unknown endpoint, missing session)
+            error tool_call_denied|approval_error|tool_execution_error -> Notice (IsError); ToolResult (IsError) for a
+                                                              denied pending call; the run ends with a non-zero exit
+            error, any other code                          -> failure (model request, connection, context, budget)
+            task_plan_updated {changeKind, tasks}          -> Notice (rendered task list)
+            hook {hookEvent, hookName, outcome, message}   -> Notice (IsError when blocked or warning)
+            context_compacted                              -> Notice
+            heartbeat, context_status                      -> (none)
+            run_completed {status, sessionId, usage}       -> usage and cost; status completed -> success, otherwise
+                                                              failure (max_iterations_reached is TurnLimitReached)
+            </code>
+            Usage (on <c>run_completed</c>): inputTokens -> PromptTokens, outputTokens -> CompletionTokens, cachedTokens ->
+            CachedPromptTokens, reasoningTokens -> ReasoningTokens, totalTokens -> TotalTokens (Mux reports a total), and
+            usage.costUsd -> CostUsd only when Mux reports it (the model has a rate in Mux's pricing.json). Mux's
+            <c>estimatedTokens</c> is an estimate and is not mapped; CacheCreationTokens is not reported and stays null.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check backend access with <c>mux probe --output-format json</c>, which validates the configuration and sends one
+            small request to the selected endpoint. Mux has no login command; this is the closest equivalent.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.MuxAgentClient.ValidateConnectivityCoreAsync(System.Threading.CancellationToken)">
+            <summary>
+            Run the base connectivity check, then report a probe failure that is not about credentials (an unreachable
+            backend, a configuration error, a rate limit) as <see cref="F:PolyPrompt.Models.CliConnectivityStatus.Error"/> instead of
+            <see cref="F:PolyPrompt.Models.CliConnectivityStatus.NotAuthenticated"/>.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The connectivity result.</returns>
         </member>
         <member name="T:PolyPrompt.Clients.OllamaCompletionClient">
             <summary>
@@ -3347,6 +3817,291 @@
         <member name="M:PolyPrompt.Clients.AzureOpenAiProtocol.ValidateApiVersion(System.String,System.String)">
             <summary>
             Validate an api-version value.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.OpenCodeAgentClient">
+            <summary>
+            Agent harness client for the OpenCode CLI (<c>opencode</c>). Each run is
+            <c>opencode run --format json --standalone --thinking</c> with the prompt on standard input; a session is resumed with
+            <c>--session &lt;id&gt;</c>. Authentication is the CLI's own (<c>opencode auth login</c>, provider API keys in the
+            environment, or OpenCode's free models, which need no credentials).
+            <para>
+            Every run passes <c>--standalone</c> so OpenCode starts a private server as a child of the run instead of handing
+            the turn to its shared background service: the per-run permission configuration below only reaches a server
+            started with the run's environment (verified against OpenCode 2.2.0, whose background service ignores the
+            client's <c>OPENCODE_CONFIG_CONTENT</c>), and cancelling or timing out the run kills the whole process tree that
+            did the work.
+            </para>
+            <para>
+            Permission mapping. OpenCode has no sandbox; its permissions are configuration rules (<c>allow</c>, <c>ask</c>,
+            <c>deny</c>) per tool, and <c>opencode run</c> rejects every <c>ask</c> because nobody can answer it.
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> and <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> pin <c>--agent build</c>
+            and set <c>OPENCODE_CONFIG_CONTENT</c> so that, at the top level and on the <c>build</c> agent (agent rules take
+            precedence over top-level rules), everything is denied (<c>"*": "deny"</c>) except <c>read</c> (with
+            <c>.env</c> files denied), <c>glob</c>, and <c>grep</c>. Shell commands stay denied in
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> because OpenCode cannot limit a command to reading.
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> adds <c>edit</c> (which covers OpenCode's edit, write, and patch
+            tools) and keeps <c>external_directory</c> denied, so edits outside the working directory are refused; the shell
+            stays denied because it cannot be confined to the workspace. <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> passes
+            <c>--auto</c> (approve everything not explicitly denied) and leaves OpenCode's configuration untouched. Any
+            <c>OPENCODE_CONFIG_CONTENT</c> the caller already supplies (request, client, or process environment) is kept, with
+            its <c>permission</c> and <c>agent.build.permission</c> replaced; inline configuration that is not a JSON object is
+            replaced, since OpenCode silently ignores invalid inline configuration.
+            </para>
+            <para>
+            OpenCode has no system-prompt option for <c>run</c>, so system instructions are prepended to the prompt. OpenCode
+            takes its project directory from <c>PWD</c> rather than the process's working directory, so every run sets
+            <c>PWD</c> to the run's working directory (or the current directory when none is set).
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.OpenCodeAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.OpenCodeAgentClient.ConfigContentVariable">
+            <summary>
+            Environment variable OpenCode reads inline JSON configuration from.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.OpenCodeAgentClient.SupportsSessionResume">
+            <summary>
+            OpenCode resumes sessions with <c>opencode run --session &lt;id&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.OpenCodeAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize an OpenCode client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>opencode</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List the models available across OpenCode's configured providers (<c>opencode models</c>, one
+            <c>provider/model</c> per line). <see cref="P:PolyPrompt.Models.ModelInformation.Name"/> is the full <c>provider/model</c> to pass as
+            the model; <see cref="P:PolyPrompt.Models.ModelInformation.OwnedBy"/> and the <c>provider</c> metadata entry hold the provider.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the CLI is missing or the command fails.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>opencode run --format json --standalone --thinking ...</c>; the prompt travels on standard input
+            (verified: <c>opencode run</c> reads the message from standard input when none is given as an argument).
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>opencode run --format json</c> line. Every line carries the session id at the top level; the payload is
+            in <c>part</c> (or <c>error</c>).
+            <code>
+            (first line with a sessionID)                 -> Started (session id)
+            step_start                                    -> (none; opens a step for usage accounting)
+            text {part.text}                              -> TextDelta (the text of the last message is the final text)
+            reasoning {part.text}                         -> ReasoningDelta (only emitted with --thinking)
+            tool_use {part.tool, part.id, part.state}     -> ToolUse, then ToolResult (OpenCode reports a tool once, when it
+                                                             has completed or failed; state.status "error" is IsError)
+            step_finish {part.reason, tokens, cost}       -> Notice carrying that step's usage and cost
+            error {error.type, message, status}           -> failure; Failed is emitted by the base at exit
+            "ERROR" heading then a message (not JSON)     -> failure (Crashed); the CLI's usage errors are plain text
+            </code>
+            OpenCode reports no terminal success event: a run succeeds when the process exits with code zero.
+            <para>
+            Usage: OpenCode reports tokens and cost per step (one model call); a turn is the sum of its steps, which is how
+            OpenCode itself totals a message. Each step's values are on its Notice exactly as reported. The run's
+            <see cref="P:PolyPrompt.Clients.CliRunState.Usage"/> and <see cref="P:PolyPrompt.Clients.CliRunState.CostUsd"/> are the sums of the step values only when
+            every step of the turn reported a step_finish; otherwise they stay null rather than under-count (OpenCode 2.2.0
+            often exits before writing the final step's step_finish). tokens.input -> PromptTokens, tokens.output ->
+            CompletionTokens, tokens.reasoning -> ReasoningTokens, tokens.cache.read -> CachedPromptTokens,
+            tokens.cache.write -> CacheCreationTokens, tokens.total -> TotalTokens (null when not reported), cost ->
+            CostUsd.
+            </para>
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.CallerConfigContent(PolyPrompt.Models.CliAgentRequest)">
+            <summary>
+            The caller's inline configuration, in the same precedence the base applies to the environment: the request's
+            value (a null value removes it), else the client's, else the process environment's.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.BuildConfigContent(PolyPrompt.Models.CliPermissionMode,System.String)">
+            <summary>
+            Write the caller's inline configuration with <c>permission</c> and <c>agent.build.permission</c> replaced by the
+            rules for <paramref name="mode"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.WritePermissions(System.Text.Json.Utf8JsonWriter,PolyPrompt.Models.CliPermissionMode)">
+            <summary>
+            Rules are evaluated last match wins, so the catch-all deny comes first.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.NoteContent(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Content outside any reported step means a step whose usage OpenCode will not report.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.Sum(System.Nullable{System.Int32},System.Nullable{System.Int32})">
+            <summary>
+            A field is summed only while every step reported it; a step that omits it makes the turn's value unknown.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenCodeAgentClient.DescribeError(System.Text.Json.JsonElement)">
+            <summary>
+            OpenCode errors carry a type such as <c>provider.auth</c>, <c>provider.free-limit</c>, or
+            <c>provider.no-route</c>, a message, and for upstream failures the HTTP status.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.PiAgentClient">
+            <summary>
+            Agent harness client for the Pi coding agent (<c>pi</c>), driven in RPC mode (<c>pi --mode rpc</c>): JSON commands
+            on standard input, JSON responses and session events on standard output. Each run writes a <c>get_state</c>
+            command (which reports the session id) and a <c>prompt</c> command, reads events until <c>agent_settled</c>, then
+            closes standard input, which Pi treats as an orderly shutdown. A session is resumed with <c>--session &lt;id&gt;</c>.
+            Authentication is the CLI's own (<c>/login</c> in Pi, <c>~/.pi/agent/auth.json</c>, or provider API key
+            environment variables such as <c>ANTHROPIC_API_KEY</c>).
+            <para>
+            Permission mapping. Pi has no sandbox and no approval prompts: an enabled tool runs with the permissions of the
+            process, so modes are mapped to tool allowlists (<c>--tools</c>). <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> and
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> use <c>--tools read,grep,find,ls</c> (Pi's documented read-only set);
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses <c>--tools read,grep,find,ls,edit,write</c>. Both leave out
+            <c>bash</c>, because Pi cannot confine a shell command to the workspace or to reads. Pi does not confine
+            <c>edit</c>/<c>write</c> to the working directory either, so WorkspaceWrite is "file edits, no shell", not a path
+            sandbox. All three also pass <c>--no-mcp</c> (an allowlist alone keeps MCP tools) and <c>--no-approve</c> (project-local
+            <c>.pi</c> settings, extensions, and other trust-gated resources are not loaded).
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> passes none of these, so Pi's configured default tools
+            (<c>read</c>, <c>bash</c>, <c>edit</c>, <c>write</c> unless changed), MCP servers, and project-trust decision apply.
+            </para>
+            <para>
+            System instructions are sent ahead of the prompt in the <c>prompt</c> command rather than with
+            <c>--append-system-prompt</c>, because Pi reads that option's value as a file whenever it names an existing path.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.PiAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.PiAgentClient.SupportsSessionResume">
+            <summary>
+            Pi resumes sessions with <c>--session &lt;id&gt;</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.PiAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Pi client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>pi</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.ListModelsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            List the models Pi can use with the credentials it has (<c>pi --list-models</c>). <see cref="P:PolyPrompt.Models.ModelInformation.Name"/>
+            is <c>provider/model</c>, the form <c>--model</c> accepts; <see cref="P:PolyPrompt.Models.ModelInformation.OwnedBy"/> is the provider.
+            The context window and maximum output are in <see cref="P:PolyPrompt.Models.ModelInformation.Metadata"/> (<c>context</c>,
+            <c>max_output</c>) exactly as Pi prints them (for example <c>200K</c>), along with <c>thinking</c> and
+            <c>images</c>. An empty list means Pi has no usable provider credentials or no model matched.
+            </summary>
+            <param name="search">Optional fuzzy search passed to <c>--list-models</c>.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the CLI is missing or the command fails.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>pi --mode rpc [--session &lt;id&gt;] [--model &lt;model&gt;] [permission options]</c>. Standard input
+            carries two JSON lines (<c>get_state</c>, then <c>prompt</c>) and stays open until the run settles.
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>pi --mode rpc</c> line.
+            <code>
+            response get_state {data.sessionId}            -> Started (session id)
+            response get_state success=false               -> Notice (IsError)
+            response prompt success=true "handled"         -> completion (no run starts)
+            response prompt success=true otherwise         -> (none)
+            response * success=false {error}               -> failure (missing credentials are NotAuthenticated)
+            message_update thinking_delta {delta}          -> ReasoningDelta
+            message_update text_delta {delta}              -> TextDelta
+            message_update other                           -> (none)
+            message_end assistant                          -> usage, cost, model; its text is the final text;
+                                                              stopReason error|aborted is remembered as the run's error
+            tool_execution_start                           -> ToolUse
+            tool_execution_end                             -> ToolResult
+            auto_retry_start {errorMessage}                -> Notice (IsError)
+            auto_retry_end success=false {finalError}      -> remembered as the run's error
+            compaction_start / compaction_end              -> Notice (IsError when compaction failed)
+            extension_error {error}                        -> Notice (IsError)
+            extension_ui_request notify                    -> Notice
+            extension_ui_request select|confirm|input|editor -> Notice (IsError; nobody can answer it)
+            agent_settled aborted=true                     -> failure
+            agent_settled with a remembered error          -> failure
+            agent_settled otherwise                        -> completion; Completed is emitted by the base at exit
+            agent_start, agent_end, turn_*, message_start, tool_execution_update, queue_update, ... -> (none)
+            </code>
+            Usage: Pi reports usage on each assistant message, so the run's usage is the sum over its assistant messages of
+            input -> PromptTokens, cacheRead -> CachedPromptTokens, cacheWrite -> CacheCreationTokens, output ->
+            CompletionTokens, reasoning -> ReasoningTokens (included in output, as Pi reports it), totalTokens ->
+            TotalTokens, and cost.total -> CostUsd. A field Pi does not report stays null.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.ClassifyFailure(PolyPrompt.Clients.CliRunState,PolyPrompt.Helpers.ProcessRunResult)">
+            <summary>
+            Classify a failed run. Pi rejects an unknown model, an unknown session, or an unknown option on standard error
+            before it starts; those are <see cref="F:PolyPrompt.Models.CliFailureKind.InvalidInput"/>. Everything else uses the default.
+            </summary>
+            <param name="state">Run state.</param>
+            <param name="process">Process outcome.</param>
+            <returns>The failure kind.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check the login. Pi's readiness check (<c>pi auth check --provider &lt;provider&gt; --json</c>) needs a provider,
+            so the provider of the model a run would use is read first from <c>get_state</c> in a short RPC session that
+            starts no run (<c>pi --mode rpc --no-session --no-tools --no-mcp --no-approve --offline [--model &lt;model&gt;]</c>).
+            When Pi has no usable model at all it reports the provider <c>unknown</c>, which is reported as not authenticated.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.SerializeCommand(System.String,System.String,System.String)">
+            <summary>
+            Serialize one RPC command as a JSON line (Utf8JsonWriter, so it needs no reflection).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.ContentText(System.Text.Json.JsonElement,System.String,System.String)">
+            <summary>
+            Concatenate the content blocks of one type (for example text blocks) of a message or tool result.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.DescribeError(System.String)">
+            <summary>
+            Pi reports provider errors as <c>&lt;status&gt; &lt;JSON body&gt;</c>; surface the body's message, type, and status.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.PiAgentClient.ParseModels(System.String)">
+            <summary>
+            Parse the <c>pi --list-models</c> table: a header row (<c>provider model context max-out thinking images</c>)
+            followed by one whitespace-separated row per model. Any other output (for example "No models available" or
+            "No models matching") yields no models.
             </summary>
         </member>
         <member name="T:PolyPrompt.Clients.TeiClassificationClient">

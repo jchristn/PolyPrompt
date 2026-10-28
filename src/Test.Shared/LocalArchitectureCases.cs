@@ -18,8 +18,10 @@ namespace Test.Shared
         private static readonly Type[] _CapabilityBases = new[]
         {
             typeof(CompletionClientBase), typeof(EmbeddingClientBase), typeof(SparseEmbeddingClientBase), typeof(RerankClientBase),
-            typeof(ClassificationClientBase), typeof(DecisionClientBase), typeof(ModelClientBase)
+            typeof(ClassificationClientBase), typeof(DecisionClientBase), typeof(ModelClientBase), typeof(CliAgentClientBase)
         };
+
+        private static readonly string[] _HarnessModelListers = new[] { "CodexAgentClient", "CursorAgentClient", "MuxAgentClient", "PiAgentClient", "OpenCodeAgentClient" };
 
         private static readonly Dictionary<Type, string[]> _ExpectedClients = new Dictionary<Type, string[]>
         {
@@ -29,6 +31,7 @@ namespace Test.Shared
             { typeof(RerankClientBase), new[] { "BedrockRerankClient", "VoyageAiRerankClient", "CohereRerankClient", "TeiRerankClient" } },
             { typeof(ClassificationClientBase), new[] { "CohereClassificationClient", "TeiClassificationClient" } },
             { typeof(DecisionClientBase), new[] { "TypeSafeDecisionClient" } },
+            { typeof(CliAgentClientBase), new[] { "ClaudeCodeAgentClient", "CodexAgentClient", "GeminiCliAgentClient", "CursorAgentClient", "MuxAgentClient", "PiAgentClient", "OpenCodeAgentClient" } },
             { typeof(ModelClientBase), new[] { "XAiModelClient", "OllamaModelClient", "OllamaCloudModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
         };
 
@@ -64,7 +67,7 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             List<Type> clients = typeof(ClientBase).Assembly.GetExportedTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && typeof(HttpClientBase).IsAssignableFrom(t))
+                .Where(t => t.IsClass && !t.IsAbstract && typeof(ClientBase).IsAssignableFrom(t))
                 .ToList();
 
             foreach (Type client in clients)
@@ -77,7 +80,8 @@ namespace Test.Shared
             foreach (Type capability in _CapabilityBases)
             {
                 SharedAssert.True(capability.IsAbstract, capability.Name + " should be abstract.");
-                SharedAssert.True(capability.BaseType == typeof(HttpClientBase), capability.Name + " should derive directly from HttpClientBase.");
+                Type transport = capability == typeof(CliAgentClientBase) ? typeof(ClientBase) : typeof(HttpClientBase);
+                SharedAssert.True(capability.BaseType == transport, capability.Name + " should derive directly from " + transport.Name + ".");
 
                 List<string> actual = clients.Where(c => capability.IsAssignableFrom(c)).Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
                 List<string> expected = _ExpectedClients[capability].OrderBy(n => n, StringComparer.Ordinal).ToList();
@@ -92,6 +96,7 @@ namespace Test.Shared
                 { "ChatAsync", typeof(CompletionClientBase) }, { "ToolChatAsync", typeof(CompletionClientBase) }, { "GenerateAsync", typeof(CompletionClientBase) },
                 { "EmbedAsync", typeof(EmbeddingClientBase) }, { "EmbedSparseAsync", typeof(SparseEmbeddingClientBase) }, { "RerankAsync", typeof(RerankClientBase) },
                 { "ClassifyAsync", typeof(ClassificationClientBase) }, { "DecideAsync", typeof(DecisionClientBase) }, { "ListModelsAsync", typeof(ModelClientBase) },
+                { "RunAsync", typeof(CliAgentClientBase) }, { "RunStreamingAsync", typeof(CliAgentClientBase) },
             };
 
             foreach (Type client in clients)
@@ -99,8 +104,21 @@ namespace Test.Shared
                 foreach (KeyValuePair<string, Type> operation in operations)
                 {
                     bool has = client.GetMethods(BindingFlags.Public | BindingFlags.Instance).Any(m => m.Name == operation.Key);
-                    SharedAssert.Equal(operation.Value.IsAssignableFrom(client), has, client.Name + " should expose " + operation.Key + " only when it is a " + operation.Value.Name + ".");
+                    bool expected = operation.Value.IsAssignableFrom(client);
+
+                    // Harness clients list models only where the CLI can (plan section 3); they are not ModelClientBase.
+                    if (operation.Key == "ListModelsAsync" && typeof(CliAgentClientBase).IsAssignableFrom(client)) expected = _HarnessModelListers.Contains(client.Name);
+
+                    SharedAssert.Equal(expected, has, client.Name + " should expose " + operation.Key + " only when it is a " + operation.Value.Name + ".");
                 }
+            }
+
+            // Harness clients are a separate capability: never completion clients, never HTTP clients.
+            foreach (Type harness in clients.Where(c => typeof(CliAgentClientBase).IsAssignableFrom(c)))
+            {
+                SharedAssert.False(typeof(CompletionClientBase).IsAssignableFrom(harness), harness.Name + " must not derive from CompletionClientBase.");
+                SharedAssert.False(typeof(HttpClientBase).IsAssignableFrom(harness), harness.Name + " must not derive from HttpClientBase.");
+                SharedAssert.True(harness.Name.EndsWith("AgentClient", StringComparison.Ordinal), harness.Name + " should be named *AgentClient.");
             }
 
             return Task.CompletedTask;

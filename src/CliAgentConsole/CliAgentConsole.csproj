@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Sample: drive a local agent harness (Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, or OpenCode) through
+    PolyPrompt. The harness CLI must be installed and logged in; PolyPrompt never handles its credentials.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyPrompt\PolyPrompt.csproj" />
+  </ItemGroup>
+
+</Project>

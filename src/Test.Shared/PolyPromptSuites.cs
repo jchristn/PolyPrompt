@@ -37,6 +37,9 @@ namespace Test.Shared
             else if (includeSkippedProviderPlaceholder)
                 suites.Add(ProviderLiveSuite.CreateSkipped());
 
+            // Agent harness live suites are opt-in per harness (POLYPROMPT_TEST_CODEX=1, ...); disabled cases are skipped.
+            suites.Add(CliAgentLiveSuite.Create());
+
             return suites;
         }
 

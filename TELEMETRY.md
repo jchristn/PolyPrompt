@@ -84,6 +84,8 @@ All spans come from the `PolyPrompt` activity source. Each span sets its status 
 | `{provider} {operation}` (for example `openai chat`, `aws.bedrock embed`, `typesafe decide`) | Client | Every public operation: `ChatAsync`, `ChatStreamingAsync`, `ToolChatAsync`, `ToolChatStreamingAsync`, `GenerateAsync`, `GenerateStreamingAsync`, `EmbedAsync`, `EmbedSparseAsync`, `RerankAsync`, `ClassifyAsync`, `DecideAsync`, `GetModelInformationAsync`, `ModelExistsAsync`, `ValidateConnectivityAsync`, and Ollama `PullModelAsync` and `DeleteModelAsync` | The caller's current span (for example the Watson request span) | `gen_ai.provider.name`, `gen_ai.operation.name`, `polyprompt.operation`, `polyprompt.capability`, `gen_ai.request.model`, `gen_ai.request.max_tokens`, `gen_ai.request.temperature`, `gen_ai.request.top_p`, `gen_ai.response.model`, `gen_ai.response.id`, `gen_ai.response.finish_reasons`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `polyprompt.usage.*`, `polyprompt.tool.definitions`, `polyprompt.tool.calls`, `polyprompt.batch.size`, `polyprompt.stream.chunks`, `polyprompt.stream.time_to_first_chunk_ms`, `http.response.status_code`, `server.address`, `server.port`, `polyprompt.outcome`, `error.type` |
 | `{provider} decide_batch` | Client | `DecideAsync(List<DecisionRequest>)` | Caller's span | `polyprompt.batch.size`, `polyprompt.decision.max_concurrency`, outcome. Error with `batch_item_failed` when any item failed. |
 | `stage:queued` | Internal | Each decision batch item while it waits for a concurrency slot | `{provider} decide_batch` | `gen_ai.provider.name`, `polyprompt.decision.max_concurrency` |
+| `{provider} agent_run`, `{provider} agent_run_stream`, `{provider} model_list` (for example `codex agent_run`, `claude_code agent_run_stream`) | Client | Agent harness `RunAsync`, `RunStreamingAsync`, `ListModelsAsync`, and `ValidateConnectivityAsync` (`validate_connectivity`) | Caller's span | `gen_ai.provider.name`, `gen_ai.operation.name` (`invoke_agent` for runs), `polyprompt.capability` (`agent`), `gen_ai.request.model`, `gen_ai.response.id` (the harness session id), `gen_ai.usage.*` and `polyprompt.usage.*` exactly as the harness reported them, `polyprompt.tool.calls` (tool uses observed), `polyprompt.stream.*`, outcome, `error.type`. No `server.address`: a harness is a local process. |
+| `exec {executable}` (for example `exec codex`, `exec claude`) | Client | Every process an agent harness client starts (runs, version and login checks, model lists) | The operation span | `gen_ai.provider.name`, `process.executable.name`, `process.pid`, `process.exit.code`, `error.type`. Arguments, prompts, and output are never recorded. |
 | `GET`, `POST`, `DELETE` | Client | Every outbound HTTP request to a provider | The operation span | `http.request.method`, `http.response.status_code`, `url.full` (query string removed), `server.address`, `server.port`, `gen_ai.provider.name`, `error.type` |
 | `{credential source} token` (for example `service_account token`, `adc token`) | Client | A credential cache miss that fetches a new OAuth token (Vertex AI) | The operation that needed the token | `polyprompt.credential.source`, outcome, `error.type` |
 
@@ -143,6 +145,16 @@ Units follow UCUM. Durations are seconds. No quantiles are computed in process: 
 | `polyprompt.http.client.request.body.size` | Histogram | `By` | `gen_ai.provider.name`, `http.request.method` | Request body size. |
 | `polyprompt.http.client.response.body.size` | Histogram | `By` | `gen_ai.provider.name`, `http.request.method` | Response body size (non-streaming requests). |
 
+### Agent harness processes
+
+| Name | Type | Unit | Labels | Description |
+|------|------|------|--------|-------------|
+| `polyprompt.process.duration` | Histogram | `s` | `gen_ai.provider.name`, `process.executable.name`, `process.exit.code`, `error.type` | Duration of each harness process from spawn to exit (runs and auxiliary commands such as `--version`, login status, and model lists). |
+| `polyprompt.process.executions` | Counter | `{process}` | same as above | Processes run, counted at exit. A process the caller cancelled is counted without `error.type`. |
+| `polyprompt.process.active` | Observable up-down counter | `{process}` | `gen_ai.provider.name`, `process.executable.name` | Harness processes currently running. |
+
+Harness operations also feed the operation metrics above (`polyprompt.capability` = `agent`, `polyprompt.operation` = `agent_run`, `agent_run_stream`, `model_list`, `validate_connectivity`) and the GenAI metrics with `gen_ai.operation.name` = `invoke_agent`. Token counters only move when the harness reports usage; cost is never turned into a metric.
+
 ### Decision batches (queue and concurrency limiter)
 
 | Name | Type | Unit | Labels | Description |
@@ -173,14 +185,16 @@ Runtime metrics (GC, thread pool, exceptions) belong to the host: enable Radiant
 
 | Attribute | Values |
 |-----------|--------|
-| `gen_ai.provider.name` | `openai`, `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `xai`, `voyageai`, `typesafe`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from a capability base is labeled by its lower-cased type name without the `...Client` suffix. |
-| `polyprompt.capability` | `completion`, `embedding`, `sparse_embedding`, `rerank`, `classification`, `decision`, `model` |
-| `polyprompt.operation` | `chat`, `chat_stream`, `tool_chat`, `tool_chat_stream`, `generate`, `generate_stream`, `embed`, `sparse_embed`, `rerank`, `classify`, `decide`, `decide_batch`, `model_info`, `model_exists`, `model_pull`, `model_delete`, `validate_connectivity` |
-| `gen_ai.operation.name` | `chat`, `text_completion`, `embeddings`, `rerank`, `classify`, `decide` (and the PolyPrompt operation on spans for non-model operations) |
+| `gen_ai.provider.name` | `openai`, `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `xai`, `voyageai`, `typesafe`, and for agent harnesses `claude_code`, `codex`, `gemini_cli`, `cursor_cli`, `mux`, `pi`, `opencode`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from a capability base is labeled by its lower-cased type name without the `...Client` suffix. |
+| `polyprompt.capability` | `completion`, `embedding`, `sparse_embedding`, `rerank`, `classification`, `decision`, `model`, `agent` |
+| `polyprompt.operation` | `chat`, `chat_stream`, `tool_chat`, `tool_chat_stream`, `generate`, `generate_stream`, `embed`, `sparse_embed`, `rerank`, `classify`, `decide`, `decide_batch`, `model_info`, `model_exists`, `model_pull`, `model_delete`, `validate_connectivity`, `agent_run`, `agent_run_stream`, `model_list` |
+| `gen_ai.operation.name` | `chat`, `text_completion`, `embeddings`, `rerank`, `classify`, `decide`, `invoke_agent` (and the PolyPrompt operation on spans for non-model operations) |
 | `polyprompt.outcome` | `success`, `error`, `timeout`, `cancelled`, `abandoned` |
-| `error.type` | An HTTP status code (`404`, `429`, `529`), `invalid_response` (a successful status with a body PolyPrompt could not use), `timeout` (exceeded `TimeoutMs`), `batch_item_failed`, `operation_failed` (a boolean operation returned false without a status), or the exception's full type name (`System.Net.Http.HttpRequestException`). Absent on success and on cancellation. |
+| `error.type` | An HTTP status code (`404`, `429`, `529`), `invalid_response` (a successful status with a body PolyPrompt could not use), `timeout` (exceeded `TimeoutMs`), `batch_item_failed`, `operation_failed` (a boolean operation returned false without a status), for agent harnesses `not_installed`, `not_authenticated`, `rate_limited`, `crashed`, `provider_error`, `invalid_input`, `turn_limit_reached`, `output_limit_exceeded` (plus `timeout` and `invalid_response`), or the exception's full type name (`System.Net.Http.HttpRequestException`). Absent on success and on cancellation. |
 | `gen_ai.request.model` | The model name your application configured or passed per call, truncated to 128 characters. |
 | `gen_ai.response.finish_reason` | The provider's finish reason, lower-cased, truncated to 32 characters (for example `stop`, `length`, `tool_calls`, `end_turn`, `max_tokens`). |
+| `process.executable.name` | The harness executable name as configured on the client (for example `codex`, `claude`, `cursor-agent`), without its directory. |
+| `process.exit.code` | The harness process exit code (absent when the process never started or was cancelled). |
 | `polyprompt.credential.source` | `service_account`, `adc`, or the lower-cased type name of a custom `CachingCredentialProvider`. |
 
 Every metric label is bounded: provider, capability, operation, outcome, and error type are fixed sets; model, endpoint host, and port are configured by your application; finish reasons are a provider vocabulary. Ids (response ids, URLs) appear only on spans.
@@ -198,6 +212,9 @@ A Prometheus exporter rewrites dotted names to snake case and appends unit and t
 | `polyprompt.http.client.request.duration` | `polyprompt_http_client_request_duration_seconds_bucket` |
 | `polyprompt.http.client.requests` | `polyprompt_http_client_requests_total` |
 | `polyprompt.http.client.request.body.size` | `polyprompt_http_client_request_body_size_bytes_bucket` |
+| `polyprompt.process.duration` | `polyprompt_process_duration_seconds_bucket` |
+| `polyprompt.process.executions` | `polyprompt_process_executions_total` |
+| `polyprompt.process.active` | `polyprompt_process_active` |
 | `polyprompt.client.operation.active` | `polyprompt_client_operation_active` |
 | `polyprompt.decision.batch.queue.duration` | `polyprompt_decision_batch_queue_duration_seconds_bucket` |
 | `polyprompt.credential.refreshes` | `polyprompt_credential_refreshes_total` |

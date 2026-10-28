@@ -170,3 +170,13 @@ The hermetic test suite (`Test.Automated`, `Test.Xunit`, `Test.Nunit`) includes 
 ## Streaming lifecycle in 3.5
 
 The shared `StreamingState`/`IStreamingResponse` contract uses ordinary typed properties and async iterators, without runtime reflection. It applies to generic completion streams and native xAI events in Native AOT. Continuation checks assert completed lifecycle state on the JIT and native builds. See [STREAMING.md](STREAMING.md) for final-state gating and cancellation behavior.
+
+## Agent harness clients in 3.6
+
+The seven agent harness clients (`ClaudeCodeAgentClient`, `CodexAgentClient`, `GeminiCliAgentClient`, `CursorAgentClient`, `MuxAgentClient`, `PiAgentClient`, `OpenCodeAgentClient`) are Native AOT and trimming safe with no setup:
+
+- Processes are started with `System.Diagnostics.Process` (`UseShellExecute = false`, argument lists, no shell), which is AOT compatible. Output is read with `System.Threading.Channels` from the shared framework; there is no new package dependency.
+- Every harness output line is parsed with `JsonDocument`/`JsonElement`, so no reflection-based deserialization is involved. Commands written to a harness (Pi RPC) are produced with source-generated metadata or `Utf8JsonWriter`.
+- `CliAgentRequest`, `CliAgentResult`, `CliAgentEvent`, `CliConnectivityResult`, and `ProcessCallDetail` are in `PolyPromptJsonContext`, so results and call details can be persisted without reflection. `ProcessCallDetail` is a registered derived type of `CallDetail`, so `List<CallDetail>` round-trips it.
+
+`Test.Aot` runs every harness client against the fake CLI (a POSIX shell shim from `src/Test.Shared/FakeCli`, placed first on the client's `PATH`): a run, a streamed run, connectivity, model listing where supported, and the not-installed path. The arguments, standard input, final text, and event kinds of every process go into the request digest, so `verify-aot.sh` proves the native binary spawns byte-identical processes and parses them identically to the JIT build. The fake CLI needs `/bin/sh`, so the harness part of `Test.Aot` runs on macOS and Linux.

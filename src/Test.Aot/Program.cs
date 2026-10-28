@@ -26,6 +26,7 @@ namespace Test.Aot
         private static int _Passed = 0;
         private static readonly List<string> _ContinuationBodies = new();
         private static readonly List<string> _Failures = new List<string>();
+        private static readonly List<string> _AgentInvocations = new List<string>();
 
         #endregion
 
@@ -60,15 +61,107 @@ namespace Test.Aot
                     catch (Exception ex) { _Failures.Add("Continuation " + provider + " stream=" + streaming + ": " + ex.Message); }
                 }
 
+            await RunAgentHarnessChecksAsync().ConfigureAwait(false);
+
             string digest = Digest(server);
             Console.WriteLine();
-            Console.WriteLine("Requests sent:  " + (server.RequestBodies.Count + _ContinuationBodies.Count));
+            Console.WriteLine("Requests sent:  " + (server.RequestBodies.Count + _ContinuationBodies.Count) + " HTTP, " + _AgentInvocations.Count + " harness processes");
             Console.WriteLine("Request digest: " + digest);
             if (digestPath != null) File.WriteAllText(digestPath, digest);
 
             Console.WriteLine("Passed: " + _Passed + "  Failed: " + _Failures.Count);
             foreach (string failure in _Failures) Console.WriteLine("  FAIL " + failure);
             return _Failures.Count == 0 ? 0 : 1;
+        }
+
+        #endregion
+
+        #region Agent-Harness-Checks
+
+        /// <summary>
+        /// Every agent harness client against the fake CLI (a POSIX shell shim placed first on the client's PATH): a run,
+        /// a streamed run, connectivity, and model listing where the client supports it. The arguments, standard input,
+        /// final text, and event kinds of every run go into the request digest, so the JIT and native builds must spawn
+        /// byte-identical processes and parse them identically.
+        /// </summary>
+        private static async Task RunAgentHarnessChecksAsync()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                _Failures.Add("Agent harness checks need a POSIX shell for the fake CLI.");
+                return;
+            }
+
+            List<(string Name, string Executable, string Scenario, Func<CliAgentClientBase> Create)> harnesses = new()
+            {
+                ("codex", "codex", "codex-happy", () => new CodexAgentClient()),
+                ("claudecode", "claude", "claudecode-happy", () => new ClaudeCodeAgentClient()),
+                ("geminicli", "gemini", "geminicli-happy", () => new GeminiCliAgentClient()),
+                ("cursor", "cursor-agent", "cursor-happy", () => new CursorAgentClient()),
+                ("mux", "mux", "mux-happy", () => new MuxAgentClient()),
+                ("pi", "pi", "pi-happy", () => new PiAgentClient()),
+                ("opencode", "opencode", "opencode-happy", () => new OpenCodeAgentClient()),
+            };
+
+            foreach ((string name, string executable, string scenario, Func<CliAgentClientBase> create) in harnesses)
+            {
+                await CheckAsync("Harness " + name + ": run, stream, connectivity, models", async () =>
+                {
+                    using FakeCli fake = FakeCli.Create(executable, scenario);
+                    using CliAgentClientBase client = fake.Attach(create());
+                    client.TimeoutMs = 30000;
+
+                    CliAgentResult result = await client.RunAsync(new CliAgentRequest("AOT harness check for " + name)).ConfigureAwait(false);
+                    if (!result.Success) throw new InvalidOperationException("Run failed (" + result.FailureKind + "): " + result.Error);
+                    if (string.IsNullOrEmpty(result.Text)) throw new InvalidOperationException("Run returned no text.");
+                    RecordInvocation(name + " run", fake, result.Text, result.Events);
+
+                    string json = JsonSerializer.Serialize(result, PolyPromptJsonContext.Default.CliAgentResult);
+                    CliAgentResult back = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.CliAgentResult)!;
+                    Expect(result.Text, back.Text, name + " result JSON round trip");
+                    Expect(result.Events.Count, back.Events.Count, name + " event JSON round trip");
+
+                    List<CliAgentEvent> streamed = new List<CliAgentEvent>();
+                    await foreach (CliAgentEvent evt in client.RunStreamingAsync(new CliAgentRequest("AOT streaming check for " + name)).ConfigureAwait(false)) streamed.Add(evt);
+                    Expect(CliAgentEventKind.Completed, streamed[streamed.Count - 1].Kind, name + " stream terminal event");
+                    RecordInvocation(name + " stream", fake, streamed[streamed.Count - 1].Text ?? "", streamed);
+
+                    CliConnectivityResult connectivity = await client.ValidateConnectivityAsync().ConfigureAwait(false);
+                    Expect(CliConnectivityStatus.Ok, connectivity.Status, name + " connectivity (" + connectivity.Message + ")");
+
+                    List<string> models = new List<string>();
+                    IAsyncEnumerable<ModelInformation>? listing = client switch
+                    {
+                        CodexAgentClient c => c.ListModelsAsync(),
+                        CursorAgentClient c => c.ListModelsAsync(),
+                        MuxAgentClient c => c.ListModelsAsync(),
+                        PiAgentClient c => c.ListModelsAsync(),
+                        OpenCodeAgentClient c => c.ListModelsAsync(),
+                        _ => null,
+                    };
+                    if (listing != null)
+                    {
+                        await foreach (ModelInformation model in listing.ConfigureAwait(false)) models.Add(model.Name);
+                        if (models.Count == 0) throw new InvalidOperationException("Model list was empty.");
+                        _AgentInvocations.Add(name + " models\n" + string.Join(",", models));
+                    }
+
+                    using CliAgentClientBase notInstalled = create();
+                    notInstalled.Executable = "polyprompt-aot-missing-" + name;
+                    CliAgentResult failure = await notInstalled.RunAsync(new CliAgentRequest("x")).ConfigureAwait(false);
+                    Expect(CliFailureKind.NotInstalled, failure.FailureKind, name + " missing executable");
+                }).ConfigureAwait(false);
+            }
+        }
+
+        private static void RecordInvocation(string label, FakeCli fake, string text, List<CliAgentEvent> events)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append(label).Append('\n');
+            foreach (string arg in fake.Arguments) sb.Append(arg).Append('\0');
+            sb.Append('\n').Append(fake.StandardInput ?? "").Append('\n').Append(text).Append('\n');
+            sb.Append(string.Join(",", events.Select(e => e.Kind.ToString())));
+            _AgentInvocations.Add(sb.ToString());
         }
 
         #endregion
@@ -416,6 +509,7 @@ namespace Test.Aot
             }
 
             foreach (string body in _ContinuationBodies) all.Append(body).Append('\n');
+            foreach (string invocation in _AgentInvocations) all.Append(invocation).Append('\n');
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(all.ToString())));
         }
 

@@ -85,3 +85,26 @@ dotnet run --project src/Test.Automated -c Release -f net10.0 -- ollamacloud-str
 ```
 
 The live suite checks chat, generation, a tool name and integer argument, a synthetic tool result, and the subsequent native continuation. It does not perform filesystem or external tool actions. Passing these checks establishes compatibility with the selected hosted model, not every Cloud model or historical Armada mission.
+
+## Agent harness streams (3.6)
+
+The seven agent harness clients (`ClaudeCodeAgentClient`, `CodexAgentClient`, `GeminiCliAgentClient`, `CursorAgentClient`, `MuxAgentClient`, `PiAgentClient`, `OpenCodeAgentClient`) stream something different from the HTTP clients. `CliAgentClientBase.RunStreamingAsync` yields `CliAgentEvent`s that the harness CLI reports while it runs its own tool loop: `Started`, `TextDelta`, `ReasoningDelta`, `ToolUse`, `ToolResult`, `Notice`, and exactly one terminal `Completed` or `Failed`. There is no `StreamingResponseBase` and no `StreamingState` for a harness run; the terminal event is the completion signal.
+
+**It is not token streaming.** A harness stream is coarse and non-deterministic in its chunk boundaries:
+
+- Depending on the CLI, a `TextDelta` is a partial delta (Claude Code with `--include-partial-messages`, Cursor with `--stream-partial-output`, Pi `message_update`) or a whole assistant message (Codex `agent_message` items). Boundaries change between runs, models, and CLI versions; never parse meaning from them.
+- Several assistant messages can appear in one run (for example a preamble before a tool call). `Completed.Text` and `CliAgentResult.Text` carry the harness's final response, which is not necessarily the concatenation of every `TextDelta`.
+- Tool events are observations. The harness has already executed (or been denied) the tool; PolyPrompt never executes harness tools and never returns them for the caller to run. Do not combine harness events with `ToolChatAsync` loops.
+- Usage and cost arrive once, on the terminal event, exactly as the harness reported them; they stay null when the harness does not report them.
+
+Lifecycle rules:
+
+| Situation | What happens |
+|---|---|
+| The run succeeds | Events in order, then `Completed` (final text, session id, usage, cost, exit code). |
+| The harness reports an error, exits non-zero, times out, writes more than `MaxOutputCharacters`, is not installed, or is not logged in | Events so far, then `Failed` with `FailureKind`; nothing is thrown. |
+| A stdout line is not valid JSON | A `Notice` with `IsError = true` is emitted, the line is counted in `MalformedLines`, and the run continues. |
+| The caller cancels | The whole process tree is killed and `OperationCanceledException` is thrown; there is no terminal event. |
+| The caller stops enumerating early | The whole process tree is killed and the process is recorded as cancelled in `CallDetails`; telemetry records `abandoned`. |
+
+`RunAsync` runs the same pipeline and returns a `CliAgentResult` whose `Events` list is exactly what `RunStreamingAsync` would have yielded. The fake-CLI suites assert that equivalence for every adapter, along with cancellation (no orphaned child processes), timeouts, oversized output, malformed lines, and each failure kind.

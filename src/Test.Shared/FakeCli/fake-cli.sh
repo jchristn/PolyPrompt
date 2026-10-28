@@ -6,7 +6,7 @@
 #   out <text>        write <text> and a newline to stdout
 #   outraw <text>     write <text> to stdout without a newline
 #   err <text>        write <text> and a newline to stderr
-#   stdin             read stdin to end of file and record it
+#   stdin             read stdin to end of file and append it to the record
 #   readline          read one line of stdin and record it
 #   sleep <seconds>   sleep
 #   child <seconds>   start a background child that sleeps, and record its pid
@@ -22,6 +22,7 @@ rec="$dir/record"
 mkdir -p "$rec"
 
 : > "$rec/argv"
+rm -f "$rec/stdin"
 for a in "$@"; do printf '%s\0' "$a" >> "$rec/argv"; done
 printf '%s\n' "$*" >> "$rec/invocations"
 pwd > "$rec/cwd"
@@ -43,7 +44,7 @@ while IFS= read -r line <&3 || [ -n "$line" ]; do
     out) printf '%s\n' "$arg" ;;
     outraw) printf '%s' "$arg" ;;
     err) printf '%s\n' "$arg" >&2 ;;
-    stdin) cat > "$rec/stdin" ;;
+    stdin) cat >> "$rec/stdin" ;;
     readline) IFS= read -r input; printf '%s\n' "$input" >> "$rec/stdin" ;;
     sleep) sleep "$arg" ;;
     child) sleep "$arg" & printf '%s\n' "$!" > "$rec/child.pid" ;;
