@@ -38,6 +38,12 @@ namespace Test.Shared
             cases.AddRange(LocalStreamingLifecycleCases.Create(SuiteId));
             cases.AddRange(LocalCliAgentCases.Create(SuiteId));
             cases.AddRange(LocalCodexAgentCases.Create(SuiteId));
+            cases.AddRange(LocalClaudeCodeAgentCases.Create(SuiteId));
+            cases.AddRange(LocalGeminiCliAgentCases.Create(SuiteId));
+            cases.AddRange(LocalCursorAgentCases.Create(SuiteId));
+            cases.AddRange(LocalMuxAgentCases.Create(SuiteId));
+            cases.AddRange(LocalPiAgentCases.Create(SuiteId));
+            cases.AddRange(LocalOpenCodeAgentCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 
