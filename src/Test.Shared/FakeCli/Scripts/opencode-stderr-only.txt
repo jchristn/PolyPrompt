@@ -1,0 +1,5 @@
+# Synthetic: the harness dies before writing any JSON, leaving only stderr and a non-zero exit code. (OpenCode 2.2.0
+# writes argument errors to stdout instead; see opencode-usage-error.)
+err error: the private server exited unexpectedly (code 134)
+err   at startStandaloneServer
+exit 1

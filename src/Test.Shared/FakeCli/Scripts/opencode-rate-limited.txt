@@ -1,0 +1,4 @@
+# Recorded from opencode 2.2.0 when the free model usage limit was reached: provider.free-limit, status 429, exit 1.
+stdin
+out {"type":"error","timestamp":1793204237541,"sessionID":"ses_e7cb2cd1cffeC79JedvrasZSHS","error":{"type":"provider.free-limit","message":"Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.","status":429,"response":{"body":"{\"type\":\"error\",\"error\":{\"type\":\"FreeUsageLimitError\",\"message\":\"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go\"}}"},"retryAfterMs":27763000}}
+exit 1

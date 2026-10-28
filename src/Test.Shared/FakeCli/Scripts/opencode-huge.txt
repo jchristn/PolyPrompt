@@ -1,0 +1,5 @@
+# A runaway harness writing one enormous line.
+stdin
+out {"type":"step_start","timestamp":1793204400000,"sessionID":"ses_e7cb00000000hugehugehuge01","part":{"id":"prt_1835000000010000000000huge","sessionID":"ses_e7cb00000000hugehugehuge01","messageID":"msg_183500000001hugehugehuge01","type":"step-start"}}
+spam 5000000
+exit 0

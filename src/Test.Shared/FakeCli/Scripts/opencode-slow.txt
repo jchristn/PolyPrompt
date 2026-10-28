@@ -1,0 +1,6 @@
+# Starts a step, spawns a long-running child (to prove the whole tree is killed), then hangs.
+stdin
+out {"type":"step_start","timestamp":1793204400000,"sessionID":"ses_e7cb00000000slowslowslow01","part":{"id":"prt_1835000000010000000000slow","sessionID":"ses_e7cb00000000slowslowslow01","messageID":"msg_183500000001slowslowslow01","type":"step-start"}}
+child 30
+sleep 30
+exit 0

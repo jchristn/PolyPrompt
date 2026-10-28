@@ -1,0 +1,8 @@
+# Recorded from opencode 2.2.0 against a provider whose API key is invalid: provider.auth, status 401, exit code 1.
+ifarg --version
+out opencode v2.2.0
+exit 0
+endif
+stdin
+out {"type":"error","timestamp":1793204491826,"sessionID":"ses_e7caeeb65ffeZm57y9G6bAZxkL","error":{"type":"provider.auth","message":"invalid x-api-key","status":401,"response":{"body":"{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_000\"}"}}}
+exit 1

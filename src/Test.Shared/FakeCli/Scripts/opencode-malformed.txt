@@ -1,0 +1,7 @@
+# A truncated JSON line mid-stream (shapes from opencode 2.2.0); the run continues and completes.
+stdin
+out {"type":"step_start","timestamp":1793204379874,"sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","part":{"id":"prt_1834f60e2001Hd8sTbWDxQKWC8","sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","messageID":"msg_1834f5432001IodUWAs6LJLt4a","type":"step-start"}}
+out {"type":"text","timestamp":1793204379900,"sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","part":{"id":"prt_1
+out {"type":"text","timestamp":1793204379901,"sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","part":{"id":"prt_183400000001text","sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","messageID":"msg_1834f5432001IodUWAs6LJLt4a","type":"text","text":"PONG"}}
+out {"type":"step_finish","timestamp":1793204379902,"sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","part":{"id":"prt_183400000002fin","sessionID":"ses_e7cb0ac7effen1rnT0BSTYC13W","messageID":"msg_1834f5432001IodUWAs6LJLt4a","type":"step-finish","reason":"stop","cost":0,"tokens":{"input":869,"output":2,"reasoning":0,"cache":{"read":70,"write":0}}}}
+exit 0

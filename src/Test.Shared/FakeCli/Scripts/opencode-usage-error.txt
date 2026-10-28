@@ -1,0 +1,12 @@
+# Recorded from opencode 2.2.0 (opencode run --format json --bogus), help text trimmed: the usage error is plain text
+# on stdout under an ERROR heading, nothing on stderr, exit code 1.
+stdin
+out DESCRIPTION
+out   Run OpenCode with a message
+out
+out USAGE
+out   opencode run [flags] [<message...>]
+out
+out ERROR
+out   Unrecognized flag: --bogus in command opencode run
+exit 1

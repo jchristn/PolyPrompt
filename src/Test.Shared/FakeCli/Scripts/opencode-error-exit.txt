@@ -1,0 +1,4 @@
+# Recorded from opencode 2.2.0 with an unknown model (-m opencode/no-such-model-xyz): structured error, exit code 1.
+stdin
+out {"type":"error","timestamp":1793204404096,"sessionID":"ses_e7cb040caffecJtmL0N5Cx0SRx","error":{"type":"provider.no-route","message":"Model unavailable: opencode/no-such-model-xyz"}}
+exit 1
