@@ -12,6 +12,7 @@
 - `ProcessCallDetail` recorded in `CallDetails` for every harness process (and serialized as a derived type of `CallDetail`); telemetry adds `exec {executable}` spans, `polyprompt.process.duration`, `polyprompt.process.executions`, and `polyprompt.process.active`, the `agent` capability, `agent_run`/`agent_run_stream`/`model_list` operations (`gen_ai.operation.name` `invoke_agent`), and provider labels `claude_code`, `codex`, `gemini_cli`, `cursor_cli`, `mux`, `pi`, and `opencode`.
 - Source-generated JSON metadata for the harness models, so harness clients run under Native AOT and trimming.
 - `CliAgentConsole` sample (`--provider codex|claudecode|geminicli|cursor|mux|pi|opencode`), README setup, prerequisites, examples, permission matrix, and an 11-column provider matrix; STREAMING.md, TELEMETRY.md, and AOT.md sections for harnesses.
+- Per-harness console samples `ClaudeCodeConsole`, `CodexConsole`, `GeminiCliConsole`, `CursorCliConsole`, `MuxConsole`, `PiConsole`, and `OpenCodeConsole` (sample-only follow-up; the package is unchanged and not republished), sharing the `AgentConsole.Shared` runner: interactive or one-shot turns, streamed thinking/answer/tool events, `[done]`/`[failed]` result lines, session resume or history replay, working directory, model, executable, permission, timeout, and model list options, Ctrl+C cancellation, and `--setup` install and login steps. `Test.Console` covers all seven end to end against the fake CLI.
 
 ### Changed
 

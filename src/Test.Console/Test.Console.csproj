@@ -13,6 +13,13 @@
   <ItemGroup>
     <ProjectReference Include="..\Test.Shared\Test.Shared.csproj" />
     <ProjectReference Include="..\CliAgentConsole\CliAgentConsole.csproj" />
+    <ProjectReference Include="..\ClaudeCodeConsole\ClaudeCodeConsole.csproj" />
+    <ProjectReference Include="..\CodexConsole\CodexConsole.csproj" />
+    <ProjectReference Include="..\GeminiCliConsole\GeminiCliConsole.csproj" />
+    <ProjectReference Include="..\CursorCliConsole\CursorCliConsole.csproj" />
+    <ProjectReference Include="..\MuxConsole\MuxConsole.csproj" />
+    <ProjectReference Include="..\PiConsole\PiConsole.csproj" />
+    <ProjectReference Include="..\OpenCodeConsole\OpenCodeConsole.csproj" />
   </ItemGroup>
   <Import Project="../Console.Shared/Console.Tools.targets" />
 </Project>

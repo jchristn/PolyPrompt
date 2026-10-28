@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Sample: drive the Gemini CLI (gemini) agent harness through PolyPrompt. The CLI must be installed and logged in;
+    PolyPrompt never handles its credentials. Run with the setup option for the install and login steps.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyPrompt\PolyPrompt.csproj" />
+    <ProjectReference Include="..\AgentConsole.Shared\AgentConsole.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

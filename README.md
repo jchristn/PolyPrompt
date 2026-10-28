@@ -555,6 +555,44 @@ dotnet run --project src/CliAgentConsole -f net10.0 -- --provider opencode --mod
 dotnet run --project src/CliAgentConsole -f net10.0 -- --provider pi --permission readonly   # interactive: /new, /status, /models, /exit
 ```
 
+### Per-harness consoles
+
+Each harness also has its own console sample, built on the shared runner in `src/AgentConsole.Shared` (which uses only the `CliAgentClientBase` API; the HTTP completion consoles are unaffected). Every console runs interactively by default or one turn with `--prompt`, streams events as they arrive (`--- Thinking ---` and `--- Answer ---` channels, `[tool]`, `[tool result]`, and `[notice]` lines), and ends each turn with a `[done]` line carrying the session id, tool call count, token usage, and cost as the harness reported them, or a `[failed: Kind]` line (with the install and login steps when the CLI is missing or signed out). Ctrl+C cancels the running turn and kills the harness process tree. Exit codes: 0 success, 1 failure, 2 invalid arguments.
+
+| Console | Harness | Run |
+|---|---|---|
+| `src/ClaudeCodeConsole` | Claude Code (`claude`) | `dotnet run --project src/ClaudeCodeConsole -f net10.0` |
+| `src/CodexConsole` | Codex (`codex`) | `dotnet run --project src/CodexConsole -f net10.0` |
+| `src/GeminiCliConsole` | Gemini CLI (`gemini`) | `dotnet run --project src/GeminiCliConsole -f net10.0` |
+| `src/CursorCliConsole` | Cursor CLI (`cursor-agent`) | `dotnet run --project src/CursorCliConsole -f net10.0` |
+| `src/MuxConsole` | Mux (`mux`) | `dotnet run --project src/MuxConsole -f net10.0` |
+| `src/PiConsole` | Pi (`pi`, RPC mode) | `dotnet run --project src/PiConsole -f net10.0` |
+| `src/OpenCodeConsole` | OpenCode (`opencode`) | `dotnet run --project src/OpenCodeConsole -f net10.0` |
+
+`GeminiCliConsole` drives the local Gemini CLI harness; `GeminiConsole` remains the sample for the Gemini HTTP API. Setup for each console:
+
+1. Install the CLI and sign in with the CLI itself, as listed in [Prerequisites](#prerequisites). `--setup` prints the steps for that harness; PolyPrompt never takes or stores a harness API key.
+2. Check it: `dotnet run --project src/CodexConsole -f net10.0 -- --check` reports `Ok`, `NotInstalled`, or `NotAuthenticated` with the CLI version.
+3. Run a turn or start the interactive console in the directory the agent should work in.
+
+Examples:
+
+```bash
+dotnet run --project src/ClaudeCodeConsole -f net10.0 -- --setup
+dotnet run --project src/ClaudeCodeConsole -f net10.0 -- --prompt "List the files here" --directory . --model sonnet
+dotnet run --project src/CodexConsole -f net10.0 -- --check
+dotnet run --project src/CodexConsole -f net10.0 -- --models
+dotnet run --project src/GeminiCliConsole -f net10.0 -- --prompt "Summarize README.md" --stream false
+dotnet run --project src/CursorCliConsole -f net10.0 -- --directory . --permission readonly
+dotnet run --project src/MuxConsole -f net10.0 -- --endpoint my-endpoint --persist true --show-thinking false
+dotnet run --project src/PiConsole -f net10.0 -- --models sonnet
+dotnet run --project src/OpenCodeConsole -f net10.0 -- --executable /opt/opencode/bin/opencode --timeout 600000
+```
+
+Common options: `--prompt TEXT`, `--directory PATH`, `--model NAME`, `--executable PATH`, `--permission restricted|readonly|workspacewrite|unrestricted` (default `restricted`), `--system TEXT`, `--timeout MS`, `--stream true|false`, `--check`, `--models [FILTER]` (Codex, Cursor CLI, Mux, Pi, and OpenCode; Pi uses the filter as its fuzzy search), `--setup`, and `--help`. MuxConsole adds `--endpoint NAME`, `--show-thinking true|false`, and `--persist true|false`. Interactive commands: `/help`, `/setup`, `/status`, `/models [FILTER]`, `/model [NAME|default]`, `/permission [MODE]`, `/cd [PATH]` (starts a new session), `/stream [on|off]`, `/session`, `/new`, and `/exit`. Later turns resume the session id the harness reported; when it reports none (Mux without `--persist true`), earlier turns are replayed as history.
+
+`Test.Console` runs all seven consoles end to end against the fake CLI and recorded harness output (`dotnet test src/Test.Console -c Release -f net10.0 --filter AgentHarnessConsoleTests`, macOS or Linux): streamed and buffered turns, tool and usage lines, session resume, history replay, interactive commands, model lists, timeouts, missing executables, unauthenticated CLIs, and invalid arguments. No live CLI or paid model call is needed.
+
 ## Authentication
 
 Most providers take one static credential in the constructor: a bearer key for OpenAI, Ollama, VoyageAI, Cohere, TypeSafe, and TEI servers started with `--api-key`; an `x-api-key` for Anthropic; and an `x-goog-api-key` for Gemini. Azure OpenAI, Vertex AI, and Bedrock need richer, per-request credentials, implemented in-library under `PolyPrompt.Auth` with no provider SDK:
@@ -1331,6 +1369,14 @@ PolyPrompt/
 |   |   |-- Models/              # Request, response, and base options models (Models/Cli: agent harness models)
 |   |   `-- Options/             # Provider-specific options
 |   |-- CliAgentConsole/         # Agent harness sample: --provider codex|claudecode|geminicli|cursor|mux|pi|opencode
+|   |-- ClaudeCodeConsole/       # Per-harness agent consoles: Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, OpenCode
+|   |-- CodexConsole/
+|   |-- GeminiCliConsole/
+|   |-- CursorCliConsole/
+|   |-- MuxConsole/
+|   |-- PiConsole/
+|   |-- OpenCodeConsole/
+|   |-- AgentConsole.Shared/     # Shared interactive/one-shot runner for the per-harness agent consoles
 |   |-- XAiConsole/              # Native Responses, model catalogs, embeddings, shared Mux tools
 |   |-- OllamaCloudConsole/      # Ollama Cloud harness (fixed URL, required bearer token)
 |   |-- OllamaConsole/           # Interactive harnesses, one per provider
@@ -1344,7 +1390,7 @@ PolyPrompt/
 |   |-- AotConsole/              # Native console: shared tools, thinking display, saved conversation
 |   |-- Console.Shared/          # Shared base, conversation/tool loop, rendering, native-safe tool bridge
 |   |-- Console.Tools/           # Companion Mux built-in tool host (JIT)
-|   |-- Test.Console/            # Shared console and real tool execution tests
+|   |-- Test.Console/            # Shared console, real tool execution, and agent console (fake CLI) tests
 |   |-- Test.Shared/             # Shared Touchstone test descriptors and the local mock server
 |   |-- Test.Automated/          # Touchstone console runner
 |   |-- Test.Aot/                # Native AOT verification: every client, JIT vs native binary (verify-aot.sh)

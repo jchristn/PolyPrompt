@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared runner for the per-harness agent console samples (ClaudeCodeConsole, CodexConsole, GeminiCliConsole,
+    CursorCliConsole, MuxConsole, PiConsole, OpenCodeConsole). Uses only the CliAgentClientBase API; the HTTP
+    completion console plumbing in Console.Shared is not involved apart from its labeled thinking/answer renderer.
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PolyPrompt\PolyPrompt.csproj" />
+    <ProjectReference Include="..\Console.Shared\Console.Shared.csproj" />
+  </ItemGroup>
+
+</Project>
