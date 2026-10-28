@@ -16,4 +16,9 @@
     <PackageReference Include="Touchstone.Core" Version="0.2.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="FakeCli\fake-cli.sh" LogicalName="FakeCli/fake-cli.sh" />
+    <EmbeddedResource Include="FakeCli\Scripts\*.txt" LogicalName="FakeCli/%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

@@ -23,7 +23,7 @@ namespace PolyPrompt.Telemetry
 
         private static readonly string[] _CapabilitySuffixes = new[]
         {
-            "SparseEmbeddingClient", "ClassificationClient", "CompletionClient", "EmbeddingClient", "DecisionClient", "RerankClient", "ModelClient", "Client"
+            "SparseEmbeddingClient", "ClassificationClient", "AgentClient", "CompletionClient", "EmbeddingClient", "DecisionClient", "RerankClient", "ModelClient", "Client"
         };
 
         private static readonly Dictionary<string, string> _ProviderNames = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -39,6 +39,13 @@ namespace PolyPrompt.Telemetry
             { "Tei", "tei" },
             { "VoyageAi", "voyageai" },
             { "TypeSafe", "typesafe" },
+            { "ClaudeCode", "claude_code" },
+            { "Codex", "codex" },
+            { "GeminiCli", "gemini_cli" },
+            { "Cursor", "cursor_cli" },
+            { "Mux", "mux" },
+            { "Pi", "pi" },
+            { "OpenCode", "opencode" },
         };
 
         #endregion
@@ -84,6 +91,11 @@ namespace PolyPrompt.Telemetry
         /// Live clients by provider and capability.
         /// </summary>
         public static readonly InFlightRegistry ActiveClients = new InFlightRegistry();
+
+        /// <summary>
+        /// Running agent harness processes.
+        /// </summary>
+        public static readonly InFlightRegistry ActiveProcesses = new InFlightRegistry();
 
         /// <summary>
         /// Operation duration histogram.
@@ -170,6 +182,18 @@ namespace PolyPrompt.Telemetry
             PolyPromptTelemetryNames.HttpResponseBodySize, "By", "HTTP response body size for non-streaming requests.");
 
         /// <summary>
+        /// Agent harness process duration histogram.
+        /// </summary>
+        public static readonly Histogram<double> ProcessDuration = Meter.CreateHistogram<double>(
+            PolyPromptTelemetryNames.ProcessDuration, "s", "Duration of agent harness processes from spawn to exit.");
+
+        /// <summary>
+        /// Agent harness process counter.
+        /// </summary>
+        public static readonly Counter<long> ProcessExecutions = Meter.CreateCounter<long>(
+            PolyPromptTelemetryNames.ProcessExecutions, "{process}", "Agent harness processes run, counted at exit.");
+
+        /// <summary>
         /// Decision batch queue wait histogram.
         /// </summary>
         public static readonly Histogram<double> DecisionQueueDuration = Meter.CreateHistogram<double>(
@@ -213,7 +237,7 @@ namespace PolyPrompt.Telemetry
                     || ToolCalls.Enabled || FinishReasons.Enabled || HttpRequestDuration.Enabled || HttpRequests.Enabled
                     || HttpRequestBodySize.Enabled || HttpResponseBodySize.Enabled || DecisionQueueDuration.Enabled
                     || DecisionQuestions.Enabled || CredentialRefreshDuration.Enabled || CredentialRefreshes.Enabled
-                    || CredentialCacheLookups.Enabled;
+                    || CredentialCacheLookups.Enabled || ProcessDuration.Enabled || ProcessExecutions.Enabled;
             }
         }
 
@@ -233,6 +257,8 @@ namespace PolyPrompt.Telemetry
                 "{request}", "Decision batch items waiting for a concurrency slot.");
             Meter.CreateObservableUpDownCounter(PolyPromptTelemetryNames.ActiveClients, () => ActiveClients.Observe(),
                 "{client}", "Constructed and not yet disposed PolyPrompt clients.");
+            Meter.CreateObservableUpDownCounter(PolyPromptTelemetryNames.ProcessActive, () => ActiveProcesses.Observe(),
+                "{process}", "Agent harness processes currently running.");
             Meter.CreateObservableGauge(PolyPromptTelemetryNames.BuildInfo,
                 () => new Measurement<long>(1, new KeyValuePair<string, object?>(PolyPromptTelemetryNames.Version, Version)),
                 "{build}", "PolyPrompt build information.");
@@ -279,6 +305,7 @@ namespace PolyPrompt.Telemetry
             if (client is ClassificationClientBase) return "classification";
             if (client is DecisionClientBase) return "decision";
             if (client is ModelClientBase) return "model";
+            if (client is CliAgentClientBase) return "agent";
             return "other";
         }
 
@@ -324,6 +351,9 @@ namespace PolyPrompt.Telemetry
                     return "classify";
                 case PolyPromptTelemetryNames.OperationDecide:
                     return "decide";
+                case PolyPromptTelemetryNames.OperationAgentRun:
+                case PolyPromptTelemetryNames.OperationAgentRunStream:
+                    return "invoke_agent";
                 default:
                     return null;
             }

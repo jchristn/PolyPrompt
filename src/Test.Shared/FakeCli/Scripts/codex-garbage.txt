@@ -1,0 +1,5 @@
+# Exit 0 with nothing PolyPrompt can parse.
+stdin
+out this is not json
+out neither is this
+exit 0

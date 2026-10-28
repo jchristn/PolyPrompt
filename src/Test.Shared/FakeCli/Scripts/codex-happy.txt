@@ -1,0 +1,24 @@
+# Recorded from codex-cli 0.163.0 (codex exec --json), trimmed. A reasoning item is added to cover the mapping.
+ifarg --version
+out codex-cli 0.163.0
+exit 0
+endif
+ifarg login
+out Logged in using ChatGPT
+exit 0
+endif
+ifarg models
+out {"models":[{"slug":"gpt-6.1-sol","display_name":"GPT-6.1-Sol","description":"Latest workhorse model for coding and everyday work.","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast"},{"effort":"high","description":"Deep"}],"visibility":"list","supported_in_api":true,"priority":1},{"slug":"gpt-6.1-mini","display_name":"GPT-6.1-Mini","description":"Small and fast.","visibility":"hide"}]}
+exit 0
+endif
+stdin
+out {"type":"thread.started","thread_id":"01a18335-b272-7883-8861-31ba989c1ddf"}
+out {"type":"turn.started"}
+out {"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"**Listing files** I should run ls first."}}
+out {"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I will run `ls` in the current directory and report the names."}}
+out {"type":"item.started","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc ls","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+out {"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"/bin/zsh -lc ls","aggregated_output":"a.txt\n","exit_code":0,"status":"completed"}}
+out {"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"`a.txt`"}}
+out {"type":"turn.completed","usage":{"input_tokens":37907,"cached_input_tokens":32000,"cache_write_input_tokens":0,"output_tokens":75,"reasoning_output_tokens":12}}
+err 2026-10-28T15:51:26.527406Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: "Bearer" })
+exit 0

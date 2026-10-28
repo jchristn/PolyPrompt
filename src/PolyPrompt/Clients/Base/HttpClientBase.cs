@@ -471,8 +471,8 @@ namespace PolyPrompt.Clients
         /// <summary>
         /// Send an HTTP POST for streaming and return the response with its body unread. The timeout covers the
         /// whole response: <see cref="StreamingHttpResult.Token"/> is linked to both the caller token and
-        /// <see cref="TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
-        /// <see cref="CallDetails"/>.
+        /// <see cref="ClientBase.TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
+        /// <see cref="ClientBase.CallDetails"/>.
         /// </summary>
         /// <param name="url">Full URL to call.</param>
         /// <param name="content">HTTP content to send.</param>

@@ -1,0 +1,17 @@
+# Recorded from codex-cli 0.163.0 with an empty CODEX_HOME, trimmed: reconnect notices, then a 401 turn failure.
+ifarg --version
+out codex-cli 0.163.0
+exit 0
+endif
+ifarg login
+err Not logged in
+exit 1
+endif
+stdin
+out {"type":"thread.started","thread_id":"01a18336-1fb9-7e92-8765-8f2dd102dba1"}
+out {"type":"turn.started"}
+out {"type":"error","message":"Reconnecting... 1/5 (unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses)"}
+out {"type":"error","message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses"}
+out {"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, url: https://api.openai.com/v1/responses"}}
+err 2026-10-28T15:52:05.137816Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 401 Unauthorized
+exit 1

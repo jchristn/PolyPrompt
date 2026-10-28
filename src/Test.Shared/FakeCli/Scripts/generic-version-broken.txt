@@ -1,0 +1,6 @@
+# Any harness whose --version command fails (for connectivity Error, distinct from NotInstalled).
+ifarg --version
+err dyld: Library not loaded
+exit 134
+endif
+exit 1

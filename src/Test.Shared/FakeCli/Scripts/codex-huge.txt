@@ -1,0 +1,5 @@
+# A runaway harness writing one enormous line.
+stdin
+out {"type":"thread.started","thread_id":"01a1833a-0000-7000-8000-000000000004"}
+spam 5000000
+exit 0

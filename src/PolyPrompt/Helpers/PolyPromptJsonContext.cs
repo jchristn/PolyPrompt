@@ -79,6 +79,14 @@ namespace PolyPrompt.Helpers
     [JsonSerializable(typeof(ClassificationResponse))]
     [JsonSerializable(typeof(ModelInformation))]
     [JsonSerializable(typeof(List<ModelInformation>))]
+    // Agent harness models.
+    [JsonSerializable(typeof(CliAgentRequest))]
+    [JsonSerializable(typeof(CliAgentResult))]
+    [JsonSerializable(typeof(CliAgentEvent))]
+    [JsonSerializable(typeof(List<CliAgentEvent>))]
+    [JsonSerializable(typeof(CliConnectivityResult))]
+    [JsonSerializable(typeof(ProcessCallDetail))]
+    [JsonSerializable(typeof(Dictionary<string, string?>))]
     public partial class PolyPromptJsonContext : JsonSerializerContext
     {
     }

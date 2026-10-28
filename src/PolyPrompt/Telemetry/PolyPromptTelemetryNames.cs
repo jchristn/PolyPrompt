@@ -119,6 +119,24 @@ namespace PolyPrompt.Telemetry
         public const string HttpResponseBodySize = "polyprompt.http.client.response.body.size";
 
         /// <summary>
+        /// Histogram (seconds): duration of each process an agent harness client runs, from spawn to exit. Labels:
+        /// provider, process.executable.name, process.exit.code, error.type.
+        /// </summary>
+        public const string ProcessDuration = "polyprompt.process.duration";
+
+        /// <summary>
+        /// Counter ({process}): processes run by agent harness clients, counted at exit. Labels: provider,
+        /// process.executable.name, process.exit.code, error.type.
+        /// </summary>
+        public const string ProcessExecutions = "polyprompt.process.executions";
+
+        /// <summary>
+        /// Observable up-down counter ({process}): agent harness processes currently running. Labels: provider,
+        /// process.executable.name.
+        /// </summary>
+        public const string ProcessActive = "polyprompt.process.active";
+
+        /// <summary>
         /// Histogram (seconds): time a decision batch item waited for a concurrency slot (the queued stage).
         /// Labels: provider.
         /// </summary>
@@ -340,6 +358,22 @@ namespace PolyPrompt.Telemetry
         public const string HttpStatusCode = "http.response.status_code";
 
         /// <summary>
+        /// Executable name of a harness process (OpenTelemetry key), for example <c>codex</c>. Bounded by the set of
+        /// configured clients.
+        /// </summary>
+        public const string ProcessExecutableName = "process.executable.name";
+
+        /// <summary>
+        /// Exit code of a harness process (OpenTelemetry key).
+        /// </summary>
+        public const string ProcessExitCode = "process.exit.code";
+
+        /// <summary>
+        /// Operating system process id of a harness process (OpenTelemetry key). Span attribute only, never a metric label.
+        /// </summary>
+        public const string ProcessPid = "process.pid";
+
+        /// <summary>
         /// Provider host (OpenTelemetry key). Endpoints are configured by the application, so the set is bounded.
         /// </summary>
         public const string ServerAddress = "server.address";
@@ -491,6 +525,21 @@ namespace PolyPrompt.Telemetry
         /// Operation value: <c>ValidateConnectivityAsync</c>.
         /// </summary>
         public const string OperationValidateConnectivity = "validate_connectivity";
+
+        /// <summary>
+        /// Operation value: agent harness <c>RunAsync</c>.
+        /// </summary>
+        public const string OperationAgentRun = "agent_run";
+
+        /// <summary>
+        /// Operation value: agent harness <c>RunStreamingAsync</c>.
+        /// </summary>
+        public const string OperationAgentRunStream = "agent_run_stream";
+
+        /// <summary>
+        /// Operation value: agent harness <c>ListModelsAsync</c>.
+        /// </summary>
+        public const string OperationModelList = "model_list";
 
         #endregion
     }

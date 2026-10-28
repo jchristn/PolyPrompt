@@ -68,6 +68,7 @@ namespace Test.Shared
                 N.OperationDuration, N.Operations, N.ActiveOperations, N.GenAiOperationDuration, N.GenAiTokenUsage, N.Tokens,
                 N.StreamTimeToFirstChunk, N.StreamChunks, N.BatchSize, N.ToolCalls, N.FinishReasons,
                 N.HttpRequestDuration, N.HttpRequests, N.HttpActiveRequests, N.HttpRequestBodySize, N.HttpResponseBodySize,
+                N.ProcessDuration, N.ProcessExecutions, N.ProcessActive,
                 N.DecisionQueueDuration, N.DecisionInFlight, N.DecisionQueued, N.DecisionQuestions,
                 N.CredentialRefreshDuration, N.CredentialRefreshes, N.CredentialCacheLookups, N.ActiveClients, N.BuildInfo,
             };

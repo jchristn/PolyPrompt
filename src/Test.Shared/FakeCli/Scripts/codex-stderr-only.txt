@@ -1,0 +1,5 @@
+# The CLI rejects its arguments before producing any JSON: only stderr and a non-zero exit code.
+err error: unexpected argument '--bogus' found
+err
+err Usage: codex exec [OPTIONS] [PROMPT]
+exit 2

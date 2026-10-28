@@ -520,6 +520,9 @@ namespace PolyPrompt.Telemetry
                 case DecisionResponse decision:
                     usage = decision.Usage;
                     break;
+                case CliAgentResult agent:
+                    usage = agent.Usage; responseId = agent.SessionId; toolCalls = agent.Events?.Count(e => e.Kind == CliAgentEventKind.ToolUse);
+                    break;
                 case RerankResponse rerank:
                     responseId = rerank.ResponseId;
                     break;

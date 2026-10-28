@@ -482,13 +482,326 @@
             <returns>The model, or null when none is set and none is required.</returns>
             <exception cref="T:System.InvalidOperationException">Thrown when a model is required and none is set.</exception>
         </member>
+        <member name="T:PolyPrompt.Clients.CliAgentClientBase">
+            <summary>
+            Base class for agent harness clients: Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode. A harness
+            is not a model API; it is a local CLI that runs its own tool loop against the filesystem and reports agent events.
+            This base runs the CLI as a child process (never through a shell), delivers the prompt over standard input where
+            the CLI allows it, maps output lines to <see cref="T:PolyPrompt.Models.CliAgentEvent"/>s through the client's parser, enforces the
+            timeout and output limit by killing the whole process tree, records each process in
+            <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/> as a <see cref="T:PolyPrompt.Models.ProcessCallDetail"/>, and reports telemetry. Authentication is
+            delegated to the CLI's own login; there is no API key parameter.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.Executable">
+            <summary>
+            Executable name (resolved on <c>PATH</c>) or full path of the harness CLI, for example <c>codex</c>.
+            </summary>
+            <exception cref="T:System.ArgumentException">Thrown when set to null, empty, or whitespace.</exception>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.Model">
+            <summary>
+            Default model, in the harness's own naming. Null lets the harness choose. Overridden by
+            <see cref="P:PolyPrompt.Models.CliAgentRequest.Model"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.PermissionMode">
+            <summary>
+            Default permission mode. Default: <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/>. Overridden by
+            <see cref="P:PolyPrompt.Models.CliAgentRequest.PermissionMode"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.WorkingDirectory">
+            <summary>
+            Default working directory, or null for the current directory. Overridden by
+            <see cref="P:PolyPrompt.Models.CliAgentRequest.WorkingDirectory"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.Environment">
+            <summary>
+            Environment variables applied to every process this client starts, under the request's own environment. A null
+            value removes the variable from the inherited environment.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.SupportsSessionResume">
+            <summary>
+            True when the harness can resume a session by id. When false, <see cref="P:PolyPrompt.Models.CliAgentRequest.History"/> is always
+            replayed into the prompt.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.HarnessName">
+            <summary>
+            Display name of the harness for messages, for example <c>Codex</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.VersionArguments">
+            <summary>
+            Arguments that print the CLI version. Default: <c>--version</c>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a harness client.
+            </summary>
+            <param name="executable">Executable name or path.</param>
+            <param name="logging">Logging module.</param>
+            <exception cref="T:System.ArgumentException">Thrown when the executable is empty.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown when logging is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.RunAsync(PolyPrompt.Models.CliAgentRequest,System.Threading.CancellationToken)">
+            <summary>
+            Run one agent turn to completion. Failures to run (not installed, not authenticated, rate limited, timed out,
+            crashed, provider error) are reported on the result with <see cref="P:PolyPrompt.Models.CliAgentResult.FailureKind"/>; only caller
+            cancellation throws.
+            </summary>
+            <param name="request">Request.</param>
+            <param name="token">Cancellation token. Cancelling kills the process tree.</param>
+            <returns>The run result.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the prompt is empty or the history contains null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when the request timeout is not positive.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.RunStreamingAsync(PolyPrompt.Models.CliAgentRequest,System.Threading.CancellationToken)">
+            <summary>
+            Run one agent turn and stream its events as the harness reports them. The last event is always
+            <see cref="F:PolyPrompt.Models.CliAgentEventKind.Completed"/> or <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/>. A harness stream is coarse:
+            events are whole agent steps or partial text whose boundaries vary between runs and versions; it is not token
+            streaming. Stopping the enumeration early kills the process tree.
+            </summary>
+            <param name="request">Request.</param>
+            <param name="token">Cancellation token. Cancelling kills the process tree.</param>
+            <returns>The events.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the prompt is empty or the history contains null.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when the request timeout is not positive.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown during enumeration when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check that the harness is installed, runs, and (where the CLI can report it) is logged in. Never throws for a
+            missing or broken CLI; rethrows only caller cancellation.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The connectivity result.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build the argument list and standard input for one run. Prompts should travel over standard input wherever
+            the CLI supports it. <see cref="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments"/> are appended by the base afterwards.
+            </summary>
+            <param name="state">Run inputs (model, permission mode, prompt, session to resume).</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one line of standard output to events and outcome on <paramref name="state"/>. Throw (for example a
+            <see cref="T:System.Text.Json.JsonException"/>) for a line that cannot be parsed; the base reports it as a notice, counts it in
+            <see cref="P:PolyPrompt.Models.CliAgentResult.MalformedLines"/>, and continues.
+            </summary>
+            <param name="line">Output line without its terminator.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ClassifyFailure(PolyPrompt.Clients.CliRunState,PolyPrompt.Helpers.ProcessRunResult)">
+            <summary>
+            Classify a failed run (one that did not time out or exceed the output limit). The default uses the kind the
+            parser set when it is specific, then recognizes authentication and rate-limit messages in the structured error
+            (or, when there is none, in standard error), then reports a structured error as
+            <see cref="F:PolyPrompt.Models.CliFailureKind.ProviderError"/> and anything else as <see cref="F:PolyPrompt.Models.CliFailureKind.Crashed"/>.
+            </summary>
+            <param name="state">Run state.</param>
+            <param name="process">Process outcome.</param>
+            <returns>The failure kind.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ClassifyMessage(System.String)">
+            <summary>
+            Recognize authentication and rate-limit failures in a message.
+            </summary>
+            <param name="message">Message, or null.</param>
+            <returns><see cref="F:PolyPrompt.Models.CliFailureKind.NotAuthenticated"/>, <see cref="F:PolyPrompt.Models.CliFailureKind.RateLimited"/>, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check the login. The default reports that the CLI offers no way to check (null); clients whose CLI has a
+            status command override this.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check, or null when the CLI cannot report its login.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ValidateConnectivityCoreAsync(System.Threading.CancellationToken)">
+            <summary>
+            Run the connectivity check: resolve the executable, run the version command, then
+            <see cref="M:PolyPrompt.Clients.CliAgentClientBase.CheckAuthenticationAsync(System.Threading.CancellationToken)"/>.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The connectivity result.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.RunCommandAsync(System.Collections.Generic.IEnumerable{System.String},System.Int32,System.Threading.CancellationToken,System.String)">
+            <summary>
+            Run a short auxiliary command (version, login status, model list) and capture its output. The process is
+            recorded in <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/> and reported to telemetry like a run.
+            </summary>
+            <param name="arguments">Arguments.</param>
+            <param name="timeoutMs">Timeout in milliseconds.</param>
+            <param name="token">Cancellation token. Cancelling kills the process tree.</param>
+            <param name="standardInput">Standard input, or null.</param>
+            <returns>The command result.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ListModelsFromCommandAsync(System.Collections.Generic.IReadOnlyList{System.String},System.Func{System.String,System.Collections.Generic.List{PolyPrompt.Models.ModelInformation}},System.Threading.CancellationToken)">
+            <summary>
+            Run a model-listing command and parse its output, instrumented as <c>model_list</c>.
+            </summary>
+            <param name="arguments">Arguments.</param>
+            <param name="parse">Parses standard output into models.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the command cannot run or fails.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ExpandExtraArguments(PolyPrompt.Models.CliAgentRequest)">
+            <summary>
+            Arguments for <see cref="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments"/>, in order.
+            </summary>
+            <param name="request">Request.</param>
+            <returns>The arguments.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.ParseJsonObject(System.String)">
+            <summary>
+            Parse a JSON line into an object element, or throw <see cref="T:System.Text.Json.JsonException"/>.
+            </summary>
+            <param name="line">Line.</param>
+            <returns>A cloned root element.</returns>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when the line is not a JSON object.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetString(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read a string property, or null when it is missing or not a string.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The value, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetInt(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read an integer property, or null when it is missing or not a number.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The value, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetDecimal(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read a decimal property, or null when it is missing or not a number.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The value, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetBool(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read a boolean property, or null when it is missing or not a boolean.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The value, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetObject(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read an object property, or null when it is missing or not an object.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The value, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.RenderJson(System.Nullable{System.Text.Json.JsonElement})">
+            <summary>
+            Render any JSON value as text: strings as is, everything else as compact JSON. Null for missing values.
+            </summary>
+            <param name="element">Element, or null.</param>
+            <returns>The text, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliAgentClientBase.GetRendered(System.Text.Json.JsonElement,System.String)">
+            <summary>
+            Read a property of any kind and render it with <see cref="M:PolyPrompt.Clients.CliAgentClientBase.RenderJson(System.Nullable{System.Text.Json.JsonElement})"/>.
+            </summary>
+            <param name="element">Object element.</param>
+            <param name="name">Property name.</param>
+            <returns>The text, or null.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult">
+            <summary>
+            Outcome of an auxiliary command run by <see cref="M:PolyPrompt.Clients.CliAgentClientBase.RunCommandAsync(System.Collections.Generic.IEnumerable{System.String},System.Int32,System.Threading.CancellationToken,System.String)"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.ExecutablePath">
+            <summary>
+            Resolved executable path, or null when it was not found.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.Started">
+            <summary>
+            True when the process started.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.ExitCode">
+            <summary>
+            Exit code, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.StandardOutput">
+            <summary>
+            Standard output.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.StandardError">
+            <summary>
+            Standard error (bounded).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.TimedOut">
+            <summary>
+            True when the command timed out.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.OutputTruncated">
+            <summary>
+            True when the output limit was exceeded.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.Error">
+            <summary>
+            Failure message, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliCommandResult.Succeeded">
+            <summary>
+            True when the process started, did not time out or overflow, and exited with code zero.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.CliAgentClientBase.CliAuthenticationCheck">
+            <summary>
+            Outcome of a login check.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliAuthenticationCheck.Authenticated">
+            <summary>
+            True when the CLI confirmed it is logged in.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliAgentClientBase.CliAuthenticationCheck.Message">
+            <summary>
+            Status message reported by the CLI.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.ClientBase">
             <summary>
             Base class for every PolyPrompt client, independent of transport. It owns logging, the call timeout
             (<see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>), the record of upstream calls (<see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>), telemetry scopes, JSON
             parsing helpers, and disposal. It declares no model operations and no transport: HTTP API clients derive from
             <see cref="T:PolyPrompt.Clients.HttpClientBase"/> (through one capability base per capability), and agent harness clients that drive a
-            local CLI process derive from <see cref="!:CliAgentClientBase"/>.
+            local CLI process derive from <see cref="T:PolyPrompt.Clients.CliAgentClientBase"/>.
             </summary>
         </member>
         <member name="F:PolyPrompt.Clients.ClientBase._Logging">
@@ -517,7 +830,7 @@
         <member name="P:PolyPrompt.Clients.ClientBase.CallDetails">
             <summary>
             Detached snapshot of the recorded details of upstream calls (HTTP requests or process executions) made by this
-            client, oldest first. Process executions are recorded as <see cref="!:ProcessCallDetail"/>.
+            client, oldest first. Process executions are recorded as <see cref="T:PolyPrompt.Models.ProcessCallDetail"/>.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.ClientBase.MaxCallDetails">
@@ -739,6 +1052,215 @@
             <param name="core">The operation.</param>
             <param name="token">Caller cancellation token.</param>
             <returns>The operation's result.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.CliInvocation">
+            <summary>
+            How an agent harness client starts its CLI for one run: the argument list and what to write to standard input.
+            Built by <see cref="M:PolyPrompt.Clients.CliAgentClientBase.BuildInvocation(PolyPrompt.Clients.CliRunState)"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliInvocation.Arguments">
+            <summary>
+            Arguments, in order, not including the executable. Passed directly to the process, never through a shell.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliInvocation.StandardInput">
+            <summary>
+            Text written to standard input, or null. Prompts travel here wherever the CLI accepts them on standard input,
+            so they are not limited by command-line length or platform quoting rules.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliInvocation.KeepStandardInputOpen">
+            <summary>
+            When true, standard input stays open after <see cref="P:PolyPrompt.Clients.CliInvocation.StandardInput"/> is written and is closed once the run
+            reports completion or failure (for request/response protocols such as an RPC mode). When the process has not
+            exited shortly after that, its tree is killed and the run keeps its reported outcome.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliInvocation.Environment">
+            <summary>
+            Extra environment variables for this run, applied over the client's and the request's environment.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.CliRunState">
+            <summary>
+            Inputs and accumulated outcome of one agent harness run. <see cref="T:PolyPrompt.Clients.CliAgentClientBase"/> creates it, passes it to
+            the client's <see cref="M:PolyPrompt.Clients.CliAgentClientBase.BuildInvocation(PolyPrompt.Clients.CliRunState)"/> and <see cref="M:PolyPrompt.Clients.CliAgentClientBase.ParseLine(System.String,PolyPrompt.Clients.CliRunState)"/>, and
+            turns it into the <see cref="T:PolyPrompt.Models.CliAgentResult"/> and the terminal event once the process exits. Parsers report what
+            they observe through the helper methods; they never emit <see cref="F:PolyPrompt.Models.CliAgentEventKind.Completed"/> or
+            <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/> themselves.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Request">
+            <summary>
+            The request being run.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Model">
+            <summary>
+            Model to request: the request's model, else the client's, else null for the harness default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.PermissionMode">
+            <summary>
+            Permission mode in effect: the request's, else the client's.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.WorkingDirectory">
+            <summary>
+            Working directory in effect, or null for the current directory.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.ResumeSessionId">
+            <summary>
+            Session to resume, or null to start a new session. Taken from <see cref="P:PolyPrompt.Models.CliAgentRequest.SessionId"/>, else from
+            the <c>sessionId</c> in the provider state of the latest history message that has one; always null when the
+            client cannot resume sessions.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Prompt">
+            <summary>
+            The prompt to send without system instructions: the request prompt, preceded by the replayed history when the
+            history is not carried by a resumed session.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.PromptWithSystem">
+            <summary>
+            <see cref="P:PolyPrompt.Clients.CliRunState.Prompt"/> preceded by the system instructions, for CLIs without a system-prompt option.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.SessionId">
+            <summary>
+            Session id reported by the harness.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.ReportedModel">
+            <summary>
+            Model reported by the harness, if any.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.FinalText">
+            <summary>
+            Final response text when the harness reports one explicitly; when null the concatenated text events are used.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Usage">
+            <summary>
+            Token usage exactly as reported, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.CostUsd">
+            <summary>
+            Cost in US dollars exactly as reported, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.ErrorMessage">
+            <summary>
+            Structured error message reported by the harness, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.FailureKind">
+            <summary>
+            Failure kind the parser determined, or null to let the client classify the failure.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Completed">
+            <summary>
+            True once the harness reported that the run finished successfully.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Failed">
+            <summary>
+            True once the harness reported a failure.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.AccumulatedText">
+            <summary>
+            Text accumulated from text events.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.AccumulatedReasoning">
+            <summary>
+            Reasoning accumulated from reasoning events, or null when there was none.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.Properties">
+            <summary>
+            Per-run scratch storage for the client's parser (for example tool calls already reported). Clients are shared
+            across concurrent runs, so per-run parser state belongs here rather than on the client.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.CurrentLine">
+            <summary>
+            Raw line being parsed; attached to events emitted while parsing it.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CliRunState.CurrentEventType">
+            <summary>
+            Provider event type being parsed; attached to events emitted while parsing it.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Emit(PolyPrompt.Models.CliAgentEvent)">
+            <summary>
+            Emit an event. <see cref="F:PolyPrompt.Models.CliAgentEventKind.Completed"/> and <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/> are not
+            allowed; use <see cref="M:PolyPrompt.Clients.CliRunState.Complete"/> and <see cref="M:PolyPrompt.Clients.CliRunState.Fail(System.String,System.Nullable{PolyPrompt.Models.CliFailureKind})"/>.
+            </summary>
+            <param name="evt">Event.</param>
+            <exception cref="T:System.ArgumentException">Thrown for terminal event kinds.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Started(System.String)">
+            <summary>
+            Record a started session.
+            </summary>
+            <param name="sessionId">Session id, or null.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Text(System.String)">
+            <summary>
+            Record assistant text and emit a <see cref="F:PolyPrompt.Models.CliAgentEventKind.TextDelta"/>.
+            </summary>
+            <param name="text">Text.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Reasoning(System.String)">
+            <summary>
+            Record reasoning text and emit a <see cref="F:PolyPrompt.Models.CliAgentEventKind.ReasoningDelta"/>.
+            </summary>
+            <param name="text">Reasoning text.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.ToolUse(System.String,System.String,System.String)">
+            <summary>
+            Emit a <see cref="F:PolyPrompt.Models.CliAgentEventKind.ToolUse"/>.
+            </summary>
+            <param name="toolName">Tool name.</param>
+            <param name="toolCallId">Tool call id, or null.</param>
+            <param name="input">Tool input, or null.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.ToolResult(System.String,System.String,System.String,System.Boolean)">
+            <summary>
+            Emit a <see cref="F:PolyPrompt.Models.CliAgentEventKind.ToolResult"/>.
+            </summary>
+            <param name="toolName">Tool name, or null.</param>
+            <param name="toolCallId">Tool call id, or null.</param>
+            <param name="output">Tool output, or null.</param>
+            <param name="isError">Whether the tool failed.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Notice(System.String,System.Boolean)">
+            <summary>
+            Emit a <see cref="F:PolyPrompt.Models.CliAgentEventKind.Notice"/>.
+            </summary>
+            <param name="text">Notice text.</param>
+            <param name="isError">Whether the notice reports a (non-fatal) error.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Complete">
+            <summary>
+            Record that the harness reported successful completion.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CliRunState.Fail(System.String,System.Nullable{PolyPrompt.Models.CliFailureKind})">
+            <summary>
+            Record a structured failure reported by the harness. The first failure wins.
+            </summary>
+            <param name="message">Error message.</param>
+            <param name="kind">Failure kind, or null to let the client classify it from the message.</param>
         </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
             <summary>
@@ -1377,8 +1899,8 @@
             <summary>
             Send an HTTP POST for streaming and return the response with its body unread. The timeout covers the
             whole response: <see cref="P:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Token"/> is linked to both the caller token and
-            <see cref="!:TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
-            <see cref="!:CallDetails"/>.
+            <see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
+            <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>.
             </summary>
             <param name="url">Full URL to call.</param>
             <param name="content">HTTP content to send.</param>
@@ -1817,6 +2339,95 @@
         </member>
         <member name="M:PolyPrompt.Clients.BedrockRerankClient.RerankCoreAsync(System.String,System.Collections.Generic.List{System.String},System.String,System.Nullable{System.Int32},PolyPrompt.Models.RerankOptions,System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Clients.CodexAgentClient">
+            <summary>
+            Agent harness client for the OpenAI Codex CLI (<c>codex</c>). Each run is <c>codex exec --json</c> with the prompt
+            on standard input; a session is resumed with <c>codex exec resume &lt;id&gt;</c>. Authentication is the CLI's own
+            (<c>codex login</c>, or <c>OPENAI_API_KEY</c>/<c>CODEX_API_KEY</c> in the environment).
+            <para>
+            Permission mapping: <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/> and <see cref="F:PolyPrompt.Models.CliPermissionMode.ReadOnly"/> use
+            <c>-c sandbox_mode="read-only"</c>; <see cref="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite"/> uses
+            <c>-c sandbox_mode="workspace-write"</c>; all three add <c>-c approval_policy="never"</c> so nothing waits for an
+            approval nobody can give. <see cref="F:PolyPrompt.Models.CliPermissionMode.Unrestricted"/> uses
+            <c>--dangerously-bypass-approvals-and-sandbox</c>. The read-only modes also pass <c>--skip-git-repo-check</c>, since
+            nothing can be modified; the writing modes keep Codex's requirement to run inside a Git repository.
+            </para>
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.CodexAgentClient.DefaultExecutable">
+            <summary>
+            Default executable name.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CodexAgentClient.SupportsSessionResume">
+            <summary>
+            Codex resumes sessions with <c>codex exec resume</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CodexAgentClient.HarnessName">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.#ctor(System.String,SyslogLogging.LoggingModule)">
+            <summary>
+            Initialize a Codex client.
+            </summary>
+            <param name="executable">Executable name or path. Default: <c>codex</c>.</param>
+            <param name="logging">Logging module. Default: new instance.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.ListModelsAsync(System.Threading.CancellationToken)">
+            <summary>
+            List the models in the Codex model catalog (<c>codex debug models</c>). <see cref="P:PolyPrompt.Models.ModelInformation.Name"/> is the
+            slug to pass as the model; the catalog's visibility, default reasoning level, and supported reasoning levels are
+            in <see cref="P:PolyPrompt.Models.ModelInformation.Metadata"/>.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The models.</returns>
+            <exception cref="T:PolyPrompt.Models.CliAgentException">Thrown when the CLI is missing or the command fails.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.BuildInvocation(PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Build <c>codex exec [resume &lt;id&gt;] --json ... -</c>; the prompt travels on standard input.
+            </summary>
+            <param name="state">Run state.</param>
+            <returns>The invocation.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.ParseLine(System.String,PolyPrompt.Clients.CliRunState)">
+            <summary>
+            Map one <c>codex exec --json</c> line.
+            <code>
+            thread.started {thread_id}                    -> Started (session id)
+            turn.started                                  -> (none)
+            item.started  command_execution|mcp_tool_call|web_search|file_change -> ToolUse
+            item.completed agent_message                  -> TextDelta (the last message is the final text)
+            item.completed reasoning                      -> ReasoningDelta
+            item.completed command_execution|mcp_tool_call|web_search|file_change -> ToolResult (ToolUse first if unseen)
+            item.completed todo_list                      -> Notice
+            item.completed error                          -> Notice (non-fatal, IsError)
+            item.updated                                  -> (none)
+            turn.completed {usage}                        -> usage; Completed is emitted by the base at exit
+            turn.failed {error.message}                   -> failure; Failed is emitted by the base at exit
+            error {message} "Reconnecting..."             -> Notice (IsError)
+            error {message} otherwise                     -> failure
+            </code>
+            Usage: input_tokens -> PromptTokens, cached_input_tokens -> CachedPromptTokens, cache_write_input_tokens ->
+            CacheCreationTokens, output_tokens -> CompletionTokens, reasoning_output_tokens -> ReasoningTokens. Codex reports
+            no total and no cost, so TotalTokens and CostUsd stay null.
+            </summary>
+            <param name="line">Line.</param>
+            <param name="state">Run state.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.CheckAuthenticationAsync(System.Threading.CancellationToken)">
+            <summary>
+            Check the login with <c>codex login status</c> (exit code zero when logged in).
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>The check.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.CodexAgentClient.DescribeError(System.String)">
+            <summary>
+            Codex reports upstream API errors as a JSON document inside the message; surface its message and code.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.CohereClassificationClient">
             <summary>
@@ -3197,6 +3808,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableDecimal">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.Double">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -3252,6 +3868,56 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliAgentEvent">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliAgentEventKind">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliAgentRequest">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliAgentResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliConnectivityResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliConnectivityStatus">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliFailureKind">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableCliFailureKind">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CliPermissionMode">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableCliPermissionMode">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.CompletionOptions">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -3273,6 +3939,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ModelInformation">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ProcessCallDetail">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3408,6 +4079,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListClassificationResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListCliAgentEvent">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -3586,6 +4262,186 @@
         <member name="M:PolyPrompt.Helpers.PolyPromptJsonContext.GetTypeInfo(System.Type)">
             <inheritdoc/>
         </member>
+        <member name="T:PolyPrompt.Helpers.ProcessRunner">
+            <summary>
+            Runs one child process without a shell and exposes its standard output as lines. Standard output is bounded by
+            <see cref="P:PolyPrompt.Helpers.ProcessRunRequest.MaxOutputCharacters"/> and standard error by
+            <see cref="P:PolyPrompt.Helpers.ProcessRunRequest.MaxStandardErrorCharacters"/>, so a runaway process cannot exhaust memory. The timeout,
+            the output limit, caller cancellation, and <see cref="M:PolyPrompt.Helpers.ProcessRunner.Dispose"/> all kill the entire process tree.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunner.ProcessId">
+            <summary>
+            Operating system process id.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunner.HasExited">
+            <summary>
+            True once the process has exited.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.Start(PolyPrompt.Helpers.ProcessRunRequest)">
+            <summary>
+            Start a process. The executable must already be resolved (see <see cref="M:PolyPrompt.Helpers.ProcessRunner.ResolveExecutable(System.String,System.String)"/>).
+            </summary>
+            <param name="request">What to start.</param>
+            <returns>The running process.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the file name is empty or a limit is not positive.</exception>
+            <exception cref="T:System.IO.FileNotFoundException">Thrown when the executable does not exist or cannot be started.</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.ResolveExecutable(System.String,System.String)">
+            <summary>
+            Resolve an executable name to a full path. A name containing a directory separator is checked as a path;
+            otherwise each directory on <paramref name="searchPath"/> (default: the <c>PATH</c> environment variable) is
+            searched, trying the <c>PATHEXT</c> extensions on Windows.
+            </summary>
+            <param name="executable">Executable name or path.</param>
+            <param name="searchPath">Search path to use instead of <c>PATH</c>, or null.</param>
+            <returns>The full path, or null when it was not found.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.ReadLineAsync(System.Threading.CancellationToken)">
+            <summary>
+            Read the next line of standard output. Line terminators (<c>\n</c> or <c>\r\n</c>) are removed; a final line
+            without a terminator is returned as is.
+            </summary>
+            <param name="token">Cancellation token. Cancelling kills the process tree.</param>
+            <returns>The line, or null once standard output has ended.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.WriteLineAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Write one line to standard input. Only valid when <see cref="P:PolyPrompt.Helpers.ProcessRunRequest.KeepStandardInputOpen"/> is true.
+            </summary>
+            <param name="line">Line to write (a newline is appended).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the line was written; false when standard input is closed or the process has exited.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.CloseStandardInput">
+            <summary>
+            Close standard input so the process sees end of file. Safe to call more than once.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.WaitForExitAsync(System.Threading.CancellationToken)">
+            <summary>
+            Wait for the process to exit and its output to drain, then report the outcome.
+            </summary>
+            <param name="token">Cancellation token. Cancelling kills the process tree.</param>
+            <returns>The outcome.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.Kill">
+            <summary>
+            Kill the process and all of its descendants. Safe to call more than once and after the process has exited.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.ProcessRunner.Dispose">
+            <summary>
+            Kill the process tree if it is still running and release resources.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Helpers.ProcessRunRequest">
+            <summary>
+            What <see cref="T:PolyPrompt.Helpers.ProcessRunner"/> should start. The process is always started directly, never through a shell, so
+            arguments are passed verbatim and need no quoting.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.FileName">
+            <summary>
+            Resolved path of the executable to start.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.Arguments">
+            <summary>
+            Arguments, in order. Each element is one argument.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.WorkingDirectory">
+            <summary>
+            Working directory, or null for the current directory.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.Environment">
+            <summary>
+            Environment overrides applied over the inherited environment. A null value removes the variable.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.StandardInput">
+            <summary>
+            Text written to standard input (UTF-8, no byte order mark), or null to write nothing.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.KeepStandardInputOpen">
+            <summary>
+            When false (the default) standard input is closed after <see cref="P:PolyPrompt.Helpers.ProcessRunRequest.StandardInput"/> is written. When true it
+            stays open for <see cref="M:PolyPrompt.Helpers.ProcessRunner.WriteLineAsync(System.String,System.Threading.CancellationToken)"/> until <see cref="M:PolyPrompt.Helpers.ProcessRunner.CloseStandardInput"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.TimeoutMs">
+            <summary>
+            Timeout for the whole run in milliseconds. When it elapses the process tree is killed. Default: 120000.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.MaxOutputCharacters">
+            <summary>
+            Maximum characters read from standard output before the process tree is killed. Default: 1,000,000.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunRequest.MaxStandardErrorCharacters">
+            <summary>
+            Maximum characters of standard error retained; the rest is read and discarded. Default: 65,536.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Helpers.ProcessRunResult">
+            <summary>
+            Outcome of a process started by <see cref="T:PolyPrompt.Helpers.ProcessRunner"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.ExitCode">
+            <summary>
+            Exit code, or null when the process did not exit (for example when it could not be killed).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.StandardError">
+            <summary>
+            Captured standard error, up to <see cref="P:PolyPrompt.Helpers.ProcessRunRequest.MaxStandardErrorCharacters"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.StandardErrorTruncated">
+            <summary>
+            True when standard error was longer than the retained portion.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.TimedOut">
+            <summary>
+            True when the process tree was killed because the timeout elapsed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.Cancelled">
+            <summary>
+            True when the process tree was killed because the caller cancelled.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.OutputTruncated">
+            <summary>
+            True when standard output exceeded the limit and the process tree was killed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.StandardOutputCharacters">
+            <summary>
+            Characters read from standard output.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.ProcessId">
+            <summary>
+            Operating system process id.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ProcessRunResult.DurationMs">
+            <summary>
+            Wall-clock run time in milliseconds.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Helpers.Serializer">
             <summary>
             JSON serializer used by PolyPrompt clients, built on System.Text.Json and safe for Native AOT and trimming.
@@ -3730,7 +4586,8 @@
         </member>
         <member name="T:PolyPrompt.Models.CallDetail">
             <summary>
-            Captures details of a single HTTP call made to an upstream completion endpoint.
+            Captures details of a single HTTP call made to an upstream completion endpoint. Process executions made by agent
+            harness clients are recorded as the derived <see cref="T:PolyPrompt.Models.ProcessCallDetail"/>.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.CallDetail.Url">
@@ -4143,6 +5000,494 @@
         <member name="P:PolyPrompt.Models.ClassificationResult.Labels">
             <summary>
             Every label the provider scored for this input, highest score first.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliAgentEvent">
+            <summary>
+            One event from an agent harness run. Fields that do not apply to the event's <see cref="P:PolyPrompt.Models.CliAgentEvent.Kind"/> are null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.Kind">
+            <summary>
+            Event kind.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.Text">
+            <summary>
+            Text for text, reasoning, and notice events; the final response text on <see cref="F:PolyPrompt.Models.CliAgentEventKind.Completed"/>;
+            the error message on <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ToolName">
+            <summary>
+            Harness tool name for tool events, for example <c>command_execution</c>, <c>Bash</c>, or <c>read</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ToolCallId">
+            <summary>
+            Harness identifier pairing a tool use with its result, when reported.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ToolInput">
+            <summary>
+            Tool input as reported by the harness (a command line or a JSON object rendered as text).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ToolOutput">
+            <summary>
+            Tool output as reported by the harness.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.IsError">
+            <summary>
+            True when a tool result or notice reports an error.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.SessionId">
+            <summary>
+            Session id, on <see cref="F:PolyPrompt.Models.CliAgentEventKind.Started"/> and terminal events.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.Usage">
+            <summary>
+            Token usage exactly as the harness reported it, on terminal events. Null when not reported.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.CostUsd">
+            <summary>
+            Cost in US dollars exactly as the harness reported it, on terminal events. Null when not reported; never
+            estimated.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.FailureKind">
+            <summary>
+            Failure reason, on <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ExitCode">
+            <summary>
+            Process exit code, on terminal events when the process exited.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.ProviderEventType">
+            <summary>
+            The harness's own event type, for example <c>item.completed</c> or <c>stream_event</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.Raw">
+            <summary>
+            The raw output line the event was parsed from, when there was one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentEvent.TimestampUtc">
+            <summary>
+            UTC time the event was observed.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.CliAgentEvent.#ctor">
+            <summary>
+            Initialize an empty event.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.CliAgentEvent.#ctor(PolyPrompt.Models.CliAgentEventKind,System.String)">
+            <summary>
+            Initialize an event.
+            </summary>
+            <param name="kind">Event kind.</param>
+            <param name="text">Event text.</param>
+        </member>
+        <member name="T:PolyPrompt.Models.CliAgentEventKind">
+            <summary>
+            Kind of a <see cref="T:PolyPrompt.Models.CliAgentEvent"/>. A harness stream is a sequence of agent events, not token deltas.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.Started">
+            <summary>
+            The harness started a session or turn. <see cref="P:PolyPrompt.Models.CliAgentEvent.SessionId"/> carries the session id when the
+            harness reports one.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.TextDelta">
+            <summary>
+            Assistant text. Depending on the harness this is a partial delta or a whole message; chunk boundaries are not
+            stable across runs or versions.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.ReasoningDelta">
+            <summary>
+            Reasoning or thinking text, when the harness exposes it.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.ToolUse">
+            <summary>
+            The harness invoked one of its own tools (shell command, file edit, search, MCP call, and so on). The harness
+            runs the tool itself; the caller only observes it.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.ToolResult">
+            <summary>
+            The result of a tool the harness ran.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.Notice">
+            <summary>
+            Informational or warning output from the harness, including stream lines PolyPrompt could not parse.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.Completed">
+            <summary>
+            The run finished successfully. Always the last event of a successful run.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliAgentEventKind.Failed">
+            <summary>
+            The run failed. Always the last event of a failed run; <see cref="P:PolyPrompt.Models.CliAgentEvent.FailureKind"/> says why.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliAgentException">
+            <summary>
+            Thrown by agent harness operations that return data rather than a <see cref="T:PolyPrompt.Models.CliAgentResult"/> (for example
+            <c>ListModelsAsync</c>) when the CLI cannot be run or reports a failure.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentException.FailureKind">
+            <summary>
+            Why the operation failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentException.ExitCode">
+            <summary>
+            Process exit code, or null when the process did not start or exit.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentException.StandardError">
+            <summary>
+            Captured standard error (bounded), or an empty string.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.CliAgentException.#ctor(PolyPrompt.Models.CliFailureKind,System.String,System.Nullable{System.Int32},System.String)">
+            <summary>
+            Initialize the exception.
+            </summary>
+            <param name="failureKind">Failure kind.</param>
+            <param name="message">Message.</param>
+            <param name="exitCode">Exit code, or null.</param>
+            <param name="standardError">Standard error, or null.</param>
+        </member>
+        <member name="T:PolyPrompt.Models.CliAgentRequest">
+            <summary>
+            One agent harness turn: a prompt plus how and where the harness should run it. Values left null fall back to the
+            client's own settings (<c>Model</c>, <c>PermissionMode</c>, <c>WorkingDirectory</c>, <c>TimeoutMs</c>).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.Prompt">
+            <summary>
+            The user prompt. Required; must not be empty or whitespace. Delivered over standard input wherever the CLI
+            supports it, so it is not limited by command-line length.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.SystemPrompt">
+            <summary>
+            Optional system instructions. Passed with the harness's own system-prompt flag where one exists, otherwise
+            prepended to the prompt, because harnesses have no system role.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.Model">
+            <summary>
+            Model to use, in the harness's own naming (for example <c>gpt-5-codex</c>, <c>sonnet</c>, or
+            <c>provider/model</c>). Null uses the client's model, and then the harness default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.SessionId">
+            <summary>
+            Session to resume, as returned in <see cref="P:PolyPrompt.Models.CliAgentResult.SessionId"/> by an earlier run. Null starts a new
+            session.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.History">
+            <summary>
+            Earlier conversation turns. Replayed into the prompt only when no <see cref="P:PolyPrompt.Models.CliAgentRequest.SessionId"/> is supplied or the
+            harness cannot resume sessions; when a session is resumed the harness already holds the history.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.WorkingDirectory">
+            <summary>
+            Directory the harness runs in and treats as its workspace. Null uses the client's working directory, and then
+            the current directory of this process.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.TimeoutMs">
+            <summary>
+            Timeout for the whole run in milliseconds. Null uses the client's <c>TimeoutMs</c>. When it elapses the process
+            tree is killed and the run fails with <see cref="F:PolyPrompt.Models.CliFailureKind.TimedOut"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.PermissionMode">
+            <summary>
+            What the harness may do. Null uses the client's permission mode, which defaults to
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.Environment">
+            <summary>
+            Environment variables for the process, applied over the client's environment. A null value removes the
+            variable from the inherited environment.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.ExtraArguments">
+            <summary>
+            Additional command-line options appended after the client's own arguments, in order. The key is the option
+            (for example <c>--max-turns</c>); a null or empty value passes the option alone. Arguments are passed directly to
+            the process, never through a shell.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentRequest.MaxOutputCharacters">
+            <summary>
+            Maximum number of characters read from standard output before the process tree is killed and the run fails
+            with <see cref="F:PolyPrompt.Models.CliFailureKind.OutputLimitExceeded"/>. Must be greater than zero. Default: 1,000,000.
+            </summary>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when set to zero or less.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.CliAgentRequest.#ctor">
+            <summary>
+            Initialize an empty request.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.CliAgentRequest.#ctor(System.String)">
+            <summary>
+            Initialize a request with a prompt.
+            </summary>
+            <param name="prompt">The user prompt.</param>
+        </member>
+        <member name="T:PolyPrompt.Models.CliAgentResult">
+            <summary>
+            Result of one agent harness run. <see cref="P:PolyPrompt.Models.ResponseBase.Success"/> is true only when the process exited cleanly
+            and the harness reported no error; otherwise <see cref="P:PolyPrompt.Models.CliAgentResult.FailureKind"/> says why and <see cref="P:PolyPrompt.Models.ResponseBase.Error"/>
+            carries the message. <see cref="P:PolyPrompt.Models.ResponseBase.StatusCode"/> is not used; see <see cref="P:PolyPrompt.Models.CliAgentResult.ExitCode"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.Text">
+            <summary>
+            Final assistant response text.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.Reasoning">
+            <summary>
+            Reasoning or thinking text the harness exposed, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.SessionId">
+            <summary>
+            Session id to pass as <see cref="P:PolyPrompt.Models.CliAgentRequest.SessionId"/> to continue this conversation, or null when the
+            harness did not report one. Also stored in <see cref="P:PolyPrompt.Models.ResponseBase.ProviderState"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.ExitCode">
+            <summary>
+            Process exit code, or null when the process could not be started or never exited on its own.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.StandardError">
+            <summary>
+            Captured standard error (bounded).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.Events">
+            <summary>
+            Every event observed, in order, ending with <see cref="F:PolyPrompt.Models.CliAgentEventKind.Completed"/> or
+            <see cref="F:PolyPrompt.Models.CliAgentEventKind.Failed"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.Usage">
+            <summary>
+            Token usage exactly as the harness reported it, or null when it did not.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.CostUsd">
+            <summary>
+            Cost in US dollars exactly as the harness reported it, or null; never estimated.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.RawOutput">
+            <summary>
+            Raw standard output (bounded by <see cref="P:PolyPrompt.Models.CliAgentRequest.MaxOutputCharacters"/>).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.FailureKind">
+            <summary>
+            Why the run failed, or <see cref="F:PolyPrompt.Models.CliFailureKind.None"/> on success.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.TimedOut">
+            <summary>
+            True when the run hit its timeout and the process tree was killed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.OutputTruncated">
+            <summary>
+            True when standard output exceeded the output limit and the process tree was killed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.MalformedLines">
+            <summary>
+            Number of standard output lines that could not be parsed. Each one also appears as a
+            <see cref="F:PolyPrompt.Models.CliAgentEventKind.Notice"/> event.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliAgentResult.Succeeded">
+            <summary>
+            Same as <see cref="P:PolyPrompt.Models.ResponseBase.Success"/>.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliConnectivityResult">
+            <summary>
+            Result of an agent harness connectivity check: whether the CLI is installed, runs, and is logged in.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.Status">
+            <summary>
+            Overall status.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.Success">
+            <summary>
+            True when <see cref="P:PolyPrompt.Models.CliConnectivityResult.Status"/> is <see cref="F:PolyPrompt.Models.CliConnectivityStatus.Ok"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.ExecutablePath">
+            <summary>
+            Resolved path of the executable, or null when it was not found.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.Version">
+            <summary>
+            Version string reported by the CLI, or null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.AuthenticationVerified">
+            <summary>
+            True when the CLI has a status command and it confirmed the login; false when the CLI offers no way to check,
+            in which case <see cref="P:PolyPrompt.Models.CliConnectivityResult.Status"/> reflects installation only.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.CliConnectivityResult.Message">
+            <summary>
+            Human-readable detail, for example the CLI's login status line or the reason a check failed.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliConnectivityStatus">
+            <summary>
+            Outcome of an agent harness connectivity check.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliConnectivityStatus.Ok">
+            <summary>
+            The harness is installed, runs, and (where the CLI can report it) is authenticated.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliConnectivityStatus.NotInstalled">
+            <summary>
+            The harness executable could not be found or started.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliConnectivityStatus.NotAuthenticated">
+            <summary>
+            The harness runs but is not logged in.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliConnectivityStatus.Error">
+            <summary>
+            The harness was found but its version or status command failed or timed out.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliFailureKind">
+            <summary>
+            Why an agent harness run or connectivity check failed.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.None">
+            <summary>
+            No failure.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.NotInstalled">
+            <summary>
+            The harness executable could not be found or started. Install the CLI or set the client's
+            <c>Executable</c> to its full path.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.NotAuthenticated">
+            <summary>
+            The harness is installed but not logged in, or its credentials were rejected.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.RateLimited">
+            <summary>
+            The harness or its model provider reported a rate limit, quota, or usage limit.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.TimedOut">
+            <summary>
+            The run exceeded its timeout and the process tree was killed.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.Crashed">
+            <summary>
+            The process exited with a non-zero code (or was killed by a signal) without reporting a structured error.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.ProviderError">
+            <summary>
+            The harness reported a structured error (for example an invalid model or a failed turn).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.InvalidInput">
+            <summary>
+            The harness rejected its input (for example an invalid argument or prompt).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.TurnLimitReached">
+            <summary>
+            The harness stopped because it reached its turn limit.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.InvalidOutput">
+            <summary>
+            The process exited successfully but its output could not be understood.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliFailureKind.OutputLimitExceeded">
+            <summary>
+            Standard output exceeded <see cref="P:PolyPrompt.Models.CliAgentRequest.MaxOutputCharacters"/> and the process tree was killed.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.CliPermissionMode">
+            <summary>
+            What an agent harness may do to the machine it runs on. Each harness client maps these modes to the closest
+            flags its CLI offers; the mapping is documented on each client. The default everywhere is
+            <see cref="F:PolyPrompt.Models.CliPermissionMode.Restricted"/>, and no client ever defaults to a mode that bypasses approvals or sandboxing.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliPermissionMode.Restricted">
+            <summary>
+            The most conservative mode the harness offers: read-only tools only, and anything that would need an approval
+            is denied because nobody is there to approve it. This is the default.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliPermissionMode.ReadOnly">
+            <summary>
+            The harness may read the workspace and run read-only commands, but may not modify files.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliPermissionMode.WorkspaceWrite">
+            <summary>
+            The harness may edit files inside the working directory without asking. Commands outside the workspace or
+            with network access stay restricted where the harness can enforce it.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CliPermissionMode.Unrestricted">
+            <summary>
+            Approvals and sandboxing are bypassed. Only use this inside an environment that is already isolated.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.CompletionOptions">
@@ -4712,6 +6057,70 @@
         <member name="P:PolyPrompt.Models.ModelPullProgress.PercentComplete">
             <summary>
             Percentage complete for the current layer (0.0 to 100.0). Null when total is unknown.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ProcessCallDetail">
+            <summary>
+            Details of one process execution made by an agent harness client, recorded in <c>CallDetails</c> next to HTTP
+            calls. The inherited fields keep their meaning: <see cref="P:PolyPrompt.Models.CallDetail.Method"/> is <c>EXEC</c>,
+            <see cref="P:PolyPrompt.Models.CallDetail.Url"/> is the resolved executable path, <see cref="P:PolyPrompt.Models.CallDetail.RequestBody"/> is the argument
+            list as a JSON array, <see cref="P:PolyPrompt.Models.CallDetail.StatusCode"/> is the exit code, <see cref="P:PolyPrompt.Models.CallDetail.ResponseBody"/> is
+            standard output (bounded), and <see cref="P:PolyPrompt.Models.CallDetail.Error"/> is the failure message or standard error.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.Executable">
+            <summary>
+            Executable as configured on the client, for example <c>codex</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.Arguments">
+            <summary>
+            Arguments passed to the process, in order (the executable itself is not included).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.WorkingDirectory">
+            <summary>
+            Working directory, or null for the current directory.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.StandardInput">
+            <summary>
+            Text written to standard input, or null when none was written.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.ExitCode">
+            <summary>
+            Process exit code, or null when the process could not be started.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.StandardError">
+            <summary>
+            Captured standard error (bounded).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.ProcessId">
+            <summary>
+            Operating system process id, or null when the process could not be started.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.TimedOut">
+            <summary>
+            True when the process tree was killed because the run timed out.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.Cancelled">
+            <summary>
+            True when the process tree was killed because the caller cancelled.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.OutputTruncated">
+            <summary>
+            True when standard output exceeded the configured limit and the process tree was killed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ProcessCallDetail.FailureKind">
+            <summary>
+            Failure classification, or <see cref="F:PolyPrompt.Models.CliFailureKind.None"/>.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ReasoningEffort">
@@ -6441,6 +7850,11 @@
             Live clients by provider and capability.
             </summary>
         </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ActiveProcesses">
+            <summary>
+            Running agent harness processes.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.OperationDuration">
             <summary>
             Operation duration histogram.
@@ -6509,6 +7923,16 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.HttpResponseBodySize">
             <summary>
             HTTP response body size histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ProcessDuration">
+            <summary>
+            Agent harness process duration histogram.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ProcessExecutions">
+            <summary>
+            Agent harness process counter.
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.DecisionQueueDuration">
@@ -6732,6 +8156,24 @@
             Histogram (bytes): HTTP response body size for non-streaming requests. Labels: provider, http.request.method.
             </summary>
         </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessDuration">
+            <summary>
+            Histogram (seconds): duration of each process an agent harness client runs, from spawn to exit. Labels:
+            provider, process.executable.name, process.exit.code, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessExecutions">
+            <summary>
+            Counter ({process}): processes run by agent harness clients, counted at exit. Labels: provider,
+            process.executable.name, process.exit.code, error.type.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessActive">
+            <summary>
+            Observable up-down counter ({process}): agent harness processes currently running. Labels: provider,
+            process.executable.name.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.DecisionQueueDuration">
             <summary>
             Histogram (seconds): time a decision batch item waited for a concurrency slot (the queued stage).
@@ -6949,6 +8391,22 @@
             HTTP response status code (OpenTelemetry key).
             </summary>
         </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessExecutableName">
+            <summary>
+            Executable name of a harness process (OpenTelemetry key), for example <c>codex</c>. Bounded by the set of
+            configured clients.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessExitCode">
+            <summary>
+            Exit code of a harness process (OpenTelemetry key).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ProcessPid">
+            <summary>
+            Operating system process id of a harness process (OpenTelemetry key). Span attribute only, never a metric label.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ServerAddress">
             <summary>
             Provider host (OpenTelemetry key). Endpoints are configured by the application, so the set is bounded.
@@ -7093,6 +8551,55 @@
             <summary>
             Operation value: <c>ValidateConnectivityAsync</c>.
             </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationAgentRun">
+            <summary>
+            Operation value: agent harness <c>RunAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationAgentRunStream">
+            <summary>
+            Operation value: agent harness <c>RunStreamingAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelList">
+            <summary>
+            Operation value: agent harness <c>ListModelsAsync</c>.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Telemetry.ProcessCallScope">
+            <summary>
+            Telemetry for one agent harness process: an <c>exec</c> client span, the process duration and execution metrics,
+            and the running-processes gauge. The process counterpart of <see cref="T:PolyPrompt.Telemetry.HttpCallScope"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Telemetry.ProcessCallScope.Activity">
+            <summary>
+            The process span, or null when nothing is listening.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.ProcessCallScope.Start(System.String,System.String,PolyPrompt.Telemetry.OperationScope)">
+            <summary>
+            Start a scope, or return null when nothing is listening or telemetry fails.
+            </summary>
+            <param name="provider">Provider label.</param>
+            <param name="executable">Executable name (not path), for example <c>codex</c>.</param>
+            <param name="operation">Enclosing operation scope, which receives the process error type.</param>
+            <returns>The scope, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.ProcessCallScope.SetProcessId(System.Int32)">
+            <summary>
+            Record the process id on the span.
+            </summary>
+            <param name="processId">Process id.</param>
+        </member>
+        <member name="M:PolyPrompt.Telemetry.ProcessCallScope.Complete(System.Nullable{System.Int32},System.String,System.Boolean)">
+            <summary>
+            End the scope. A null <paramref name="errorType"/> means the process ran and exited cleanly.
+            </summary>
+            <param name="exitCode">Exit code, or null when the process did not start or exit.</param>
+            <param name="errorType">Bounded error type, or null.</param>
+            <param name="callerCancelled">True when the caller cancelled; the error is then not reported to the operation.</param>
         </member>
         <member name="T:PolyPrompt.Wire.EventStreamDecoder">
             <summary>

@@ -1,0 +1,7 @@
+# A truncated JSON line mid-stream; the run continues and completes.
+stdin
+out {"type":"thread.started","thread_id":"01a18338-0000-7000-8000-000000000002"}
+out {"type":"item.completed","item":{"id":"item_0","type":"agent_mess
+out {"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"PONG"}}
+out {"type":"turn.completed","usage":{"input_tokens":18892,"cached_input_tokens":13184,"cache_write_input_tokens":0,"output_tokens":6,"reasoning_output_tokens":0}}
+exit 0

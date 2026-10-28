@@ -1,8 +1,10 @@
 namespace PolyPrompt.Models
 {
     /// <summary>
-    /// Captures details of a single HTTP call made to an upstream completion endpoint.
+    /// Captures details of a single HTTP call made to an upstream completion endpoint. Process executions made by agent
+    /// harness clients are recorded as the derived <see cref="ProcessCallDetail"/>.
     /// </summary>
+    [System.Text.Json.Serialization.JsonDerivedType(typeof(ProcessCallDetail), "process")]
     public class CallDetail
     {
         /// <summary>

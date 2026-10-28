@@ -211,7 +211,29 @@ namespace PolyPrompt.Clients
         /// <returns>A detached copy.</returns>
         protected static CallDetail CloneCallDetail(CallDetail detail)
         {
-            CallDetail clone = new CallDetail();
+            CallDetail clone;
+            if (detail is ProcessCallDetail process)
+            {
+                clone = new ProcessCallDetail
+                {
+                    Executable = process.Executable,
+                    Arguments = process.Arguments != null ? new List<string>(process.Arguments) : new List<string>(),
+                    WorkingDirectory = process.WorkingDirectory,
+                    StandardInput = process.StandardInput,
+                    ExitCode = process.ExitCode,
+                    StandardError = process.StandardError,
+                    ProcessId = process.ProcessId,
+                    TimedOut = process.TimedOut,
+                    Cancelled = process.Cancelled,
+                    OutputTruncated = process.OutputTruncated,
+                    FailureKind = process.FailureKind,
+                };
+            }
+            else
+            {
+                clone = new CallDetail();
+            }
+
             clone.Url = detail.Url;
             clone.Method = detail.Method;
             clone.RequestHeaders = detail.RequestHeaders != null ? new Dictionary<string, string>(detail.RequestHeaders) : new Dictionary<string, string>();

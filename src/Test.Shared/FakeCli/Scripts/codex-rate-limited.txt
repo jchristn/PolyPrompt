@@ -1,0 +1,6 @@
+# Codex usage-limit failure (message shape from codex-cli turn.failed events).
+stdin
+out {"type":"thread.started","thread_id":"01a18337-0000-7000-8000-000000000001"}
+out {"type":"turn.started"}
+out {"type":"turn.failed","error":{"message":"exceeded retry limit, last status: 429 Too Many Requests, request id: req_123"}}
+exit 1
