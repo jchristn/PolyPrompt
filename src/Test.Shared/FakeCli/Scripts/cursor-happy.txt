@@ -1,0 +1,38 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). Usage shape from the CLI source (turnEnded -> result.usage).
+ifarg --version
+out 2026.10.22-27dcf5f
+exit 0
+endif
+ifarg status
+out {"status":"authenticated","isAuthenticated":true,"hasAccessToken":true,"hasRefreshToken":true,"message":"Logged in (user details not available)"}
+exit 0
+endif
+ifarg models
+out Available models
+out
+out auto - Auto
+out composer-2.5 - Composer 2.5 (default)
+out sonnet-4.6-thinking - Claude 4.6 Sonnet (Thinking) (current)
+out gpt-5.4-high - GPT-5.4 High
+out
+out Tip: use --model <id> (or /model <id> in interactive mode) to switch.
+exit 0
+endif
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work/project","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","model":"Claude 4.6 Sonnet","permissionMode":"default"}
+out {"type":"user","message":{"role":"user","content":[{"type":"text","text":"List the files."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+out {"type":"thinking","subtype":"delta","text":"Reading a.txt ","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000000}
+out {"type":"thinking","subtype":"delta","text":"answers the question.","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000010}
+out {"type":"thinking","subtype":"completed","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000020}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I will read "}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000100}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"a.txt."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000110}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I will read a.txt."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","model_call_id":"mc-0001","timestamp_ms":1793200000120}
+out {"type":"tool_call","subtype":"started","call_id":"toolu_vrtx_01NnjaR886UcE8whekg2MGJd","tool_call":{"readToolCall":{"args":{"path":"a.txt"}}},"model_call_id":"mc-0001","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000130}
+out {"type":"tool_call","subtype":"completed","call_id":"toolu_vrtx_01NnjaR886UcE8whekg2MGJd","tool_call":{"readToolCall":{"args":{"path":"a.txt"},"result":{"success":{"content":"hello","isEmpty":false,"exceededLimit":false,"totalLines":1,"totalChars":5}}}},"model_call_id":"mc-0001","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000140}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"It says "}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000200}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hello."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","timestamp_ms":1793200000210}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"It says hello."}]},"session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff"}
+out {"type":"result","subtype":"success","duration_ms":5234,"duration_api_ms":5234,"is_error":false,"result":"I will read a.txt.It says hello.","session_id":"c6b62c6f-7ead-4fd6-9922-e952131177ff","request_id":"10e11780-df2f-45dc-a1ff-4540af32e9c0","usage":{"inputTokens":7,"outputTokens":548,"cacheReadTokens":147695,"cacheWriteTokens":39331}}
+exit 0

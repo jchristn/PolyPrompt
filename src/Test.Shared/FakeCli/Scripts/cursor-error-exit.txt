@@ -1,0 +1,10 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). Cursor writes run errors to stderr as String(error)
+# (connect-es "ConnectError: [code] message") after the session started, then exits 1; it emits no error event.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work/project","session_id":"6f1d2b0e-3a4c-4d5e-8f60-718293a4b5c6","model":"Auto","permissionMode":"default"}
+out {"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]},"session_id":"6f1d2b0e-3a4c-4d5e-8f60-718293a4b5c6"}
+err Warning: Failed to flush local agent state (disk full)
+err ConnectError: [invalid_argument] Model 'no-such-model-xyz' is not available for this account.
+exit 1

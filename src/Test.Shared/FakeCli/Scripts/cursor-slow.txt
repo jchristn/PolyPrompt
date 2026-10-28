@@ -1,0 +1,10 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). Starts a session, spawns a long-running child (to prove the whole tree is
+# killed), then hangs.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work/project","session_id":"8b3f4d20-5c6e-4f70-a182-93a4b5c6d7e8","model":"Auto","permissionMode":"default"}
+child 30
+sleep 30
+out {"type":"result","subtype":"success","duration_ms":1,"duration_api_ms":1,"is_error":false,"result":"late","session_id":"8b3f4d20-5c6e-4f70-a182-93a4b5c6d7e8"}
+exit 0

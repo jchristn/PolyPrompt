@@ -1,0 +1,9 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). A truncated JSON line mid-stream; the run continues and completes.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"env","cwd":"/work/project","session_id":"7a2e3c1f-4b5d-4e6f-9071-8293a4b5c6d7","model":"Auto","permissionMode":"default"}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"te
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"PONG"}]},"session_id":"7a2e3c1f-4b5d-4e6f-9071-8293a4b5c6d7","timestamp_ms":1793200001000}
+out {"type":"result","subtype":"success","duration_ms":900,"duration_api_ms":900,"is_error":false,"result":"PONG","session_id":"7a2e3c1f-4b5d-4e6f-9071-8293a4b5c6d7","request_id":"20e11780-df2f-45dc-a1ff-4540af32e9c0"}
+exit 0

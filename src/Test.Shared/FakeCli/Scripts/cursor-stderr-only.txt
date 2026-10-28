@@ -1,0 +1,4 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# The CLI's argument parser (commander) rejects an unknown option before any output: stderr only, exit code 1.
+err error: unknown option '--bogus'
+exit 1

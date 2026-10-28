@@ -1,0 +1,6 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# A runaway harness writing one enormous line.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work/project","session_id":"9c4a5e31-6d7f-4081-b293-a4b5c6d7e8f9","model":"Auto","permissionMode":"default"}
+spam 5000000
+exit 0

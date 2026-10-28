@@ -1,0 +1,9 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). Usage-limit failure after the session started:
+# resource_exhausted is the connect code the CLI maps HTTP 429 to; the message text is illustrative.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"login","cwd":"/work/project","session_id":"0d5b6f42-7e80-4192-a3a4-b5c6d7e8f901","model":"Auto","permissionMode":"default"}
+out {"type":"user","message":{"role":"user","content":[{"type":"text","text":"hello"}]},"session_id":"0d5b6f42-7e80-4192-a3a4-b5c6d7e8f901"}
+err ConnectError: [resource_exhausted] You have hit your usage limit. Try again later.
+exit 1

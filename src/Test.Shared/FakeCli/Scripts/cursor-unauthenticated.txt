@@ -1,0 +1,13 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# Messages and the status JSON shape come from the published cursor-agent package 2026.10.22-27dcf5f: "status"
+# exits 0 and reports isAuthenticated false; a print-mode run exits 1 before reading stdin or starting a session.
+ifarg --version
+out 2026.10.22-27dcf5f
+exit 0
+endif
+ifarg status
+out {"status":"unauthenticated","isAuthenticated":false,"hasAccessToken":false,"hasRefreshToken":false,"message":"Not logged in"}
+exit 0
+endif
+err Error: Authentication required. Please run 'cursor-agent login' first, or set CURSOR_API_KEY environment variable.
+exit 1

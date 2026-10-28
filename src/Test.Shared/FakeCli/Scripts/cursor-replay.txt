@@ -1,0 +1,24 @@
+# Constructed, not recorded: the Cursor CLI is not installed here. Event shapes follow
+# https://cursor.com/docs/cli/reference/output-format and the print-mode writer in the published cursor-agent
+# package 2026.10.22-27dcf5f (inspected statically, not run). Covers the duplicate assistant flushes (before a tool call, before a
+# retry event, at the end of the turn), retry and connection events, a background task notification, the generic
+# tool_call.function form, and a non-success tool result. The "rejected" result key and its "reason" field follow
+# the CLI source's shell result cases; the run reports no usage.
+stdin
+out {"type":"system","subtype":"init","apiKeySource":"flag","cwd":"/work/project","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","model":"GPT-5.4 High","permissionMode":"default"}
+out {"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12"}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Checking "}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002000}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Checking "}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002010}
+out {"type":"retry","subtype":"starting","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002020,"attempt":1,"is_resume":true}
+out {"type":"retry","subtype":"resuming","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002030,"checkpoint_turn_count":1,"attempt":2}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"the repo."}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002100}
+out {"type":"connection","subtype":"reconnecting","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002110,"attempt":2}
+out {"type":"connection","subtype":"reconnected","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002120}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"the repo."}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","model_call_id":"mc-0002","timestamp_ms":1793200002130}
+out {"type":"tool_call","subtype":"started","call_id":"call_02","tool_call":{"function":{"name":"grep","arguments":"{\"pattern\":\"TODO\"}"}},"model_call_id":"mc-0002","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002140}
+out {"type":"tool_call","subtype":"completed","call_id":"call_02","tool_call":{"function":{"name":"grep","arguments":"{\"pattern\":\"TODO\"}","result":{"rejected":{"reason":"Denied in print mode"}}}},"model_call_id":"mc-0002","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002150}
+out {"type":"system","subtype":"task_notification","task_id":"task-1","status":"completed","title":"Indexing","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002160}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","timestamp_ms":1793200002200}
+out {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]},"session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12"}
+out {"type":"result","subtype":"success","duration_ms":3000,"duration_api_ms":3000,"is_error":false,"result":"Checking the repo.Done.","session_id":"1e6c7053-8f91-42a3-b4b5-c6d7e8f90a12","request_id":"30e11780-df2f-45dc-a1ff-4540af32e9c0"}
+exit 0
