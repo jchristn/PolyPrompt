@@ -8,7 +8,7 @@ namespace PolyPrompt.Clients
     /// Base class for sparse (lexical, SPLADE-style) embedding clients. Supports a single input and a batch of inputs.
     /// Settings come from <see cref="Defaults"/>, overridden per call by a <see cref="SparseEmbeddingOptions"/>.
     /// </summary>
-    public abstract class SparseEmbeddingClientBase : ClientBase
+    public abstract class SparseEmbeddingClientBase : HttpClientBase
     {
         #region Public-Members
 

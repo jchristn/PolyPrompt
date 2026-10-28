@@ -64,7 +64,7 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             List<Type> clients = typeof(ClientBase).Assembly.GetExportedTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && typeof(ClientBase).IsAssignableFrom(t))
+                .Where(t => t.IsClass && !t.IsAbstract && typeof(HttpClientBase).IsAssignableFrom(t))
                 .ToList();
 
             foreach (Type client in clients)
@@ -77,7 +77,7 @@ namespace Test.Shared
             foreach (Type capability in _CapabilityBases)
             {
                 SharedAssert.True(capability.IsAbstract, capability.Name + " should be abstract.");
-                SharedAssert.True(capability.BaseType == typeof(ClientBase), capability.Name + " should derive directly from ClientBase.");
+                SharedAssert.True(capability.BaseType == typeof(HttpClientBase), capability.Name + " should derive directly from HttpClientBase.");
 
                 List<string> actual = clients.Where(c => capability.IsAssignableFrom(c)).Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
                 List<string> expected = _ExpectedClients[capability].OrderBy(n => n, StringComparer.Ordinal).ToList();
@@ -110,8 +110,8 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            List<ClientBase> first = LocalClients.All("http://127.0.0.1:1");
-            List<ClientBase> second = LocalClients.All("http://127.0.0.1:1");
+            List<HttpClientBase> first = LocalClients.All("http://127.0.0.1:1");
+            List<HttpClientBase> second = LocalClients.All("http://127.0.0.1:1");
             try
             {
                 Dictionary<Type, Type> optionsTypes = new Dictionary<Type, Type>
@@ -123,7 +123,7 @@ namespace Test.Shared
 
                 for (int i = 0; i < first.Count; i++)
                 {
-                    ClientBase client = first[i];
+                    HttpClientBase client = first[i];
                     string name = client.GetType().Name;
                     if (client is ModelClientBase)
                     {
@@ -289,7 +289,7 @@ namespace Test.Shared
         private static async Task RunNoModelAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<ClientBase> clients = LocalClients.All(server.Endpoint);
+            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
                 foreach (CompletionClientBase client in clients.OfType<CompletionClientBase>())
@@ -458,7 +458,7 @@ namespace Test.Shared
             OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "key-e", httpClient: shared) { Model = "test-model" };
             TypeSafeDecisionClient typeSafe = new TypeSafeDecisionClient(server.Endpoint, "key-f", httpClient: shared);
             OpenAiEmbeddingClient embedding = new OpenAiEmbeddingClient(server.Endpoint, "key-g", httpClient: shared);
-            List<ClientBase> clients = new List<ClientBase> { openAiA, openAiB, anthropic, gemini, ollama, typeSafe, embedding };
+            List<HttpClientBase> clients = new List<HttpClientBase> { openAiA, openAiB, anthropic, gemini, ollama, typeSafe, embedding };
 
             await openAiA.ChatAsync("hi", token: token).ConfigureAwait(false);
             await openAiB.ChatAsync("hi", token: token).ConfigureAwait(false);
@@ -507,7 +507,7 @@ namespace Test.Shared
                 SharedAssert.NotNull(await models.GetModelInformationAsync("test-model", token).ConfigureAwait(false), "Gemini model information should be found.");
                 SharedAssert.True(await chat.ValidateConnectivityAsync(token).ConfigureAwait(false), "Gemini connectivity should succeed with the header key.");
 
-                foreach (ClientBase client in new ClientBase[] { chat, embed, models })
+                foreach (HttpClientBase client in new HttpClientBase[] { chat, embed, models })
                 {
                     foreach (CallDetail detail in client.CallDetails)
                     {
@@ -529,10 +529,10 @@ namespace Test.Shared
         private static async Task RunConnectivitySuccessAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<ClientBase> clients = LocalClients.All(server.Endpoint);
+            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
-                foreach (ClientBase client in clients)
+                foreach (HttpClientBase client in clients)
                 {
                     SharedAssert.True(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " should report a reachable server.");
                 }
@@ -547,11 +547,11 @@ namespace Test.Shared
         {
             LocalFakeHandler unauthorized = LocalFakeHandler.Always(HttpStatusCode.Unauthorized, "{\"error\":{\"message\":\"bad key\"}}");
             using HttpClient http = new HttpClient(unauthorized);
-            List<ClientBase> rejected = LocalClients.All("http://polyprompt.test", http);
-            List<ClientBase> unreachable = LocalClients.All("http://127.0.0.1:1");
+            List<HttpClientBase> rejected = LocalClients.All("http://polyprompt.test", http);
+            List<HttpClientBase> unreachable = LocalClients.All("http://127.0.0.1:1");
             try
             {
-                foreach (ClientBase client in rejected)
+                foreach (HttpClientBase client in rejected)
                 {
                     SharedAssert.False(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " should report failure on HTTP 401.");
                 }
@@ -577,10 +577,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CancellationTokenSource cancelled = new CancellationTokenSource();
             cancelled.Cancel();
-            List<ClientBase> clients = LocalClients.All(server.Endpoint);
+            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
-                foreach (ClientBase client in clients)
+                foreach (HttpClientBase client in clients)
                 {
                     await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ValidateConnectivityAsync(cancelled.Token), client.GetType().Name + " should rethrow caller cancellation.").ConfigureAwait(false);
                 }

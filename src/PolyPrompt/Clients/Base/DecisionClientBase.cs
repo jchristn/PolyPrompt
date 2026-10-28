@@ -11,7 +11,7 @@ namespace PolyPrompt.Clients
     /// generated text. Requests are validated before any network call. Settings come from <see cref="Defaults"/>,
     /// overridden per call by a <see cref="DecisionOptions"/>.
     /// </summary>
-    public abstract class DecisionClientBase : ClientBase
+    public abstract class DecisionClientBase : HttpClientBase
     {
         #region Private-Members
 

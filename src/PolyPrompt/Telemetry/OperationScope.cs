@@ -86,7 +86,7 @@ namespace PolyPrompt.Telemetry
                 Activity.SetTag(PolyPromptTelemetryNames.Operation, operation);
                 Activity.SetTag(PolyPromptTelemetryNames.GenAiOperationName, _GenAiOperation ?? operation);
                 if (!string.IsNullOrWhiteSpace(model)) Activity.SetTag(PolyPromptTelemetryNames.RequestModel, model);
-                if (Uri.TryCreate(client.Endpoint, UriKind.Absolute, out Uri? endpoint))
+                if (client is HttpClientBase httpClient && Uri.TryCreate(httpClient.Endpoint, UriKind.Absolute, out Uri? endpoint))
                 {
                     Activity.SetTag(PolyPromptTelemetryNames.ServerAddress, endpoint.Host);
                     Activity.SetTag(PolyPromptTelemetryNames.ServerPort, endpoint.Port);

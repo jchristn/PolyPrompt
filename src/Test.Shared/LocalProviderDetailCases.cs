@@ -49,7 +49,7 @@ namespace Test.Shared
             using OllamaCloudCompletionClient completion = new OllamaCloudCompletionClient("test-cloud-token", httpClient: http) { Model = "test-model" };
             using OllamaCloudEmbeddingClient embedding = new OllamaCloudEmbeddingClient("test-cloud-token", httpClient: http) { Model = "test-embed" };
             using OllamaCloudModelClient models = new OllamaCloudModelClient("test-cloud-token", httpClient: http);
-            foreach (ClientBase client in new ClientBase[] { completion, embedding, models })
+            foreach (HttpClientBase client in new HttpClientBase[] { completion, embedding, models })
             {
                 SharedAssert.Equal("https://ollama.com:443", client.Endpoint, "Endpoint must be fixed.");
                 SharedAssert.True(await client.ValidateConnectivityAsync(token), "Cloud connectivity should use native tags.");
@@ -372,13 +372,13 @@ namespace Test.Shared
                 configuration.CredentialsPath = null;
 
                 using LiveProvider provider = LiveProvider.Create(configuration);
-                Dictionary<string, ClientBase?> clients = new Dictionary<string, ClientBase?>
+                Dictionary<string, HttpClientBase?> clients = new Dictionary<string, HttpClientBase?>
                 {
                     { "completion", provider.Completion }, { "embedding", provider.Embedding }, { "sparse", provider.SparseEmbedding },
                     { "rerank", provider.Rerank }, { "classification", provider.Classification }, { "decision", provider.Decision }, { "models", provider.Models },
                 };
 
-                foreach (KeyValuePair<string, ClientBase?> entry in clients)
+                foreach (KeyValuePair<string, HttpClientBase?> entry in clients)
                 {
                     SharedAssert.Equal(ProviderLiveSuite.Supports(providerType, entry.Key), entry.Value != null, providerType + " " + entry.Key + " client presence should match the live suite's capability table.");
                 }

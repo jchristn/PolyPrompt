@@ -30,11 +30,11 @@ namespace Test.Shared
         /// <summary>
         /// Every non-null client.
         /// </summary>
-        public List<ClientBase> All
+        public List<HttpClientBase> All
         {
             get
             {
-                return new List<ClientBase?> { Completion, Embedding, SparseEmbedding, Rerank, Classification, Decision, Models }
+                return new List<HttpClientBase?> { Completion, Embedding, SparseEmbedding, Rerank, Classification, Decision, Models }
                     .Where(client => client != null)
                     .Select(client => client!)
                     .ToList();
@@ -147,7 +147,7 @@ namespace Test.Shared
             }
 
             provider.ApplyModels();
-            foreach (ClientBase client in provider.All) client.TimeoutMs = 120000;
+            foreach (HttpClientBase client in provider.All) client.TimeoutMs = 120000;
             return provider;
         }
 
@@ -157,7 +157,7 @@ namespace Test.Shared
 
         public void Dispose()
         {
-            foreach (ClientBase client in All) client.Dispose();
+            foreach (HttpClientBase client in All) client.Dispose();
         }
 
         #endregion

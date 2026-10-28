@@ -39,7 +39,7 @@ namespace TeiConsole
             _ClassificationClient = new TeiClassificationClient(endpoint, key);
             _ModelClient = new TeiModelClient(endpoint, key);
 
-            foreach (ClientBase client in AllClients())
+            foreach (HttpClientBase client in AllClients())
             {
                 client.TimeoutMs = timeoutMs;
             }
@@ -58,7 +58,7 @@ namespace TeiConsole
 
             ShutdownSharedConsole();
 
-            foreach (ClientBase client in AllClients())
+            foreach (HttpClientBase client in AllClients())
             {
                 client.Dispose();
             }
@@ -68,9 +68,9 @@ namespace TeiConsole
 
         #region Private-Methods
 
-        private static List<ClientBase> AllClients()
+        private static List<HttpClientBase> AllClients()
         {
-            return new List<ClientBase> { _EmbeddingClient, _SparseClient, _RerankClient, _ClassificationClient, _ModelClient };
+            return new List<HttpClientBase> { _EmbeddingClient, _SparseClient, _RerankClient, _ClassificationClient, _ModelClient };
         }
 
         private static async Task ProcessCommand(string input)
@@ -386,7 +386,7 @@ namespace TeiConsole
 
             try
             {
-                foreach (ClientBase client in AllClients())
+                foreach (HttpClientBase client in AllClients())
                 {
                     bool ok = await client.ValidateConnectivityAsync().ConfigureAwait(false);
                     Console.WriteLine("Connectivity (" + client.GetType().Name + "): " + (ok ? "OK" : "FAILED"));

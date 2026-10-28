@@ -927,7 +927,7 @@ namespace Test.Shared
             ClassificationResponse classify = await badClassifyClient.ClassifyAsync("hi", null, token).ConfigureAwait(false);
             AssertHttpFailure(classify.Success, classify.StatusCode, classify.Error, 404, "Cohere classification");
 
-            foreach (ClientBase badClient in new List<ClientBase> { bad, badEmbedClient, badRerankClient, badClassifyClient, badModelClient })
+            foreach (HttpClientBase badClient in new List<HttpClientBase> { bad, badEmbedClient, badRerankClient, badClassifyClient, badModelClient })
             {
                 SharedAssert.False(await badClient.ValidateConnectivityAsync(token).ConfigureAwait(false), badClient.GetType().Name + " connectivity validation should fail against a bad path.");
             }
@@ -1038,7 +1038,7 @@ namespace Test.Shared
                 async () => { await foreach (ModelInformation m in modelClient.ListModelsAsync(c).ConfigureAwait(false)) { } },
                 "Cohere ListModelsAsync should respect cancellation.").ConfigureAwait(false);
 
-            foreach (ClientBase each in new List<ClientBase> { client, embedClient, rerankClient, classifyClient, modelClient })
+            foreach (HttpClientBase each in new List<HttpClientBase> { client, embedClient, rerankClient, classifyClient, modelClient })
             {
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => each.ValidateConnectivityAsync(c), each.GetType().Name + " ValidateConnectivityAsync should respect cancellation.").ConfigureAwait(false);
             }
@@ -1250,7 +1250,7 @@ namespace Test.Shared
         private static async Task RunTeiValidateConnectivityAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<ClientBase> teiClients = new List<ClientBase>
+            List<HttpClientBase> teiClients = new List<HttpClientBase>
             {
                 CreateTeiClient(server), CreateTeiSparseClient(server), CreateTeiRerankClient(server), CreateTeiClassificationClient(server), CreateTeiModelClient(server)
             };
@@ -1265,7 +1265,7 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (ClientBase c in teiClients) c.Dispose();
+                foreach (HttpClientBase c in teiClients) c.Dispose();
             }
 
             using TeiEmbeddingClient bad = new TeiEmbeddingClient(server.Endpoint + "/missing");
@@ -1522,7 +1522,7 @@ namespace Test.Shared
             };
         }
 
-        private static T Configure<T>(T client) where T : ClientBase
+        private static T Configure<T>(T client) where T : HttpClientBase
         {
             client.TimeoutMs = 2000;
             return client;

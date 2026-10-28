@@ -484,36 +484,16 @@
         </member>
         <member name="T:PolyPrompt.Clients.ClientBase">
             <summary>
-            Base class for every PolyPrompt client. It owns the HTTP transport (timeouts, cancellation, per-request
-            credentials), the record of upstream calls (<see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>), JSON parsing helpers, and connectivity
-            validation. It declares no model operations: each capability (completions, embeddings, reranking, and so on)
-            has its own base class that derives from this one, and each provider supplies one client per capability.
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Clients.ClientBase._OwnsHttpClient">
-            <summary>
-            Whether this instance created (and therefore owns and disposes) <see cref="F:PolyPrompt.Clients.ClientBase._HttpClient"/>.
-            False when the client was supplied by the caller, in which case the caller retains ownership.
+            Base class for every PolyPrompt client, independent of transport. It owns logging, the call timeout
+            (<see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>), the record of upstream calls (<see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>), telemetry scopes, JSON
+            parsing helpers, and disposal. It declares no model operations and no transport: HTTP API clients derive from
+            <see cref="T:PolyPrompt.Clients.HttpClientBase"/> (through one capability base per capability), and agent harness clients that drive a
+            local CLI process derive from <see cref="!:CliAgentClientBase"/>.
             </summary>
         </member>
         <member name="F:PolyPrompt.Clients.ClientBase._Logging">
             <summary>
             Logging module.
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Clients.ClientBase._Endpoint">
-            <summary>
-            Endpoint URL.
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Clients.ClientBase._ApiKey">
-            <summary>
-            API key (nullable).
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Clients.ClientBase._HttpClient">
-            <summary>
-            HTTP client for API requests.
             </summary>
         </member>
         <member name="F:PolyPrompt.Clients.ClientBase._Serializer">
@@ -526,26 +506,18 @@
             Header prefix for log messages, for example <c>[OpenAI] </c>.
             </summary>
         </member>
-        <member name="P:PolyPrompt.Clients.ClientBase.Endpoint">
-            <summary>
-            The endpoint URL for this client (read-only, set in constructor).
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Clients.ClientBase.ApiKey">
-            <summary>
-            The API key for this client (read-only, set in constructor). Returns null if not set.
-            </summary>
-        </member>
         <member name="P:PolyPrompt.Clients.ClientBase.TimeoutMs">
             <summary>
-            HTTP request timeout in milliseconds. Must be greater than zero. Default: 120000.
-            For streaming operations the timeout covers the whole response, including the body.
+            Call timeout in milliseconds. Must be greater than zero. Default: 120000.
+            For HTTP streaming operations the timeout covers the whole response, including the body; for agent harness
+            clients it covers the whole process run unless the request sets its own timeout.
             </summary>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown when set to zero or less.</exception>
         </member>
         <member name="P:PolyPrompt.Clients.ClientBase.CallDetails">
             <summary>
-            Detached snapshot of the recorded details of HTTP calls made by this client, oldest first.
+            Detached snapshot of the recorded details of upstream calls (HTTP requests or process executions) made by this
+            client, oldest first. Process executions are recorded as <see cref="!:ProcessCallDetail"/>.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.ClientBase.MaxCallDetails">
@@ -559,36 +531,12 @@
             Bounded provider label used on telemetry, for example <c>openai</c> or <c>aws.bedrock</c>.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+        <member name="M:PolyPrompt.Clients.ClientBase.#ctor(SyslogLogging.LoggingModule)">
             <summary>
             Initialize a new client.
             </summary>
-            <param name="endpoint">Endpoint URL.</param>
-            <param name="apiKey">API key (nullable).</param>
             <param name="logging">Logging module.</param>
-            <param name="httpClient">
-            Optional HTTP client to use for all requests. When supplied, the caller retains ownership and is
-            responsible for disposing it; <see cref="M:PolyPrompt.Clients.ClientBase.Dispose"/> will not dispose an injected client. This lets
-            callers configure the transport (for example a custom <see cref="T:System.Net.Http.HttpClientHandler"/>
-            that relaxes TLS certificate validation, or a proxy), and lets several clients share one connection
-            pool. When null, an internally owned client is created. The client's <see cref="P:System.Net.Http.HttpClient.Timeout"/>
-            is set to <see cref="F:System.Threading.Timeout.InfiniteTimeSpan"/> (per-request timeouts are enforced via
-            <see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>); if an injected client has already sent a request its timeout cannot be
-            changed and is left as configured, so callers sharing a client should give it an infinite timeout.
-            Clients never modify <see cref="P:System.Net.Http.HttpClient.DefaultRequestHeaders"/>; credentials and provider headers
-            are attached to each request, so a shared client is safe to use across providers.
-            </param>
-            <exception cref="T:System.ArgumentNullException">Thrown when endpoint or logging is null.</exception>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)">
-            <summary>
-            Verify that the provider is reachable and accepts this client's credentials. Returns false on an HTTP
-            error status, an unreachable server, or a request timeout; rethrows only cancellation requested through
-            <paramref name="token"/>.
-            </summary>
-            <param name="token">Cancellation token.</param>
-            <returns>True when the provider responded successfully, false otherwise.</returns>
-            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown when logging is null.</exception>
         </member>
         <member name="M:PolyPrompt.Clients.ClientBase.ClearCallDetails">
             <summary>
@@ -597,159 +545,13 @@
         </member>
         <member name="M:PolyPrompt.Clients.ClientBase.Dispose">
             <summary>
-            Dispose of HTTP client resources. An HTTP client supplied by the caller is not disposed.
+            Dispose of client resources. An HTTP client supplied by the caller is not disposed.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.BuildUrl(System.String)">
+        <member name="M:PolyPrompt.Clients.ClientBase.DisposeResources">
             <summary>
-            Build a full URL from the endpoint and a path (with optional query string).
+            Release transport resources owned by the derived client. Called once from <see cref="M:PolyPrompt.Clients.ClientBase.Dispose"/>.
             </summary>
-            <param name="pathAndQuery">Path beginning with a slash, for example <c>/v1/models</c>.</param>
-            <returns>The absolute URL.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.ProbeAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Send a GET to <paramref name="url"/> and report whether it succeeded. Used to implement
-            <see cref="M:PolyPrompt.Clients.ClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)"/>. Returns false on an HTTP error status, a transport failure, or a
-            timeout; rethrows only cancellation requested through <paramref name="token"/>.
-            </summary>
-            <param name="url">URL to probe.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>True when the response has a success status code.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)">
-            <summary>
-            POST <paramref name="body"/> as JSON and fill <paramref name="response"/>: the status code, then either the
-            HTTP error (status and body) or the result of <paramref name="parse"/>, and the elapsed time. A parser reports
-            a malformed provider response by setting <see cref="P:PolyPrompt.Models.ResponseBase.Error"/>; <see cref="P:PolyPrompt.Models.ResponseBase.Success"/>
-            is true when the status is successful and no error was set. Transport failures are reported on the response;
-            cancellation and timeouts (<see cref="T:System.OperationCanceledException"/>) propagate.
-            </summary>
-            <typeparam name="TResponse">Response type.</typeparam>
-            <param name="response">The response to fill (with its model already set).</param>
-            <param name="operation">Operation name for log messages, for example "chat".</param>
-            <param name="url">Full URL.</param>
-            <param name="body">Request body.</param>
-            <param name="parse">Parses a successful response body into the response.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The filled response.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.ExecuteGetAsync``1(``0,System.String,System.String,System.Action{System.String,``0},System.Threading.CancellationToken)">
-            <summary>
-            GET <paramref name="url"/> and fill <paramref name="response"/>. See
-            <see cref="M:PolyPrompt.Clients.ClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)"/>.
-            </summary>
-            <typeparam name="TResponse">Response type.</typeparam>
-            <param name="response">The response to fill.</param>
-            <param name="operation">Operation name for log messages.</param>
-            <param name="url">Full URL.</param>
-            <param name="parse">Parses a successful response body into the response.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The filled response.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.ExecuteStreamingAsync``1(``0,System.String,System.String,System.Object,System.Action{PolyPrompt.Clients.ClientBase.StreamingHttpResult,System.Diagnostics.Stopwatch},System.Threading.CancellationToken)">
-            <summary>
-            POST <paramref name="body"/> as JSON for a streaming response. On a successful status,
-            <paramref name="attach"/> is called with the open stream and a stopwatch started before the request, and
-            must set the response's chunk enumerable; the stream resources are then owned by that enumerable. On an
-            HTTP error the body is read into <see cref="P:PolyPrompt.Models.ResponseBase.Error"/> and the resources are released. Transport
-            failures are reported on the response; cancellation and timeouts propagate.
-            </summary>
-            <typeparam name="TResponse">Streaming response type.</typeparam>
-            <param name="response">The response to fill.</param>
-            <param name="operation">Operation name for log messages.</param>
-            <param name="url">Full URL.</param>
-            <param name="body">Request body.</param>
-            <param name="attach">Attaches the chunk enumerable to the response.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The response, ready to enumerate when successful.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.GetAndRecordAsync(System.String,System.Threading.CancellationToken)">
-            <summary>
-            Send a GET to an upstream endpoint and record the call details.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>An HttpCallResult containing the response and body.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.DeleteAndRecordAsync(System.String,System.String,System.Threading.CancellationToken)">
-            <summary>
-            Send an HTTP DELETE with an optional JSON body and record the call details.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="requestBodyJson">JSON body, or null for none.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>An HttpCallResult containing the response and body.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.PostAndRecordAsync(System.String,System.Net.Http.StringContent,System.String,System.Threading.CancellationToken)">
-            <summary>
-            Send an HTTP POST to an upstream endpoint and record the call details.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="content">HTTP content to send.</param>
-            <param name="requestBodyJson">Request body as a JSON string (for recording and signing).</param>
-            <param name="token">Cancellation token.</param>
-            <returns>An HttpCallResult containing the response and body.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.PostJsonAsync(System.String,System.Object,System.Threading.CancellationToken)">
-            <summary>
-            Serialize <paramref name="body"/> and POST it as JSON, recording the call details.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="body">Request body.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>An HttpCallResult containing the response and body.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)">
-            <summary>
-            Send an HTTP POST for streaming and return the response with its body unread. The timeout covers the
-            whole response: <see cref="P:PolyPrompt.Clients.ClientBase.StreamingHttpResult.Token"/> is linked to both the caller token and
-            <see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
-            <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="content">HTTP content to send.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The HTTP response message with stream content, and the resources that must be disposed with it.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.PostStreamingJsonAsync(System.String,System.Object,System.Threading.CancellationToken)">
-            <summary>
-            Serialize <paramref name="body"/> and POST it as JSON for streaming. See <see cref="M:PolyPrompt.Clients.ClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)"/>.
-            </summary>
-            <param name="url">Full URL to call.</param>
-            <param name="body">Request body.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The streaming result.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
-            <summary>
-            Hook invoked after an outbound <see cref="T:System.Net.Http.HttpRequestMessage"/> is built and its body serialized,
-            immediately before the request is sent. Clients override this to attach credentials and provider
-            headers to the request: a static API key header, a freshly refreshed OAuth bearer token, or an AWS
-            SigV4 signature computed over <paramref name="body"/>. For a GET (or any request without a body)
-            <paramref name="body"/> is an empty array, which for SigV4 hashes to the well-known empty-payload digest.
-            The default implementation does nothing.
-            </summary>
-            <param name="request">The request about to be sent. Add or replace headers on it as needed.</param>
-            <param name="body">The exact request body bytes (empty for bodyless requests).</param>
-            <param name="token">Cancellation token.</param>
-            <returns>A task that completes once the request has been prepared.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.CaptureRequestHeaders(System.Net.Http.HttpRequestMessage)">
-            <summary>
-            Captures the effective request headers: the HTTP client's default headers overlaid with any headers
-            (and content headers) attached to this specific request, so credentials added by
-            <see cref="M:PolyPrompt.Clients.ClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> are reflected in recorded <see cref="T:PolyPrompt.Models.CallDetail"/>s.
-            </summary>
-            <param name="request">The outbound request.</param>
-            <returns>The merged request headers.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.CaptureResponseHeaders(System.Net.Http.HttpResponseMessage)">
-            <summary>
-            Captures response and content headers into a retained dictionary.
-            </summary>
-            <param name="response">HTTP response.</param>
-            <returns>Response headers.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.ClientBase.RecordCallDetail(PolyPrompt.Models.CallDetail)">
             <summary>
@@ -763,13 +565,6 @@
             </summary>
             <param name="detail">Call detail.</param>
             <returns>A detached copy.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.StripQuery(System.String)">
-            <summary>
-            Remove the query string from a URL, for logging URLs that carry an API key.
-            </summary>
-            <param name="url">URL.</param>
-            <returns>The URL without its query string.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.ClientBase.Pick``2(System.Object,System.Object,System.Func{``0,System.Nullable{``1}})">
             <summary>
@@ -896,13 +691,6 @@
             <param name="json">Tool-call arguments JSON.</param>
             <returns>The arguments object, or an empty dictionary.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.DescribeHttpError(PolyPrompt.Models.HttpCallResult)">
-            <summary>
-            Build an unsuccessful-response error message from an HTTP result.
-            </summary>
-            <param name="result">HTTP result.</param>
-            <returns>A message that includes the status code and response body.</returns>
-        </member>
         <member name="M:PolyPrompt.Clients.ClientBase.InstrumentAsync``1(System.String,System.String,System.Action{PolyPrompt.Telemetry.OperationScope},System.Func{System.Threading.Tasks.Task{``0}},System.Threading.CancellationToken)">
             <summary>
             Run an operation that returns a response inside a telemetry scope (span plus metrics). When nothing is
@@ -951,35 +739,6 @@
             <param name="core">The operation.</param>
             <param name="token">Caller cancellation token.</param>
             <returns>The operation's result.</returns>
-        </member>
-        <member name="T:PolyPrompt.Clients.ClientBase.StreamingHttpResult">
-            <summary>
-            Holds the HTTP response and timeout resources for a streaming request.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Clients.ClientBase.StreamingHttpResult.Response">
-            <summary>
-            HTTP response message.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Clients.ClientBase.StreamingHttpResult.Token">
-            <summary>
-            Token linked to the caller token and the configured timeout.
-            </summary>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.StreamingHttpResult.#ctor(System.Net.Http.HttpResponseMessage,System.Threading.CancellationTokenSource,System.Threading.CancellationTokenSource,System.Net.Http.HttpRequestMessage)">
-            <summary>
-            Initialize a streaming result.
-            </summary>
-            <param name="response">HTTP response.</param>
-            <param name="timeoutCts">Timeout cancellation source.</param>
-            <param name="linkedCts">Linked cancellation source.</param>
-            <param name="request">HTTP request.</param>
-        </member>
-        <member name="M:PolyPrompt.Clients.ClientBase.StreamingHttpResult.Dispose">
-            <summary>
-            Dispose streaming request resources.
-            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.CompletionClientBase">
             <summary>
@@ -1438,6 +1197,275 @@
             <param name="options">Per-call options.</param>
             <returns>The model, or null when none is set and none is required.</returns>
             <exception cref="T:System.InvalidOperationException">Thrown when a model is required and none is set.</exception>
+        </member>
+        <member name="T:PolyPrompt.Clients.HttpClientBase">
+            <summary>
+            Base class for every HTTP API client. It owns the HTTP transport (endpoint, per-request credentials, timeouts,
+            cancellation), recording of HTTP calls into <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>, and the HTTP connectivity probe.
+            It declares no model operations: each capability (completions, embeddings, reranking, and so on) has its own base
+            class that derives from this one, and each provider supplies one client per capability.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.HttpClientBase._OwnsHttpClient">
+            <summary>
+            Whether this instance created (and therefore owns and disposes) <see cref="F:PolyPrompt.Clients.HttpClientBase._HttpClient"/>.
+            False when the client was supplied by the caller, in which case the caller retains ownership.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.HttpClientBase._Endpoint">
+            <summary>
+            Endpoint URL.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.HttpClientBase._ApiKey">
+            <summary>
+            API key (nullable).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.HttpClientBase._HttpClient">
+            <summary>
+            HTTP client for API requests.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.Endpoint">
+            <summary>
+            The endpoint URL for this client (read-only, set in constructor).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.ApiKey">
+            <summary>
+            The API key for this client (read-only, set in constructor). Returns null if not set.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.#ctor(System.String,System.String,SyslogLogging.LoggingModule,System.Net.Http.HttpClient)">
+            <summary>
+            Initialize a new client.
+            </summary>
+            <param name="endpoint">Endpoint URL.</param>
+            <param name="apiKey">API key (nullable).</param>
+            <param name="logging">Logging module.</param>
+            <param name="httpClient">
+            Optional HTTP client to use for all requests. When supplied, the caller retains ownership and is
+            responsible for disposing it; <see cref="M:PolyPrompt.Clients.ClientBase.Dispose"/> will not dispose an injected client. This lets
+            callers configure the transport (for example a custom <see cref="T:System.Net.Http.HttpClientHandler"/>
+            that relaxes TLS certificate validation, or a proxy), and lets several clients share one connection
+            pool. When null, an internally owned client is created. The client's <see cref="P:System.Net.Http.HttpClient.Timeout"/>
+            is set to <see cref="F:System.Threading.Timeout.InfiniteTimeSpan"/> (per-request timeouts are enforced via
+            <see cref="P:PolyPrompt.Clients.ClientBase.TimeoutMs"/>); if an injected client has already sent a request its timeout cannot be
+            changed and is left as configured, so callers sharing a client should give it an infinite timeout.
+            Clients never modify <see cref="P:System.Net.Http.HttpClient.DefaultRequestHeaders"/>; credentials and provider headers
+            are attached to each request, so a shared client is safe to use across providers.
+            </param>
+            <exception cref="T:System.ArgumentNullException">Thrown when endpoint or logging is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)">
+            <summary>
+            Verify that the provider is reachable and accepts this client's credentials. Returns false on an HTTP
+            error status, an unreachable server, or a request timeout; rethrows only cancellation requested through
+            <paramref name="token"/>.
+            </summary>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the provider responded successfully, false otherwise.</returns>
+            <exception cref="T:System.OperationCanceledException">Thrown when <paramref name="token"/> is cancelled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.DisposeResources">
+            <summary>
+            Dispose the HTTP client when this instance created it. An HTTP client supplied by the caller is not disposed.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.BuildUrl(System.String)">
+            <summary>
+            Build a full URL from the endpoint and a path (with optional query string).
+            </summary>
+            <param name="pathAndQuery">Path beginning with a slash, for example <c>/v1/models</c>.</param>
+            <returns>The absolute URL.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ProbeAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send a GET to <paramref name="url"/> and report whether it succeeded. Used to implement
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.ValidateConnectivityAsync(System.Threading.CancellationToken)"/>. Returns false on an HTTP error status, a transport failure, or a
+            timeout; rethrows only cancellation requested through <paramref name="token"/>.
+            </summary>
+            <param name="url">URL to probe.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the response has a success status code.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)">
+            <summary>
+            POST <paramref name="body"/> as JSON and fill <paramref name="response"/>: the status code, then either the
+            HTTP error (status and body) or the result of <paramref name="parse"/>, and the elapsed time. A parser reports
+            a malformed provider response by setting <see cref="P:PolyPrompt.Models.ResponseBase.Error"/>; <see cref="P:PolyPrompt.Models.ResponseBase.Success"/>
+            is true when the status is successful and no error was set. Transport failures are reported on the response;
+            cancellation and timeouts (<see cref="T:System.OperationCanceledException"/>) propagate.
+            </summary>
+            <typeparam name="TResponse">Response type.</typeparam>
+            <param name="response">The response to fill (with its model already set).</param>
+            <param name="operation">Operation name for log messages, for example "chat".</param>
+            <param name="url">Full URL.</param>
+            <param name="body">Request body.</param>
+            <param name="parse">Parses a successful response body into the response.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The filled response.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteGetAsync``1(``0,System.String,System.String,System.Action{System.String,``0},System.Threading.CancellationToken)">
+            <summary>
+            GET <paramref name="url"/> and fill <paramref name="response"/>. See
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)"/>.
+            </summary>
+            <typeparam name="TResponse">Response type.</typeparam>
+            <param name="response">The response to fill.</param>
+            <param name="operation">Operation name for log messages.</param>
+            <param name="url">Full URL.</param>
+            <param name="parse">Parses a successful response body into the response.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The filled response.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteStreamingAsync``1(``0,System.String,System.String,System.Object,System.Action{PolyPrompt.Clients.HttpClientBase.StreamingHttpResult,System.Diagnostics.Stopwatch},System.Threading.CancellationToken)">
+            <summary>
+            POST <paramref name="body"/> as JSON for a streaming response. On a successful status,
+            <paramref name="attach"/> is called with the open stream and a stopwatch started before the request, and
+            must set the response's chunk enumerable; the stream resources are then owned by that enumerable. On an
+            HTTP error the body is read into <see cref="P:PolyPrompt.Models.ResponseBase.Error"/> and the resources are released. Transport
+            failures are reported on the response; cancellation and timeouts propagate.
+            </summary>
+            <typeparam name="TResponse">Streaming response type.</typeparam>
+            <param name="response">The response to fill.</param>
+            <param name="operation">Operation name for log messages.</param>
+            <param name="url">Full URL.</param>
+            <param name="body">Request body.</param>
+            <param name="attach">Attaches the chunk enumerable to the response.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The response, ready to enumerate when successful.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.GetAndRecordAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send a GET to an upstream endpoint and record the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.DeleteAndRecordAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP DELETE with an optional JSON body and record the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="requestBodyJson">JSON body, or null for none.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostAndRecordAsync(System.String,System.Net.Http.StringContent,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP POST to an upstream endpoint and record the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="content">HTTP content to send.</param>
+            <param name="requestBodyJson">Request body as a JSON string (for recording and signing).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostJsonAsync(System.String,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Serialize <paramref name="body"/> and POST it as JSON, recording the call details.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="body">Request body.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP POST for streaming and return the response with its body unread. The timeout covers the
+            whole response: <see cref="P:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Token"/> is linked to both the caller token and
+            <see cref="!:TimeoutMs"/>, and must be used while reading the body. Streaming calls are not recorded in
+            <see cref="!:CallDetails"/>.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="content">HTTP content to send.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The HTTP response message with stream content, and the resources that must be disposed with it.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostStreamingJsonAsync(System.String,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Serialize <paramref name="body"/> and POST it as JSON for streaming. See <see cref="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)"/>.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="body">Request body.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The streaming result.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <summary>
+            Hook invoked after an outbound <see cref="T:System.Net.Http.HttpRequestMessage"/> is built and its body serialized,
+            immediately before the request is sent. Clients override this to attach credentials and provider
+            headers to the request: a static API key header, a freshly refreshed OAuth bearer token, or an AWS
+            SigV4 signature computed over <paramref name="body"/>. For a GET (or any request without a body)
+            <paramref name="body"/> is an empty array, which for SigV4 hashes to the well-known empty-payload digest.
+            The default implementation does nothing.
+            </summary>
+            <param name="request">The request about to be sent. Add or replace headers on it as needed.</param>
+            <param name="body">The exact request body bytes (empty for bodyless requests).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A task that completes once the request has been prepared.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.CaptureRequestHeaders(System.Net.Http.HttpRequestMessage)">
+            <summary>
+            Captures the effective request headers: the HTTP client's default headers overlaid with any headers
+            (and content headers) attached to this specific request, so credentials added by
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> are reflected in recorded <see cref="T:PolyPrompt.Models.CallDetail"/>s.
+            </summary>
+            <param name="request">The outbound request.</param>
+            <returns>The merged request headers.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.CaptureResponseHeaders(System.Net.Http.HttpResponseMessage)">
+            <summary>
+            Captures response and content headers into a retained dictionary.
+            </summary>
+            <param name="response">HTTP response.</param>
+            <returns>Response headers.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.StripQuery(System.String)">
+            <summary>
+            Remove the query string from a URL, for logging URLs that carry an API key.
+            </summary>
+            <param name="url">URL.</param>
+            <returns>The URL without its query string.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.DescribeHttpError(PolyPrompt.Models.HttpCallResult)">
+            <summary>
+            Build an unsuccessful-response error message from an HTTP result.
+            </summary>
+            <param name="result">HTTP result.</param>
+            <returns>A message that includes the status code and response body.</returns>
+        </member>
+        <member name="T:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult">
+            <summary>
+            Holds the HTTP response and timeout resources for a streaming request.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Response">
+            <summary>
+            HTTP response message.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Token">
+            <summary>
+            Token linked to the caller token and the configured timeout.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.#ctor(System.Net.Http.HttpResponseMessage,System.Threading.CancellationTokenSource,System.Threading.CancellationTokenSource,System.Net.Http.HttpRequestMessage)">
+            <summary>
+            Initialize a streaming result.
+            </summary>
+            <param name="response">HTTP response.</param>
+            <param name="timeoutCts">Timeout cancellation source.</param>
+            <param name="linkedCts">Linked cancellation source.</param>
+            <param name="request">HTTP request.</param>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Dispose">
+            <summary>
+            Dispose streaming request resources.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.ModelClientBase">
             <summary>

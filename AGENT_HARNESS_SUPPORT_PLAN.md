@@ -258,7 +258,9 @@ Architecture-level tests that will fail until updated: `LocalArchitectureCases` 
 
 * Seven clients exist, all deriving from `CliAgentClientBase`, none from `CompletionClientBase`.
 * `AGENT_HARNESS_SUPPORT_PLAN.md`, README, `STREAMING.md`, `TELEMETRY.md`, `AOT.md`, and `CHANGELOG.md` all describe the same seven providers and the same permission defaults.
-* `dotnet test src/Test.Nunit` and `src/Test.Xunit` green with no fake-CLI tests skipped.
+* README is updated with setup, prerequisites, and usage examples for the seven harness clients; `CHANGELOG.md` records the new support and the release version.
+* All applicable package, assembly, and release version declarations are updated consistently for a minor version release (`major.minor.patch` → `major.(minor + 1).0`).
+* All existing and new test cases pass, including `dotnet test src/Test.Nunit` and `dotnet test src/Test.Xunit`, with no fake-CLI tests skipped.
 * `Test.Aot` passes on JIT and native for all seven, with request digests matching.
 * No new package references in `PolyPrompt.csproj`.
 * Every adapter distinguishes *not installed*, *not authenticated*, *timed out*, *crashed*, and *succeeded*.

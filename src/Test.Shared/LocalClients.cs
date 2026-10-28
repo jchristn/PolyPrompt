@@ -21,9 +21,9 @@ namespace Test.Shared
         /// <summary>
         /// Every client, pointed at the endpoint. Cohere clients use the Cohere test key so the local server routes them.
         /// </summary>
-        public static List<ClientBase> All(string endpoint, HttpClient? httpClient = null)
+        public static List<HttpClientBase> All(string endpoint, HttpClient? httpClient = null)
         {
-            List<ClientBase> clients = new List<ClientBase>();
+            List<HttpClientBase> clients = new List<HttpClientBase>();
             clients.AddRange(Completion(endpoint, httpClient));
             clients.AddRange(Embedding(endpoint, httpClient));
             clients.Add(new TeiSparseEmbeddingClient(endpoint, TestKey, httpClient: httpClient));
@@ -31,7 +31,7 @@ namespace Test.Shared
             clients.AddRange(Classification(endpoint, httpClient));
             clients.Add(new TypeSafeDecisionClient(endpoint, TestKey, httpClient: httpClient));
             clients.AddRange(Models(endpoint, httpClient));
-            foreach (ClientBase client in clients) client.TimeoutMs = 3000;
+            foreach (HttpClientBase client in clients) client.TimeoutMs = 3000;
             return clients;
         }
 
@@ -104,12 +104,12 @@ namespace Test.Shared
             });
         }
 
-        public static void DisposeAll(IEnumerable<ClientBase> clients)
+        public static void DisposeAll(IEnumerable<HttpClientBase> clients)
         {
-            foreach (ClientBase client in clients) client.Dispose();
+            foreach (HttpClientBase client in clients) client.Dispose();
         }
 
-        private static List<T> Timed<T>(List<T> clients) where T : ClientBase
+        private static List<T> Timed<T>(List<T> clients) where T : HttpClientBase
         {
             foreach (T client in clients) client.TimeoutMs = 3000;
             return clients;

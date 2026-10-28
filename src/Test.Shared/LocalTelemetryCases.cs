@@ -555,11 +555,11 @@ namespace Test.Shared
         private static async Task RunProviderLabelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<ClientBase> clients = LocalClients.All(server.Endpoint);
+            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
                 using TelemetryCapture capture = new TelemetryCapture("tel_provider_labels");
-                foreach (ClientBase client in clients)
+                foreach (HttpClientBase client in clients)
                 {
                     await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
                 }
@@ -580,7 +580,7 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (ClientBase client in clients) client.Dispose();
+                foreach (HttpClientBase client in clients) client.Dispose();
             }
         }
 

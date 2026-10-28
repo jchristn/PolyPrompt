@@ -12,7 +12,7 @@ namespace PolyPrompt.Clients
     /// <see cref="CompletionOptions"/> (or a provider-specific subtype). The public methods validate arguments and merge
     /// settings, then call the provider's protected <c>...CoreAsync</c> implementation.
     /// </summary>
-    public abstract class CompletionClientBase : ClientBase
+    public abstract class CompletionClientBase : HttpClientBase
     {
         #region Public-Members
 

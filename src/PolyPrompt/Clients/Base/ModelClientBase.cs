@@ -8,7 +8,7 @@ namespace PolyPrompt.Clients
     /// Base class for model catalog clients: list the models a provider serves, check whether one exists, and look up
     /// its details. Providers that can also download or remove models (Ollama) add those operations on their own client.
     /// </summary>
-    public abstract class ModelClientBase : ClientBase
+    public abstract class ModelClientBase : HttpClientBase
     {
         #region Constructors-and-Factories
 

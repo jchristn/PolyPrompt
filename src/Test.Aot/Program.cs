@@ -229,10 +229,10 @@ namespace Test.Aot
 
         private static async Task RunClientChecksAsync(LocalOpenAiTestServer server)
         {
-            List<ClientBase> clients = LocalClients.All(server.Endpoint);
+            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
-                foreach (ClientBase client in clients)
+                foreach (HttpClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     SetModel(client);
@@ -299,7 +299,7 @@ namespace Test.Aot
             }).ConfigureAwait(false);
         }
 
-        private static void SetModel(ClientBase client)
+        private static void SetModel(HttpClientBase client)
         {
             switch (client)
             {

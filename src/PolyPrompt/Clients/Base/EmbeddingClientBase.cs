@@ -8,7 +8,7 @@ namespace PolyPrompt.Clients
     /// Base class for dense embedding clients. Supports a single input and a batch of inputs. Settings come from
     /// <see cref="Defaults"/>, overridden per call by an <see cref="EmbeddingOptions"/> (or a provider-specific subtype).
     /// </summary>
-    public abstract class EmbeddingClientBase : ClientBase
+    public abstract class EmbeddingClientBase : HttpClientBase
     {
         #region Public-Members
 

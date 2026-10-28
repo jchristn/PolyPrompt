@@ -11,7 +11,7 @@ namespace PolyPrompt.Clients
     /// client-side otherwise), and <see cref="RerankOptions.ReturnDocuments"/> attaches document text from the caller's
     /// list. Settings come from <see cref="Defaults"/>, overridden per call by a <see cref="RerankOptions"/>.
     /// </summary>
-    public abstract class RerankClientBase : ClientBase
+    public abstract class RerankClientBase : HttpClientBase
     {
         #region Public-Members
 

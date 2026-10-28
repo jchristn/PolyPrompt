@@ -166,7 +166,7 @@ namespace Test.Shared
 
             using LiveProvider provider = LiveProvider.Create(configuration);
 
-            foreach (ClientBase client in provider.All)
+            foreach (HttpClientBase client in provider.All)
             {
                 string name = client.GetType().Name;
                 SharedAssert.True(configuration.ProviderType == "vertex" || configuration.ProviderType == "bedrock" || !string.IsNullOrEmpty(client.Endpoint), name + " Endpoint should be set.");
@@ -627,7 +627,7 @@ namespace Test.Shared
         private static async Task RunCallDetailsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            ClientBase recorded;
+            HttpClientBase recorded;
 
             if (provider.Completion != null)
             {
@@ -742,13 +742,13 @@ namespace Test.Shared
         private static async Task RunValidateConnectivityTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            foreach (ClientBase client in provider.All)
+            foreach (HttpClientBase client in provider.All)
             {
                 SharedAssert.True(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " ValidateConnectivityAsync should return true with a valid endpoint.");
             }
 
             using LiveProvider bad = LiveProvider.Create(configuration, "http://localhost:1");
-            foreach (ClientBase client in bad.All)
+            foreach (HttpClientBase client in bad.All)
             {
                 client.TimeoutMs = 5000;
                 SharedAssert.False(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), client.GetType().Name + " ValidateConnectivityAsync should return false with an unreachable endpoint.");
@@ -793,7 +793,7 @@ namespace Test.Shared
             if (provider.Models != null)
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Models.GetModelInformationAsync("x", c), "GetModelInformationAsync should respect a pre-cancelled token.").ConfigureAwait(false);
 
-            foreach (ClientBase client in provider.All)
+            foreach (HttpClientBase client in provider.All)
             {
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ValidateConnectivityAsync(c), client.GetType().Name + " ValidateConnectivityAsync should respect a pre-cancelled token.").ConfigureAwait(false);
             }

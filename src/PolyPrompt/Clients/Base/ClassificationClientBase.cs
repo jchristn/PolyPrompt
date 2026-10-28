@@ -9,7 +9,7 @@ namespace PolyPrompt.Clients
     /// set. Supports a single input and a batch of inputs. For instruction-driven questions over arbitrary state with
     /// calibrated confidence, see <see cref="DecisionClientBase"/>.
     /// </summary>
-    public abstract class ClassificationClientBase : ClientBase
+    public abstract class ClassificationClientBase : HttpClientBase
     {
         #region Public-Members
 
