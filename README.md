@@ -8,23 +8,34 @@
 
 PolyPrompt is a lightweight, unified .NET library for chat completions, tool calling, text generation, embeddings, reranking, classification, decision models, and model management across **Ollama**, **Ollama Cloud**, **OpenAI**, **xAI Grok**, **Azure OpenAI**, **Google Gemini**, **Google Vertex AI**, **Anthropic Claude**, **AWS Bedrock**, **VoyageAI**, **Cohere**, **Hugging Face Text Embeddings Inference (TEI)**, and **TypeSafe** (Jev and the local Ollaya runtime). Write your integration code once against a capability, and swap providers without changing your application logic.
 
+Since 3.6 it also drives local **agent harnesses** (**Claude Code**, **Codex**, **Gemini CLI**, **Cursor CLI**, **Mux**, **Pi**, and **OpenCode**) through one `CliAgentClientBase` API: run an agent turn, stream its events, resume its session, and check that the CLI is installed and logged in. See [Agent Harnesses](#agent-harnesses).
+
 > **Upgrading from 2.x?** Version 3.0 splits each provider client into one client per capability. See [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md).
 
-| Provider | Completion | Embedding | Rerank | Classification | Decision | Models | Auth |
-|---|---|---|---|---|---|---|---|
-| xAI Grok | `XAiCompletionClient` | `XAiEmbeddingClient` | | | | `XAiModelClient` | bearer (required) |
-| OllamaCloud | `OllamaCloudCompletionClient` | `OllamaCloudEmbeddingClient` | | | | `OllamaCloudModelClient` | bearer (required) |
-| Ollama | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer |
-| OpenAI (+ compatible) | `OpenAiCompletionClient` | `OpenAiEmbeddingClient` | | | | `OpenAiModelClient` | bearer |
-| Azure OpenAI | `AzureOpenAiCompletionClient` | `AzureOpenAiEmbeddingClient` | | | | `AzureOpenAiModelClient` | `api-key` or Azure AD |
-| Google Gemini | `GeminiCompletionClient` | `GeminiEmbeddingClient` | | | | `GeminiModelClient` | `x-goog-api-key` |
-| Google Vertex AI | `VertexAiCompletionClient` | `VertexAiEmbeddingClient` | | | | | OAuth (ADC / service account) |
-| Anthropic Claude | `AnthropicCompletionClient` | | | | | `AnthropicModelClient` | `x-api-key` |
-| AWS Bedrock | `BedrockCompletionClient` | `BedrockEmbeddingClient` | `BedrockRerankClient` | | | `BedrockModelClient` | SigV4 |
-| VoyageAI | | `VoyageAiEmbeddingClient` | `VoyageAiRerankClient` | | | | bearer |
-| Cohere | `CohereCompletionClient` | `CohereEmbeddingClient` | `CohereRerankClient` | `CohereClassificationClient` | | `CohereModelClient` | bearer |
-| Hugging Face TEI | | `TeiEmbeddingClient`, `TeiSparseEmbeddingClient` | `TeiRerankClient` | `TeiClassificationClient` | | `TeiModelClient` | none / bearer |
-| TypeSafe (Jev, Ollaya) | | | | | `TypeSafeDecisionClient` | | bearer |
+| Provider | Kind | Agent run | Completion | Embedding | Rerank | Classification | Decision | Models | Auth | Transport |
+|---|---|---|---|---|---|---|---|---|---|---|
+| xAI Grok | API | | `XAiCompletionClient` | `XAiEmbeddingClient` | | | | `XAiModelClient` | bearer (required) | HTTP |
+| OllamaCloud | API | | `OllamaCloudCompletionClient` | `OllamaCloudEmbeddingClient` | | | | `OllamaCloudModelClient` | bearer (required) | HTTP |
+| Ollama | API | | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer | HTTP |
+| OpenAI (+ compatible) | API | | `OpenAiCompletionClient` | `OpenAiEmbeddingClient` | | | | `OpenAiModelClient` | bearer | HTTP |
+| Azure OpenAI | API | | `AzureOpenAiCompletionClient` | `AzureOpenAiEmbeddingClient` | | | | `AzureOpenAiModelClient` | `api-key` or Azure AD | HTTP |
+| Google Gemini | API | | `GeminiCompletionClient` | `GeminiEmbeddingClient` | | | | `GeminiModelClient` | `x-goog-api-key` | HTTP |
+| Google Vertex AI | API | | `VertexAiCompletionClient` | `VertexAiEmbeddingClient` | | | | | OAuth (ADC / service account) | HTTP |
+| Anthropic Claude | API | | `AnthropicCompletionClient` | | | | | `AnthropicModelClient` | `x-api-key` | HTTP |
+| AWS Bedrock | API | | `BedrockCompletionClient` | `BedrockEmbeddingClient` | `BedrockRerankClient` | | | `BedrockModelClient` | SigV4 | HTTP |
+| VoyageAI | API | | | `VoyageAiEmbeddingClient` | `VoyageAiRerankClient` | | | | bearer | HTTP |
+| Cohere | API | | `CohereCompletionClient` | `CohereEmbeddingClient` | `CohereRerankClient` | `CohereClassificationClient` | | `CohereModelClient` | bearer | HTTP |
+| Hugging Face TEI | API | | | `TeiEmbeddingClient`, `TeiSparseEmbeddingClient` | `TeiRerankClient` | `TeiClassificationClient` | | `TeiModelClient` | none / bearer | HTTP |
+| TypeSafe (Jev, Ollaya) | API | | | | | | `TypeSafeDecisionClient` | | bearer | HTTP |
+| **Claude Code** | **Harness** | `ClaudeCodeAgentClient` | | | | | | | `claude auth login` | process |
+| **Codex** | **Harness** | `CodexAgentClient` | | | | | | `CodexAgentClient.ListModelsAsync` | `codex login` / `OPENAI_API_KEY` | process |
+| **Gemini CLI** | **Harness** | `GeminiCliAgentClient` | | | | | | | Google sign-in via `gemini` / `GEMINI_API_KEY` | process |
+| **Cursor CLI** | **Harness** | `CursorAgentClient` | | | | | | `CursorAgentClient.ListModelsAsync` (`cursor-agent models`) | `cursor-agent login` / `CURSOR_API_KEY` | process |
+| **Mux** | **Harness** | `MuxAgentClient` | | | | | | `MuxAgentClient.ListModelsAsync` (`mux endpoint models`) | Mux endpoint configuration | process |
+| **Pi** | **Harness** | `PiAgentClient` | | | | | | `PiAgentClient.ListModelsAsync` (`pi --list-models`) | Pi login / provider keys | process (RPC over stdio) |
+| **OpenCode** | **Harness** | `OpenCodeAgentClient` | | | | | | `OpenCodeAgentClient.ListModelsAsync` (`opencode models`) | `opencode auth login` | process |
+
+`Google Gemini` (an HTTP API keyed by `x-goog-api-key`) and `Gemini CLI` (a harness signed in with your Google account) are different products with different clients; so are `Anthropic Claude` (API) and `Claude Code` (harness). No harness row has Embedding, Rerank, Classification, or Decision: the "missing capability is a compile error" rule holds because those cells are empty.
 
 ## What It Does
 
@@ -43,6 +54,7 @@ PolyPrompt gives you one consistent API per capability. A chat call looks the sa
 - **Call recording**: every HTTP call is recorded with full request and response details for debugging and auditing
 - **Observability**: OpenTelemetry-shaped metrics and traces for every operation, outbound request, stream, decision batch, and credential refresh, emitted through the BCL `Meter` and `ActivitySource` named `PolyPrompt` with no exporter dependency (see [TELEMETRY.md](TELEMETRY.md))
 - **Settings that compose**: client-wide `Defaults` plus per-call options, merged field by field, with provider-specific options that extend the common ones
+- **Agent harnesses**: run Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode as shell-free child processes with the prompt on standard input, streamed agent events, session resume, read-only permissions by default, bounded output, timeouts, and process-tree cancellation (see [Agent Harnesses](#agent-harnesses))
 - **Native AOT and trimming**: no reflection required, verified by publishing a native binary that exercises every client; your own types plug in through source-generated JSON metadata (see [AOT.md](AOT.md))
 
 ## Use Cases
@@ -62,8 +74,8 @@ PolyPrompt is a good fit when you need to:
 
 PolyPrompt may not be the right choice if you need:
 
-- **Advanced multimodal or lifecycle APIs**: vision inputs, structured outputs, fine-tuning, provider batch APIs, and agent runtimes are not supported
-- **Automatic agent execution**: PolyPrompt returns requested tool calls; your application runs the tools and appends the results
+- **Advanced multimodal or lifecycle APIs**: vision inputs, structured outputs, fine-tuning, and provider batch APIs are not supported
+- **Automatic agent execution against a model API**: the HTTP clients return requested tool calls; your application runs the tools and appends the results. If you want an agent that runs its own tools, use a local harness through the separate [Agent Harnesses](#agent-harnesses) capability; PolyPrompt does not host an agent runtime itself
 - **Conversation storage**: PolyPrompt sends the messages you provide; it does not persist history or manage context windows
 - **Token counting or cost estimation** before a request
 - **Official SDK parity**: if you need every feature of one provider's API, use its official SDK
@@ -74,25 +86,30 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.5.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.6.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
-Every client derives from `ClientBase`, which owns the HTTP transport, per-request credentials, `TimeoutMs`, `CallDetails`, and `ValidateConnectivityAsync`. Each client then derives from exactly one capability base:
+Every client derives from `ClientBase`, which owns logging, `TimeoutMs`, `CallDetails`, telemetry, and disposal. HTTP API clients derive from `HttpClientBase` (the HTTP transport, per-request credentials, `Endpoint`, `ApiKey`, and `ValidateConnectivityAsync`); agent harness clients derive from `CliAgentClientBase` (a local CLI process). Each client then derives from exactly one capability base:
 
 ```
-ClientBase                     HTTP transport, timeouts, credentials, CallDetails, ValidateConnectivityAsync
-├── CompletionClientBase       ChatAsync, ChatStreamingAsync, ToolChatAsync, ToolChatStreamingAsync,
-│                              GenerateAsync, GenerateStreamingAsync
-├── EmbeddingClientBase        EmbedAsync(string), EmbedAsync(List<string>)
-├── SparseEmbeddingClientBase  EmbedSparseAsync(string), EmbedSparseAsync(List<string>)
-├── RerankClientBase           RerankAsync(query, documents)
-├── ClassificationClientBase   ClassifyAsync(string), ClassifyAsync(List<string>)
-├── DecisionClientBase         DecideAsync(DecisionRequest), DecideAsync(List<DecisionRequest>)
-└── ModelClientBase            ListModelsAsync, ModelExistsAsync, GetModelInformationAsync
+ClientBase                         logging, TimeoutMs, CallDetails, telemetry, Dispose
+├── HttpClientBase                 HTTP transport, credentials, Endpoint, ApiKey, ValidateConnectivityAsync -> bool
+│   ├── CompletionClientBase       ChatAsync, ChatStreamingAsync, ToolChatAsync, ToolChatStreamingAsync,
+│   │                              GenerateAsync, GenerateStreamingAsync
+│   ├── EmbeddingClientBase        EmbedAsync(string), EmbedAsync(List<string>)
+│   ├── SparseEmbeddingClientBase  EmbedSparseAsync(string), EmbedSparseAsync(List<string>)
+│   ├── RerankClientBase           RerankAsync(query, documents)
+│   ├── ClassificationClientBase   ClassifyAsync(string), ClassifyAsync(List<string>)
+│   ├── DecisionClientBase         DecideAsync(DecisionRequest), DecideAsync(List<DecisionRequest>)
+│   └── ModelClientBase            ListModelsAsync, ModelExistsAsync, GetModelInformationAsync
+└── CliAgentClientBase             RunAsync, RunStreamingAsync, ValidateConnectivityAsync -> CliConnectivityResult
+                                   (ListModelsAsync on the harnesses whose CLI lists models)
 ```
 
-Three rules hold for every client:
+> **3.6 note:** `Endpoint`, `ApiKey`, and the boolean `ValidateConnectivityAsync` moved from `ClientBase` to `HttpClientBase`. Every concrete client keeps them unchanged; only code that holds a client through a variable typed as the abstract `ClientBase` and reads those members needs to use `HttpClientBase` (or a capability base) instead.
+
+Three rules hold for every HTTP client (agent harness rules are under [Agent Harnesses](#agent-harnesses)):
 
 1. **Arguments are validated before any request**, identically on every provider. Null prompts or inputs throw `ArgumentNullException`; empty lists, null list elements, empty tool-chat messages, and invalid decision questions throw `ArgumentException`; an operation that needs a model throws `InvalidOperationException` when neither the call nor `Defaults` sets one.
 2. **HTTP errors do not throw.** An HTTP failure returns `Success = false` with `StatusCode` and `Error` set. Streaming failures after headers use final `State` and `StreamError`; partial output remains provisional. Cancellation and `TimeoutMs` timeouts propagate as `OperationCanceledException`.
@@ -424,6 +441,119 @@ Console.WriteLine("Tone: " + answer.Score("tone").LevelText);
 ```
 
 See [Decision Models](#decision-models) for details.
+
+## Agent Harnesses
+
+Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode are not model APIs. They are **agent harnesses**: local CLIs that run their own tool loop (reading files, running commands, editing code) and report agent events. PolyPrompt drives them as a separate capability, `CliAgentClientBase`, so they never pretend to be chat clients and never hand you tool calls to execute: the harness runs its tools itself, under the permission mode you choose.
+
+### Prerequisites
+
+Install each CLI you want to use and sign in **with the CLI itself**; PolyPrompt never takes an API key for a harness and never logs in or out for you. The executable must be on `PATH` (or set `Executable` to its full path).
+
+| Harness | Client | Executable | Install | Sign in |
+|---|---|---|---|---|
+| Claude Code | `ClaudeCodeAgentClient` | `claude` | [Claude Code setup](https://code.claude.com/docs/en/setup) | `claude auth login` (check with `claude auth status`) |
+| Codex | `CodexAgentClient` | `codex` | [Codex CLI](https://developers.openai.com/codex/cli) | `codex login`, or `OPENAI_API_KEY` / `CODEX_API_KEY` in the environment |
+| Gemini CLI | `GeminiCliAgentClient` | `gemini` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | run `gemini` once and sign in with Google, or `GEMINI_API_KEY` |
+| Cursor CLI | `CursorAgentClient` | `cursor-agent` (also installed as `agent`) | [Cursor CLI](https://cursor.com/docs/cli/installation) | `cursor-agent login` or `CURSOR_API_KEY`; trust the workspace once interactively |
+| Mux | `MuxAgentClient` | `mux` | `dotnet tool install -g mux.cli` ([usemux.ai](https://usemux.ai)) | configure an endpoint in Mux; `mux probe` checks it |
+| Pi | `PiAgentClient` | `pi` | [pi.dev](https://pi.dev) | `pi` then `/login`, or a provider key such as `ANTHROPIC_API_KEY` |
+| OpenCode | `OpenCodeAgentClient` | `opencode` | [opencode.ai](https://opencode.ai/docs) | `opencode auth login` |
+
+Versions verified for 3.6.0: Claude Code 2.1.312, Codex 0.163.0, Mux 1.5.0, Pi 1.4.0, and OpenCode 2.2.0 were exercised live; Gemini CLI (v0.66.0) and Cursor CLI (2026.10.22) adapters are built from their official documentation and source and tested against recorded-shape fixtures. The fake-CLI tests need macOS or Linux (`/bin/sh`).
+
+### Run a turn
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using CodexAgentClient codex = new CodexAgentClient { WorkingDirectory = "/path/to/repo" };
+
+CliConnectivityResult status = await codex.ValidateConnectivityAsync();
+if (!status.Success) throw new InvalidOperationException(status.Status + ": " + status.Message);   // NotInstalled, NotAuthenticated, Error
+
+CliAgentResult result = await codex.RunAsync(new CliAgentRequest("Summarize what this repository does."));
+if (result.Success)
+    Console.WriteLine(result.Text);
+else
+    Console.WriteLine(result.FailureKind + ": " + result.Error);   // NotInstalled, NotAuthenticated, RateLimited, TimedOut, Crashed, ProviderError, ...
+
+Console.WriteLine("Session " + result.SessionId + ", input tokens " + result.Usage?.PromptTokens + ", cost " + result.CostUsd);
+```
+
+Every client works the same way; swap `CodexAgentClient` for `ClaudeCodeAgentClient`, `GeminiCliAgentClient`, `CursorAgentClient`, `MuxAgentClient`, `PiAgentClient`, or `OpenCodeAgentClient`.
+
+### Stream agent events
+
+```csharp
+using ClaudeCodeAgentClient claude = new ClaudeCodeAgentClient { Model = "sonnet" };
+
+await foreach (CliAgentEvent evt in claude.RunStreamingAsync(new CliAgentRequest("Find the TODO comments in src/")))
+{
+    switch (evt.Kind)
+    {
+        case CliAgentEventKind.TextDelta: Console.Write(evt.Text); break;
+        case CliAgentEventKind.ToolUse: Console.WriteLine("\n[" + evt.ToolName + "] " + evt.ToolInput); break;
+        case CliAgentEventKind.Completed: Console.WriteLine("\nDone. Cost: " + evt.CostUsd); break;
+        case CliAgentEventKind.Failed: Console.WriteLine("\nFailed (" + evt.FailureKind + "): " + evt.Text); break;
+    }
+}
+```
+
+A harness stream is coarse and its chunk boundaries vary between runs and versions; it is not token streaming. The last event is always `Completed` or `Failed`; cancelling the token (or stopping the enumeration) kills the whole process tree. See [STREAMING.md](STREAMING.md#agent-harness-streams-36).
+
+### Continue a conversation
+
+```csharp
+CliAgentResult first = await codex.RunAsync(new CliAgentRequest("Read README.md and remember the project name."));
+CliAgentResult second = await codex.RunAsync(new CliAgentRequest("What is the project name?") { SessionId = first.SessionId });
+```
+
+`SessionId` is also stored in `result.ProviderState`, so an assistant `ChatMessage` that carries it in `History` resumes the session automatically. When the harness cannot resume (or no session id is available), `History` is replayed into the prompt instead. `SystemPrompt` uses the harness's own option where one exists (Claude Code `--append-system-prompt`, Mux `--append-system-prompt`) and is otherwise prepended to the prompt.
+
+### Permissions
+
+`CliPermissionMode` controls what the harness may do. The default is **`Restricted`** on every client and request, and no mode other than `Unrestricted` ever passes a bypass, yolo, or force flag.
+
+| Harness | `Restricted` (default) | `ReadOnly` | `WorkspaceWrite` | `Unrestricted` |
+|---|---|---|---|---|
+| Claude Code | `--permission-mode dontAsk --tools Read,Glob,Grep --strict-mcp-config` | `--permission-mode dontAsk --disallowedTools Edit,Write,NotebookEdit` | `--permission-mode acceptEdits` | `--permission-mode bypassPermissions` |
+| Codex | `-c sandbox_mode="read-only" -c approval_policy="never" --skip-git-repo-check` | same as Restricted | `-c sandbox_mode="workspace-write" -c approval_policy="never"` | `--dangerously-bypass-approvals-and-sandbox` |
+| Gemini CLI | `--approval-mode default` (approvals are denied headless) | same as Restricted | `--approval-mode auto_edit` | `--approval-mode yolo` |
+| Cursor CLI | `--mode ask --sandbox enabled` | same as Restricted | `--sandbox enabled` (no `--force`) | `--force --sandbox disabled` |
+| Mux | `--approval-policy auto --sandbox read-only --deny-tools web_search,web_retrieve` | `--approval-policy auto --sandbox read-only` | `--approval-policy auto --sandbox workspace-write --deny-tools run_process` | `--yolo --sandbox none` |
+| Pi (RPC) | `--tools read,grep,find,ls --no-mcp --no-approve` | same as Restricted | adds `edit,write` (no `bash`) | Pi defaults |
+| OpenCode | `--agent build` with an inline permission config allowing only `read`, `glob`, `grep` | same as Restricted | adds `edit` (shell still denied) | `--auto` |
+
+Harness settings you have saved yourself (for example allow rules in your Claude Code or Gemini settings, or Cursor's "Run Everything") still apply; each client documents its caveats in its XML docs. Only use `Unrestricted` in an environment that is already isolated.
+
+### Request options and results
+
+| `CliAgentRequest` | Description |
+|---|---|
+| `Prompt` | Required. Sent on standard input wherever the CLI accepts it (all seven do), so prompt size is not limited by the command line |
+| `SystemPrompt`, `History`, `SessionId` | See [Continue a conversation](#continue-a-conversation) |
+| `Model` | Harness model name (falls back to the client's `Model`, then the harness default) |
+| `WorkingDirectory`, `PermissionMode`, `TimeoutMs` | Per-request overrides of the client settings |
+| `Environment` | Extra environment variables for the process (a null value removes one) |
+| `ExtraArguments` | Extra CLI options appended after the client's own, passed as separate arguments (never through a shell) |
+| `MaxOutputCharacters` | Standard output limit (default 1,000,000); beyond it the process tree is killed and the run fails with `OutputLimitExceeded` |
+
+`CliAgentResult` carries `Success`, `Text`, `Reasoning`, `SessionId`, `Events`, `Usage` and `CostUsd` (exactly as the harness reported them, null otherwise; never estimated), `ExitCode`, `StandardError`, `RawOutput`, `FailureKind`, `TimedOut`, `OutputTruncated`, and `MalformedLines`. Failures do not throw; only caller cancellation does (`OperationCanceledException`, after the process tree is killed). `ListModelsAsync` throws `CliAgentException` with a `FailureKind` when the CLI cannot list models.
+
+Each process is recorded in `CallDetails` as a `ProcessCallDetail` (`Method = "EXEC"`, `Url` = executable path, `RequestBody` = arguments as JSON, `StatusCode` = exit code, `ResponseBody` = standard output, plus `Arguments`, `StandardInput`, `StandardError`, `ProcessId`, `TimedOut`, `Cancelled`, `OutputTruncated`, `FailureKind`), and reported to telemetry as `exec {executable}` spans and `polyprompt.process.*` metrics (see [TELEMETRY.md](TELEMETRY.md)).
+
+### Console sample
+
+`src/CliAgentConsole` runs any harness interactively or one-shot:
+
+```bash
+dotnet run --project src/CliAgentConsole -f net10.0 -- --provider codex --check
+dotnet run --project src/CliAgentConsole -f net10.0 -- --provider claudecode --prompt "List the files here" --directory .
+dotnet run --project src/CliAgentConsole -f net10.0 -- --provider opencode --models
+dotnet run --project src/CliAgentConsole -f net10.0 -- --provider pi --permission readonly   # interactive: /new, /status, /models, /exit
+```
 
 ## Authentication
 
@@ -1059,10 +1189,11 @@ Clients with provider-shaped credentials or routing:
 
 | Member | On | Description |
 |---|---|---|
-| `Endpoint`, `ApiKey` | every client | Read-only |
-| `TimeoutMs` | every client | HTTP timeout in milliseconds (default 120,000, must be greater than zero) |
-| `CallDetails`, `MaxCallDetails`, `ClearCallDetails()` | every client | Recorded HTTP calls (default retention 1,000) |
-| `ValidateConnectivityAsync()` | every client | See [Validate Connectivity](#validate-connectivity) |
+| `Endpoint`, `ApiKey` | every HTTP client | Read-only |
+| `TimeoutMs` | every client | HTTP request or harness run timeout in milliseconds (default 120,000, must be greater than zero) |
+| `CallDetails`, `MaxCallDetails`, `ClearCallDetails()` | every client | Recorded HTTP calls and harness processes (default retention 1,000) |
+| `ValidateConnectivityAsync()` | every client | `bool` on HTTP clients (see [Validate Connectivity](#validate-connectivity)); `CliConnectivityResult` on harness clients |
+| `Executable`, `Model`, `PermissionMode`, `WorkingDirectory`, `Environment`, `SupportsSessionResume` | harness clients | See [Agent Harnesses](#agent-harnesses) |
 | `Defaults` | every client except model clients | Client-wide settings of the capability's options type |
 | `Model` | every client except model clients | Shorthand for `Defaults.Model`; assigning null or whitespace throws |
 | `MaxConcurrency` | decision clients | Batch concurrency, 1 to 64 (default 4) |
@@ -1192,13 +1323,14 @@ PolyPrompt/
 |   |-- PolyPrompt/              # Core library (NuGet package)
 |   |   |-- Auth/                # SigV4 signing and OAuth / AWS credential providers
 |   |   |-- Clients/
-|   |   |   |-- Base/            # ClientBase and the seven capability bases
-|   |   |   `-- <Provider>/      # One folder per provider: capability clients and a shared protocol helper
-|   |   |-- Helpers/             # AOT-safe JSON serializer, PolyPromptJsonContext, UtcDateTimeConverter
+|   |   |   |-- Base/            # ClientBase, HttpClientBase, CliAgentClientBase, and the capability bases
+|   |   |   `-- <Provider>/      # One folder per provider or harness: capability clients and a shared protocol helper
+|   |   |-- Helpers/             # AOT-safe JSON serializer, PolyPromptJsonContext, UtcDateTimeConverter, ProcessRunner
 |   |   |-- Telemetry/           # Meter, ActivitySource, and the stable telemetry names (PolyPromptTelemetryNames)
 |   |   |-- Wire/                # AWS event-stream decoder
-|   |   |-- Models/              # Request, response, and base options models
+|   |   |-- Models/              # Request, response, and base options models (Models/Cli: agent harness models)
 |   |   `-- Options/             # Provider-specific options
+|   |-- CliAgentConsole/         # Agent harness sample: --provider codex|claudecode|geminicli|cursor|mux|pi|opencode
 |   |-- XAiConsole/              # Native Responses, model catalogs, embeddings, shared Mux tools
 |   |-- OllamaCloudConsole/      # Ollama Cloud harness (fixed URL, required bearer token)
 |   |-- OllamaConsole/           # Interactive harnesses, one per provider
@@ -1231,7 +1363,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (616 cases, including streaming lifecycle, telemetry, and serializer cases) runs against an in-process mock server and needs no credentials:
+The local suite (796 cases, including streaming lifecycle, telemetry, serializer, and agent harness cases) runs against an in-process mock server and a fake agent CLI (`src/Test.Shared/FakeCli`, a POSIX shell shim placed first on the client's `PATH`, so macOS or Linux), and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest
@@ -1243,6 +1375,13 @@ The Native AOT check runs every client on the JIT and as a native binary (any tr
 
 ```bash
 src/Test.Aot/verify-aot.sh                      # current platform, net8.0 and net10.0
+```
+
+The agent harness live suites are opt-in per harness and use whatever login the installed CLI already has. Each runs a trivial read-only prompt in a temporary directory:
+
+```bash
+POLYPROMPT_TEST_CODEX=1 POLYPROMPT_TEST_CLAUDE_CODE=1 POLYPROMPT_TEST_CLAUDE_CODE_MODEL=haiku dotnet test src/Test.Nunit -f net10.0
+# Also: POLYPROMPT_TEST_GEMINI_CLI, POLYPROMPT_TEST_CURSOR_CLI, POLYPROMPT_TEST_MUX, POLYPROMPT_TEST_PI, POLYPROMPT_TEST_OPENCODE (each with an optional _MODEL)
 ```
 
 The live suite runs against one provider at a time. Cases for a capability the provider does not have are skipped with the reason.

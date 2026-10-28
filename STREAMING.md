@@ -92,7 +92,7 @@ The seven agent harness clients (`ClaudeCodeAgentClient`, `CodexAgentClient`, `G
 
 **It is not token streaming.** A harness stream is coarse and non-deterministic in its chunk boundaries:
 
-- Depending on the CLI, a `TextDelta` is a partial delta (Claude Code with `--include-partial-messages`, Cursor with `--stream-partial-output`, Pi `message_update`) or a whole assistant message (Codex `agent_message` items). Boundaries change between runs, models, and CLI versions; never parse meaning from them.
+- Depending on the CLI, a `TextDelta` is a partial delta (Claude Code with `--include-partial-messages`, Cursor with `--stream-partial-output`, Pi `text_delta`) or a whole assistant message (Codex `agent_message` items). Boundaries change between runs, models, and CLI versions; never parse meaning from them.
 - Several assistant messages can appear in one run (for example a preamble before a tool call). `Completed.Text` and `CliAgentResult.Text` carry the harness's final response, which is not necessarily the concatenation of every `TextDelta`.
 - Tool events are observations. The harness has already executed (or been denied) the tool; PolyPrompt never executes harness tools and never returns them for the caller to run. Do not combine harness events with `ToolChatAsync` loops.
 - Usage and cost arrive once, on the terminal event, exactly as the harness reported them; they stay null when the harness does not report them.

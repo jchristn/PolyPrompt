@@ -1,8 +1,8 @@
 # Agent Harness Support Plan
 
-> **Status:** proposal — nothing in this document is implemented yet.
+> **Status:** implemented and released in PolyPrompt 3.6.0 (P0 through P3 complete; see section 13 for the as-built record).
 > **Baseline:** `main` @ `d70f310`.
-> **Target:** PolyPrompt 4.0. Purely additive: no existing client class, option type, or method signature changes.
+> **Target:** PolyPrompt 3.6.0 (minor release; supersedes the earlier 4.0 heading). Additive for every concrete client; `Endpoint`, `ApiKey`, and the boolean `ValidateConnectivityAsync` moved from `ClientBase` to `HttpClientBase` (see section 13).
 > **Related:** [README.md](README.md) provider table, [TELEMETRY.md](TELEMETRY.md), [STREAMING.md](STREAMING.md), [AOT.md](AOT.md)
 
 ## 1. Summary
@@ -165,37 +165,37 @@ Each phase ends in a green build, a green test run, and a reviewable increment. 
 
 ### P0 — Foundation + one harness end-to-end (~2 weeks)
 
-* [ ] **P0-1** `HttpClientBase` split (§6.1). Gate: builds; existing suites green; diff is renames only.
-* [ ] **P0-2** `ProcessRunner` + unit tests against a shell shim (`echo`, `false`, `sleep`, malformed lines, huge output, SIGKILL-on-cancel).
-* [ ] **P0-3** `CliAgentClientBase` + models + `ProcessCallDetail` + telemetry labels + JSON source-gen entries (§6.2–6.4).
-* [ ] **P0-4** `CodexAgentClient` end-to-end: `codex exec --json`, prompt over stdin, JSONL parse, `exec resume <id>`, usage mapping, non-zero-exit mapping. Gate: `src/Test.Console` runs a live Codex turn and a recorded-JSONL replay without a live CLI.
-* [ ] **P0-5** Fake-CLI test fixture (§8) so P1/P2 adapters can be tested the same day they are written.
-* [ ] **P0-6** `README.md` "Agent Harnesses" section with the Codex row only, marked *preview*.
+* [x] **P0-1** `HttpClientBase` split (§6.1). Gate: builds; existing suites green; diff is renames only.
+* [x] **P0-2** `ProcessRunner` + unit tests against a shell shim (`echo`, `false`, `sleep`, malformed lines, huge output, SIGKILL-on-cancel).
+* [x] **P0-3** `CliAgentClientBase` + models + `ProcessCallDetail` + telemetry labels + JSON source-gen entries (§6.2–6.4).
+* [x] **P0-4** `CodexAgentClient` end-to-end: `codex exec --json`, prompt over stdin, JSONL parse, `exec resume <id>`, usage mapping, non-zero-exit mapping. Gate: `src/Test.Console` runs a live Codex turn and a recorded-JSONL replay without a live CLI.
+* [x] **P0-5** Fake-CLI test fixture (§8) so P1/P2 adapters can be tested the same day they are written.
+* [x] **P0-6** `README.md` "Agent Harnesses" section with the Codex row only, marked *preview*.
 
 **P0 gate:** a developer can `dotnet add package PolyPrompt`, construct one client, and run an agent turn against Codex with a working `CallDetails` entry and telemetry. If the shape is wrong, this is the cheapest possible time to find out.
 
 ### P1 — First-party CLIs (~2 weeks)
 
-* [ ] **P1-1** `ClaudeCodeAgentClient`: `-p --output-format stream-json --verbose --include-partial-messages`, `--resume`, `total_cost_usd` + usage, `--input-format stream-json` for long prompts.
-* [ ] **P1-2** `GeminiCliAgentClient`: `-p --output-format json|stream-json`, map `init`/`message`/`tool_use`/`tool_result`/`error`/`result`, special-case exit codes 42 and 53. ⚠ confirm session flags first.
-* [ ] **P1-3** `CursorAgentClient`: `-p --output-format json|stream-json --stream-partial-output`, `--resume`/`--continue`, `agent status` for connectivity, `agent models` for `ListModelsAsync`.
-* [ ] **P1-4** Permission policy mapping for all three (`--permission-mode`/`--allowedTools`, `--sandbox`, `--force`/`--trust`/`--sandbox`) behind `CliPermissionMode` (D2).
-* [ ] **P1-5** Per-adapter test suites (§8) + README rows + one console sample per provider.
+* [x] **P1-1** `ClaudeCodeAgentClient`: `-p --output-format stream-json --verbose --include-partial-messages`, `--resume`, `total_cost_usd` + usage, `--input-format stream-json` for long prompts.
+* [x] **P1-2** `GeminiCliAgentClient`: `-p --output-format json|stream-json`, map `init`/`message`/`tool_use`/`tool_result`/`error`/`result`, special-case exit codes 42 and 53. ⚠ confirm session flags first.
+* [x] **P1-3** `CursorAgentClient`: `-p --output-format json|stream-json --stream-partial-output`, `--resume`/`--continue`, `agent status` for connectivity, `agent models` for `ListModelsAsync`.
+* [x] **P1-4** Permission policy mapping for all three (`--permission-mode`/`--allowedTools`, `--sandbox`, `--force`/`--trust`/`--sandbox`) behind `CliPermissionMode` (D2).
+* [x] **P1-5** Per-adapter test suites (§8) + README rows + one console sample per provider.
 
 ### P2 — Remaining harnesses (~2 weeks)
 
-* [ ] **P2-1** `MuxAgentClient`: `mux print --output-format jsonl`; decide in-process `Mux.Core` vs. subprocess (D4) and record the decision here.
-* [ ] **P2-2** `PiAgentClient`: RPC mode over stdin/stdout (`docs/rpc.md`) — the cleanest contract of the seven; no text parsing.
-* [ ] **P2-3** `OpenCodeAgentClient`: `run --format json`, `--session`/`--continue`, `opencode models`.
-* [ ] **P2-4** Long-prompt transport: prefer stdin everywhere (`codex exec -`, Claude `--input-format stream-json`, Pi RPC) to dodge argv limits and Windows quoting (D5).
+* [x] **P2-1** `MuxAgentClient`: `mux print --output-format jsonl`; decide in-process `Mux.Core` vs. subprocess (D4) and record the decision here. **Decided: subprocess only** (no `Mux.Core` reference); `Mux.Core` remains a possible opt-in fast path for a later release.
+* [x] **P2-2** `PiAgentClient`: RPC mode over stdin/stdout (`docs/rpc.md`) — the cleanest contract of the seven; no text parsing.
+* [x] **P2-3** `OpenCodeAgentClient`: `run --format json`, `--session`/`--continue`, `opencode models`.
+* [x] **P2-4** Long-prompt transport: prefer stdin everywhere (`codex exec -`, Claude `--input-format stream-json`, Pi RPC) to dodge argv limits and Windows quoting (D5).
 
 ### P3 — Hardening and release (~1.5 weeks)
 
-* [ ] **P3-1** `Test.Aot`: every new client on JIT + native with matching request digests (process spawning is AOT-safe; JSONL parsing needs the source-gen entries from P0-3).
-* [ ] **P3-2** `Test.Shared/LocalArchitectureCases.cs`: update `_CapabilityBases` and `_ExpectedClients` — the matrix test asserts the *exact* client set.
-* [ ] **P3-3** Consoles: one `CliAgentConsole` with a `--provider` switch, or seven thin consoles if `AotConsole` parity is wanted.
-* [ ] **P3-4** Docs: README provider table (§3), `STREAMING.md` (what a stream means when the unit is a whole agent run), `TELEMETRY.md` counters for process spawn/exit, `AOT.md`, `CHANGELOG.md`, `PolyPrompt.csproj` Description/Tags.
-* [ ] **P3-5** Live suites, opt-in and skipped by default (`POLYPROMPT_TEST_CLAUDE_CODE=1`, ... ), because none of these can run in CI without credentials.
+* [x] **P3-1** `Test.Aot`: every new client on JIT + native with matching request digests (process spawning is AOT-safe; JSONL parsing needs the source-gen entries from P0-3).
+* [x] **P3-2** `Test.Shared/LocalArchitectureCases.cs`: update `_CapabilityBases` and `_ExpectedClients` — the matrix test asserts the *exact* client set.
+* [x] **P3-3** Consoles: one `CliAgentConsole` with a `--provider` switch, or seven thin consoles if `AotConsole` parity is wanted.
+* [x] **P3-4** Docs: README provider table (§3), `STREAMING.md` (what a stream means when the unit is a whole agent run), `TELEMETRY.md` counters for process spawn/exit, `AOT.md`, `CHANGELOG.md`, `PolyPrompt.csproj` Description/Tags.
+* [x] **P3-5** Live suites, opt-in and skipped by default (`POLYPROMPT_TEST_CLAUDE_CODE=1`, ... ), because none of these can run in CI without credentials.
 
 ### Per-adapter checklist (repeat for each of the seven)
 
@@ -274,3 +274,28 @@ Architecture-level tests that will fail until updated: `LocalArchitectureCases` 
 * Mux: <https://usemux.ai> (`mux print`, `mux serve`, `mux mcp serve`, `Mux.Core` on NuGet)
 * Pi: <https://pi.dev> (`-p`, `--mode json`, `docs/rpc.md`)
 * OpenCode: `opencode run --help`, `opencode serve`, `opencode acp`
+
+## 13. As-built record (3.6.0)
+
+Decisions, as resolved:
+
+| # | Resolution |
+|---|---|
+| D1 | Yes, as a separate capability (`CliAgentClientBase`); the README "agent runtimes are not supported" line now points to the Agent Harnesses section. |
+| D2 | `CliPermissionMode.Restricted` is the default on every client and request. Only `Unrestricted` passes a bypass/yolo/force flag; per-harness mappings are in the README and each client's XML docs, and asserted by exact-argv tests. |
+| D3 | No `apiKey` parameter. `ValidateConnectivityAsync` returns `CliConnectivityResult` (`Ok`, `NotInstalled`, `NotAuthenticated`, `Error`) and `AuthenticationVerified`; login status commands used: `claude auth status --json`, `codex login status`, `cursor-agent status --format json`, `mux probe`, `pi auth check`. Gemini CLI and OpenCode have no reliable login status command, so they report installation only. |
+| D4 | Subprocess only; no `Mux.Core` dependency. |
+| D5 | Prompt on standard input for all seven (Codex `exec -`, Claude Code `-p` with stdin, Gemini CLI headless stdin, Cursor print-mode stdin, Mux `print` stdin, Pi RPC `prompt` command, OpenCode `run` stdin). Never a shell. |
+| D6 | `SessionId` is returned and stored in `ProviderState` (`sessionId`); a history message carrying it resumes the session, otherwise `History` is replayed into the prompt. |
+| D7 | Documented in STREAMING.md ("Agent harness streams"). |
+| D8 | Not done (optional stretch); `CliAgentConsole` gives console parity without a completion shim. |
+
+Deviations from the original plan text:
+
+* The split moved `Endpoint`, `ApiKey`, and the boolean `ValidateConnectivityAsync` to `HttpClientBase`; the seven HTTP capability bases (rather than ~25 client files) changed `: ClientBase` to `: HttpClientBase`. Concrete clients are unchanged.
+* The base class implements `RunAsync`/`RunStreamingAsync`/`ValidateConnectivityAsync` once (validation, process lifecycle, classification, recording, telemetry); adapters implement `BuildInvocation` and `ParseLine` (repository pattern of capability bases with core hooks).
+* `CliFailureKind` adds `ProviderError`, `InvalidInput`, `TurnLimitReached`, `InvalidOutput`, and `OutputLimitExceeded` to the plan's not-installed / not-authenticated / rate-limited / crashed / timed-out set. Failures are reported on the result; only caller cancellation throws. `ListModelsAsync` throws `CliAgentException`.
+* Model listing: Codex (`codex debug models`), Cursor (`cursor-agent models`), Mux (`mux endpoint models`), Pi (`pi --list-models`), OpenCode (`opencode models`). Gemini CLI's model listing exists only in unreleased builds, so it was left out; Claude Code has no model list command.
+* OpenCode runs with `--standalone` so its per-run permission configuration applies; Pi uses RPC mode with a `get_state` command for the session id; Gemini CLI uses `--resume` (sessions are per project directory).
+* The fake CLI is a POSIX shell shim (`src/Test.Shared/FakeCli`), so fake-CLI tests and the harness part of `Test.Aot` need macOS or Linux.
+* Live verification: Claude Code 2.1.312, Codex 0.163.0, Mux 1.5.0, Pi 1.4.0, and OpenCode 2.2.0 were exercised live; Gemini CLI and Cursor CLI were not installed and were implemented from official documentation and source with constructed fixtures.

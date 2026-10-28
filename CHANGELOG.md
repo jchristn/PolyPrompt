@@ -1,5 +1,29 @@
 # Changelog
 
+## v3.6.0 (2026-10-28)
+
+### Added
+
+- Agent harness support as a new capability, `CliAgentClientBase`, with seven clients: `ClaudeCodeAgentClient` (`claude`), `CodexAgentClient` (`codex`), `GeminiCliAgentClient` (`gemini`), `CursorAgentClient` (`cursor-agent`), `MuxAgentClient` (`mux`), `PiAgentClient` (`pi`, RPC mode), and `OpenCodeAgentClient` (`opencode`). Each exposes `RunAsync`, `RunStreamingAsync` (coarse `CliAgentEvent`s ending in exactly one `Completed` or `Failed`), and `ValidateConnectivityAsync` (installed, version, and login where the CLI can report it); Codex, Cursor, Mux, Pi, and OpenCode also expose `ListModelsAsync`.
+- Harness runs start the CLI directly (no shell), deliver the prompt on standard input, resume sessions by id (`SessionId`, also carried in `ProviderState`) or replay `History`, enforce `TimeoutMs` and `MaxOutputCharacters`, and kill the whole process tree on timeout, output overflow, cancellation, or early disposal of a stream.
+- `CliPermissionMode` (`Restricted` default, `ReadOnly`, `WorkspaceWrite`, `Unrestricted`) mapped to each CLI's own permission flags; no mode except `Unrestricted` passes a bypass, yolo, or force flag.
+- `CliFailureKind` distinguishes not installed, not authenticated, rate limited, timed out, crashed, provider error, invalid input, turn limit, invalid output, and output limit. Usage and cost are reported exactly as each harness reports them and are never estimated.
+- `ProcessRunner` (public helper): shell-free process execution with line-buffered, bounded stdout, bounded stderr, stdin, timeouts, process-tree kill, and PATH resolution.
+- `ProcessCallDetail` recorded in `CallDetails` for every harness process (and serialized as a derived type of `CallDetail`); telemetry adds `exec {executable}` spans, `polyprompt.process.duration`, `polyprompt.process.executions`, and `polyprompt.process.active`, the `agent` capability, `agent_run`/`agent_run_stream`/`model_list` operations (`gen_ai.operation.name` `invoke_agent`), and provider labels `claude_code`, `codex`, `gemini_cli`, `cursor_cli`, `mux`, `pi`, and `opencode`.
+- Source-generated JSON metadata for the harness models, so harness clients run under Native AOT and trimming.
+- `CliAgentConsole` sample (`--provider codex|claudecode|geminicli|cursor|mux|pi|opencode`), README setup, prerequisites, examples, permission matrix, and an 11-column provider matrix; STREAMING.md, TELEMETRY.md, and AOT.md sections for harnesses.
+
+### Changed
+
+- `ClientBase` no longer owns the HTTP transport. The new `HttpClientBase` holds `Endpoint`, `ApiKey`, the HTTP helpers, and the boolean `ValidateConnectivityAsync`, and the seven HTTP capability bases derive from it. Concrete clients are unchanged; code that reads `Endpoint`, `ApiKey`, or calls `ValidateConnectivityAsync` through a variable typed as the abstract `ClientBase` must use `HttpClientBase` instead.
+- `CallDetail` is annotated with `[JsonDerivedType(typeof(ProcessCallDetail), "process")]`; plain HTTP call details serialize exactly as before.
+
+### Validation
+
+- 796 local cases on .NET 8 and .NET 10 in both NUnit and xUnit, none skipped (616 existing plus 180 new): `ProcessRunner` against shell shims, model JSON, telemetry, the capability matrix, and for each of the seven harnesses a fake-CLI suite (happy path, usage and cost, streaming equivalence, structured error exit, stderr-only crash, malformed line, cancellation with no orphaned child, timeout, not installed, not authenticated, rate limited, oversized output, 3 MB prompt over stdin, exact argv per option combination, environment and working directory, call recording, connectivity, validation, Restricted default) plus harness-specific cases.
+- Native AOT: 145 checks per framework, including a run, stream, connectivity, and model listing for every harness against the fake CLI, with JIT and native request digests matching on .NET 8 and .NET 10.
+- Live checks against installed CLIs: Claude Code 2.1.312, Codex 0.163.0, Mux 1.5.0, Pi 1.4.0, and OpenCode 2.2.0. Gemini CLI and Cursor CLI were not installed; their adapters follow the official documentation and source and are covered by constructed fixtures only. Opt-in live suites: `POLYPROMPT_TEST_<HARNESS>=1`.
+
 ## v3.5.0 (2026-10-20)
 
 ### Added
