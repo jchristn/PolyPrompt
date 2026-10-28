@@ -45,7 +45,7 @@ Current `README.md` provider matrix (13 providers, all HTTP, all `CompletionClie
 The seven new rows use their own column (`Agent run`) because they are a different capability, not a different transport for `Completion`.
 
 | Provider | Kind | Agent run | Completion | Embedding | Rerank | Classification | Decision | Models | Auth | Transport |
-|---|---|---|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|---|---|
 | xAI Grok | API | | `XAiCompletionClient` | `XAiEmbeddingClient` | | | | `XAiModelClient` | bearer | HTTP |
 | OllamaCloud | API | | `OllamaCloudCompletionClient` | `OllamaCloudEmbeddingClient` | | | | `OllamaCloudModelClient` | bearer | HTTP |
 | Ollama | API | | `OllamaCompletionClient` | `OllamaEmbeddingClient` | | | | `OllamaModelClient` | none / bearer | HTTP |
