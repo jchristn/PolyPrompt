@@ -318,6 +318,10 @@
         <member name="M:PolyPrompt.Clients.AnthropicCompletionClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.AnthropicCompletionClient.RequiresMaxTokens(System.String)">
+            <inheritdoc />
+            <remarks>The Messages API rejects a request without <c>max_tokens</c>, so a limit is always sent.</remarks>
+        </member>
         <member name="M:PolyPrompt.Clients.AnthropicCompletionClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -839,6 +843,25 @@
             </summary>
             <exception cref="T:System.ArgumentOutOfRangeException">Thrown when set to a negative value.</exception>
         </member>
+        <member name="P:PolyPrompt.Clients.ClientBase.CallDetailCapture">
+            <summary>
+            How much of each upstream call is recorded in <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>. Default:
+            <see cref="F:PolyPrompt.Models.CallDetailCapture.Metadata"/>, which records URL, method, headers, status, timing, and errors
+            but no request or response bodies (they contain prompts and model output). Set to
+            <see cref="F:PolyPrompt.Models.CallDetailCapture.Full"/> to record bodies, or <see cref="F:PolyPrompt.Models.CallDetailCapture.None"/> to
+            record nothing. Applies to calls recorded after the change.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClientBase.RedactCredentials">
+            <summary>
+            Whether credential headers are replaced with <c>[redacted]</c> in recorded <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>. Covers
+            <c>Authorization</c>, <c>Proxy-Authorization</c>, <c>Cookie</c>, <c>Set-Cookie</c>, <c>x-api-key</c>,
+            <c>api-key</c>, <c>x-goog-api-key</c>, <c>x-amz-security-token</c>, any header whose name contains
+            <c>api-key</c>, <c>apikey</c>, <c>auth</c>, <c>secret</c>, or <c>password</c>, and any whose name ends in
+            <c>token</c> (rate-limit headers such as <c>x-ratelimit-remaining-tokens</c> are kept). Default: true. Set to false
+            only to debug authentication or request signing. Applies to calls recorded after the change.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Clients.ClientBase.TelemetryProvider">
             <summary>
             Bounded provider label used on telemetry, for example <c>openai</c> or <c>aws.bedrock</c>.
@@ -1052,6 +1075,13 @@
             <param name="core">The operation.</param>
             <param name="token">Caller cancellation token.</param>
             <returns>The operation's result.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ClientBase.IsCredentialHeader(System.String)">
+            <summary>
+            Whether a header name carries a credential that <see cref="P:PolyPrompt.Clients.ClientBase.RedactCredentials"/> hides.
+            </summary>
+            <param name="name">Header name.</param>
+            <returns>True when the header value is a credential.</returns>
         </member>
         <member name="T:PolyPrompt.Clients.CliInvocation">
             <summary>
@@ -1272,7 +1302,17 @@
         </member>
         <member name="F:PolyPrompt.Clients.CompletionClientBase.DefaultMaxTokens">
             <summary>
-            Maximum tokens sent when neither the call nor <see cref="P:PolyPrompt.Clients.CompletionClientBase.Defaults"/> sets one.
+            Maximum tokens sent when neither the call nor <see cref="P:PolyPrompt.Clients.CompletionClientBase.Defaults"/> sets one and
+            <see cref="P:PolyPrompt.Clients.CompletionClientBase.SendDefaultMaxTokens"/> is true, or the provider requires a limit.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.CompletionClientBase.SendDefaultMaxTokens">
+            <summary>
+            Whether <see cref="F:PolyPrompt.Clients.CompletionClientBase.DefaultMaxTokens"/> is sent when neither the call nor <see cref="P:PolyPrompt.Clients.CompletionClientBase.Defaults"/> sets
+            <c>MaxTokens</c>. When false, no output limit is sent and the provider's own default applies (for Ollama, no
+            limit; for most hosted APIs, the model's maximum). Providers whose API requires a limit (Anthropic, and
+            Anthropic models on Bedrock) still send <see cref="F:PolyPrompt.Clients.CompletionClientBase.DefaultMaxTokens"/>. An explicit <c>MaxTokens</c> is always
+            sent. Default: true, except on <c>OllamaCompletionClient</c>, where it is false.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.CompletionClientBase.Defaults">
@@ -1425,6 +1465,14 @@
             <param name="token">Cancellation token.</param>
             <returns>The streaming generation response.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.RequiresMaxTokens(System.String)">
+            <summary>
+            Whether the provider's API rejects a request without an output token limit for this model. When true,
+            <see cref="F:PolyPrompt.Clients.CompletionClientBase.DefaultMaxTokens"/> is sent even if <see cref="P:PolyPrompt.Clients.CompletionClientBase.SendDefaultMaxTokens"/> is false. Default: false.
+            </summary>
+            <param name="model">Resolved model name.</param>
+            <returns>True when a limit must be sent.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.CompletionClientBase.Resolve(PolyPrompt.Models.CompletionOptions)">
             <summary>
             Merge per-call options over <see cref="P:PolyPrompt.Clients.CompletionClientBase.Defaults"/>.
@@ -1493,7 +1541,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion.MaxTokens">
             <summary>
-            Maximum tokens to generate.
+            Maximum tokens to generate, or null to send no limit (see <see cref="P:PolyPrompt.Clients.CompletionClientBase.SendDefaultMaxTokens"/>).
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion.Temperature">
@@ -1522,7 +1570,7 @@
             with <see cref="M:PolyPrompt.Clients.ClientBase.Pick``2(System.Object,System.Object,System.Func{``0,System.Nullable{``1}})"/>.
             </summary>
         </member>
-        <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion.#ctor(System.String,System.Int32,System.Nullable{System.Double},System.Nullable{System.Double},System.String,PolyPrompt.Models.ReasoningEffort,PolyPrompt.Models.CompletionOptions)">
+        <member name="M:PolyPrompt.Clients.CompletionClientBase.ResolvedCompletion.#ctor(System.String,System.Nullable{System.Int32},System.Nullable{System.Double},System.Nullable{System.Double},System.String,PolyPrompt.Models.ReasoningEffort,PolyPrompt.Models.CompletionOptions)">
             <summary>
             Initialize merged settings.
             </summary>
@@ -2199,6 +2247,10 @@
         </member>
         <member name="M:PolyPrompt.Clients.BedrockCompletionClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.BedrockCompletionClient.RequiresMaxTokens(System.String)">
+            <inheritdoc />
+            <remarks>Anthropic models (including cross-region inference profiles such as <c>us.anthropic.*</c>) always get a limit, as on the Anthropic API.</remarks>
         </member>
         <member name="M:PolyPrompt.Clients.BedrockCompletionClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
@@ -3455,11 +3507,46 @@
             <exception cref="T:System.ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
             <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled or the request times out.</exception>
         </member>
+        <member name="M:PolyPrompt.Clients.OllamaModelClient.LoadModelAsync(System.String,System.Nullable{System.TimeSpan},System.Threading.CancellationToken)">
+            <summary>
+            Load a model into memory so the first real request does not wait for it, by sending Ollama an empty
+            <c>/api/generate</c> request. Use this for chat and generation models; Ollama loads an embedding model on its
+            first <c>/api/embed</c> call.
+            </summary>
+            <param name="model">The model name to load, for example gemma3:4b.</param>
+            <param name="keepAlive">How long the model stays loaded afterwards; see
+            <see cref="P:PolyPrompt.Options.OllamaCompletionOptions.KeepAlive"/>. A negative value keeps it loaded until the server stops.
+            Null uses the server default (5 minutes unless <c>OLLAMA_KEEP_ALIVE</c> is set).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the server loaded the model, false on an HTTP error (for example, the model is not pulled)
+            or a transport failure.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled or the request times out.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaModelClient.UnloadModelAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Unload a model from memory now, freeing its RAM or VRAM, by sending Ollama an empty <c>/api/generate</c> request
+            with <c>keep_alive</c> 0. The model stays on disk.
+            </summary>
+            <param name="model">The model name to unload.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>True when the server accepted the request, false on an HTTP error or a transport failure.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is cancelled or the request times out.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.OllamaModelClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaModelClient.GetModelInformationCoreAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaModelClient.DetectToolSupport(System.Collections.Generic.List{System.String},System.String,System.String)">
+            <summary>
+            Decide whether an Ollama model can actually use tools. Ollama lists the <c>tools</c> capability for some models
+            whose prompt template drops tools without a word (deepseek-r1 builds, for one), so the listing alone is not
+            enough: the model also needs a built-in renderer, or a template that references tools (a Go template using
+            <c>.Tools</c> or a Jinja template using <c>tools</c>). Returns null when the server reports no capabilities.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.OllamaProtocol">
             <summary>
@@ -3469,6 +3556,13 @@
         <member name="M:PolyPrompt.Clients.OllamaProtocol.ApplyAuth(System.Net.Http.HttpRequestMessage,System.String)">
             <summary>
             Attach the bearer token, when one is configured (Ollama itself needs none; proxies in front of it may).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OllamaProtocol.KeepAliveSeconds(System.TimeSpan)">
+            <summary>
+            Convert a keep-alive duration to the <c>keep_alive</c> wire value: whole seconds (a fractional second rounds up,
+            so a short positive duration never unloads the model), 0 to unload, and -1 for any negative value (keep loaded).
+            Ollama reads a JSON number as seconds; a number avoids its duration-string parser, which rejects "-1".
             </summary>
         </member>
         <member name="T:PolyPrompt.Clients.OllamaCloudCompletionClient">
@@ -5400,6 +5494,29 @@
             UTC timestamp when the call was initiated.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.CallDetailCapture">
+            <summary>
+            How much of each upstream call a client records in <c>CallDetails</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CallDetailCapture.None">
+            <summary>
+            Record nothing.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CallDetailCapture.Metadata">
+            <summary>
+            Record call metadata only: URL, method, headers, status, timing, success, and error. Request and response bodies
+            are left null. For process executions, the arguments, standard input, and standard output are also left out
+            (arguments can carry a system prompt); the executable, working directory, exit code, standard error, and
+            failure details are kept.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.CallDetailCapture.Full">
+            <summary>
+            Record everything, including request and response bodies, which contain prompts and model output.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Models.ChatMessage">
             <summary>
             Message used by tool-capable chat requests.
@@ -6777,6 +6894,15 @@
             Maximum output tokens supported by the model. May be null if the provider does not supply one.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.SupportsTools">
+            <summary>
+            Whether the model can use tools (function calling), or null when the provider does not say. Best-effort: on
+            Ollama it is true only when the server lists the <c>tools</c> capability and the model's renderer or prompt
+            template actually renders tools (some templates, such as deepseek-r1 builds, are listed with <c>tools</c> but
+            drop them). The raw <c>capabilities</c>, <c>template</c>, and <c>renderer</c> values stay in
+            <see cref="P:PolyPrompt.Models.ModelInformation.Metadata"/> for callers that want to decide for themselves. Other providers leave it null.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Models.ModelInformation.Metadata">
             <summary>
             Provider-specific metadata as key-value pairs. Contains fields such as parameter_size,
@@ -7996,6 +8122,14 @@
             Number of tokens to look back for repeat penalty (repeat_last_n). Clamped to 0..4096. Null uses model default.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Options.OllamaCompletionOptions.KeepAlive">
+            <summary>
+            How long Ollama keeps the model loaded after this request (<c>keep_alive</c>), sent as whole seconds.
+            <see cref="F:System.TimeSpan.Zero"/> unloads the model as soon as the request finishes; a negative value (for example
+            <see cref="F:System.Threading.Timeout.InfiniteTimeSpan"/>) keeps it loaded until the server stops. Null uses the
+            server default (5 minutes unless <c>OLLAMA_KEEP_ALIVE</c> is set).
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Options.OllamaEmbeddingOptions">
             <summary>
             Ollama settings for embedding requests, mapped to the Ollama <c>/api/embed</c> request body. Use this type for an
@@ -8011,6 +8145,14 @@
         <member name="P:PolyPrompt.Options.OllamaEmbeddingOptions.ContextLength">
             <summary>
             Context window size (num_ctx). Clamped to 1..2,097,152. Null uses model default.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Options.OllamaEmbeddingOptions.KeepAlive">
+            <summary>
+            How long Ollama keeps the model loaded after this request (<c>keep_alive</c>), sent as whole seconds.
+            <see cref="F:System.TimeSpan.Zero"/> unloads the model as soon as the request finishes; a negative value (for example
+            <see cref="F:System.Threading.Timeout.InfiniteTimeSpan"/>) keeps it loaded until the server stops. Null uses the
+            server default (5 minutes unless <c>OLLAMA_KEEP_ALIVE</c> is set).
             </summary>
         </member>
         <member name="T:PolyPrompt.Options.OpenAiCompletionOptions">
@@ -8491,11 +8633,11 @@
             <param name="key">Attribute key.</param>
             <param name="value">Attribute value.</param>
         </member>
-        <member name="M:PolyPrompt.Telemetry.OperationScope.SetCompletionSettings(System.Int32,System.Nullable{System.Double},System.Nullable{System.Double})">
+        <member name="M:PolyPrompt.Telemetry.OperationScope.SetCompletionSettings(System.Nullable{System.Int32},System.Nullable{System.Double},System.Nullable{System.Double})">
             <summary>
             Record the request's completion settings on the span.
             </summary>
-            <param name="maxTokens">Max tokens.</param>
+            <param name="maxTokens">Max tokens, or null when no limit is sent.</param>
             <param name="temperature">Temperature, or null.</param>
             <param name="topP">Top-p, or null.</param>
         </member>
@@ -9300,6 +9442,16 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelDelete">
             <summary>
             Operation value: Ollama <c>DeleteModelAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelLoad">
+            <summary>
+            Operation label: load a model into memory (Ollama).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationModelUnload">
+            <summary>
+            Operation label: unload a model from memory (Ollama).
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationValidateConnectivity">

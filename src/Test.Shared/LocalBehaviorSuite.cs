@@ -31,6 +31,7 @@ namespace Test.Shared
             cases.AddRange(LocalArchitectureCases.Create(SuiteId));
             cases.AddRange(LocalDecisionCases.Create(SuiteId));
             cases.AddRange(LocalProviderDetailCases.Create(SuiteId));
+            cases.AddRange(LocalCallDetailAndOllamaCases.Create(SuiteId));
             cases.AddRange(LocalTelemetryCases.Create(SuiteId));
             cases.AddRange(LocalSerializerCases.Create(SuiteId));
             cases.AddRange(LocalXAiCases.Create(SuiteId));
@@ -3054,6 +3055,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", "secret-key", apiVersion: "2099-01-01");
+            WireCapture.Full(client);
             client.TimeoutMs = 1000;
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -3082,6 +3084,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", new StaticTokenCredential("aad-token"), apiVersion: "2024-10-21");
+            WireCapture.Full(client);
             client.TimeoutMs = 1000;
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -3120,6 +3123,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using VertexAiCompletionClient client = CreateVertexClient(server);
+            WireCapture.Full(client);
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(chat.Success, "Vertex chat should succeed.");
@@ -3135,6 +3139,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using VertexAiEmbeddingClient client = new VertexAiEmbeddingClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
+            WireCapture.Full(client);
             client.TimeoutMs = 1000;
             SharedAssert.Equal("text-embedding-005", client.Model, "Vertex embedding client should default to text-embedding-005.");
 
@@ -3169,6 +3174,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using VertexAiCompletionClient client = CreateVertexClient(server);
+            WireCapture.Full(client);
 
             await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             await client.ChatAsync("again", token: token).ConfigureAwait(false);
@@ -3224,6 +3230,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using BedrockCompletionClient client = CreateBedrockClient(server);
+            WireCapture.Full(client);
 
             await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             CallDetail detail = client.CallDetails[0];

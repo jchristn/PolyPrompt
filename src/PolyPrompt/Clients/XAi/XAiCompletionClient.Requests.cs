@@ -12,7 +12,8 @@ namespace PolyPrompt.Clients
 
         private Dictionary<string, object> BuildBody(object input, ResolvedCompletion settings, bool stream, bool chat, ToolChatRequest? request = null)
         {
-            Dictionary<string, object> body = new() { ["model"] = settings.Model, ["input"] = input, ["stream"] = stream, ["max_output_tokens"] = settings.MaxTokens };
+            Dictionary<string, object> body = new() { ["model"] = settings.Model, ["input"] = input, ["stream"] = stream };
+            if (settings.MaxTokens.HasValue) body["max_output_tokens"] = settings.MaxTokens.Value;
             string? previous = Reference(settings, o => o.PreviousResponseId);
             if (!string.IsNullOrWhiteSpace(previous)) body["previous_response_id"] = previous;
             if (chat && request == null && string.IsNullOrWhiteSpace(previous) && !string.IsNullOrEmpty(settings.SystemPrompt)) body["instructions"] = settings.SystemPrompt;

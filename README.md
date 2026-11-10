@@ -86,7 +86,7 @@ PolyPrompt may not be the right choice if you need:
 dotnet add package PolyPrompt
 ```
 
-Current documented package version: **3.6.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
+Current documented package version: **3.7.0**. PolyPrompt targets **.NET 8.0** and **.NET 10.0**.
 
 ## Architecture
 
@@ -138,7 +138,14 @@ ChatResponse reply = await chat.ChatAsync("Explain dependency injection.", new C
 ChatResponse other = await chat.ChatAsync("Hi", new CompletionOptions { Model = "gpt-oss:20b" });
 ```
 
-The same options object is used by `ChatAsync`, `GenerateAsync`, and `ToolChatAsync` (through `ToolChatRequest.Options`). When nothing sets `MaxTokens`, 4096 is sent.
+The same options object is used by `ChatAsync`, `GenerateAsync`, and `ToolChatAsync` (through `ToolChatRequest.Options`).
+
+**Output limit.** When neither the call nor `Defaults` sets `MaxTokens`, 4096 (`CompletionClientBase.DefaultMaxTokens`) is sent, except on Ollama, which sends no `num_predict` so the model can finish (a fixed 4096 cuts reasoning models off mid-answer). Set `SendDefaultMaxTokens = false` on any completion client to send no limit and let the provider's own default apply; set it to `true` on an Ollama client to get the 4096 cap back. Anthropic, and Anthropic models on Bedrock, require a limit, so they always send 4096 when nothing else is set. An explicit `MaxTokens` is always sent.
+
+```csharp
+using OpenAiCompletionClient openAi = new OpenAiCompletionClient(apiKey: key);
+openAi.SendDefaultMaxTokens = false;   // no max_tokens unless a call or Defaults sets one
+```
 
 ## Quick Start
 
@@ -542,7 +549,7 @@ Harness settings you have saved yourself (for example allow rules in your Claude
 
 `CliAgentResult` carries `Success`, `Text`, `Reasoning`, `SessionId`, `Events`, `Usage` and `CostUsd` (exactly as the harness reported them, null otherwise; never estimated), `ExitCode`, `StandardError`, `RawOutput`, `FailureKind`, `TimedOut`, `OutputTruncated`, and `MalformedLines`. Failures do not throw; only caller cancellation does (`OperationCanceledException`, after the process tree is killed). `ListModelsAsync` throws `CliAgentException` with a `FailureKind` when the CLI cannot list models.
 
-Each process is recorded in `CallDetails` as a `ProcessCallDetail` (`Method = "EXEC"`, `Url` = executable path, `RequestBody` = arguments as JSON, `StatusCode` = exit code, `ResponseBody` = standard output, plus `Arguments`, `StandardInput`, `StandardError`, `ProcessId`, `TimedOut`, `Cancelled`, `OutputTruncated`, `FailureKind`), and reported to telemetry as `exec {executable}` spans and `polyprompt.process.*` metrics (see [TELEMETRY.md](TELEMETRY.md)).
+Each process is recorded in `CallDetails` as a `ProcessCallDetail` (`Method = "EXEC"`, `Url` = executable path, `RequestBody` = arguments as JSON, `StatusCode` = exit code, `ResponseBody` = standard output, plus `Arguments`, `StandardInput`, `StandardError`, `ProcessId`, `TimedOut`, `Cancelled`, `OutputTruncated`, `FailureKind`; by default only metadata is kept, so arguments, standard input, and standard output are left out unless `CallDetailCapture` is `Full`), and reported to telemetry as `exec {executable}` spans and `polyprompt.process.*` metrics (see [TELEMETRY.md](TELEMETRY.md)).
 
 ### Console sample
 
@@ -1036,7 +1043,18 @@ bool pulled = await models.PullModelAsync("gemma3:4b", progress =>
     return Task.CompletedTask;
 });
 bool deleted = await models.DeleteModelAsync("old-model:1b");
+
+// Ollama only: load a model ahead of the first request, keep it loaded, or free its memory.
+await models.LoadModelAsync("gemma3:4b", keepAlive: Timeout.InfiniteTimeSpan);   // stay loaded until the server stops
+await models.UnloadModelAsync("gemma3:4b");                                      // free RAM/VRAM now; stays on disk
+
+// Ollama only: does the model really handle tools?
+if (info?.SupportsTools == true) { /* send tools */ }
 ```
+
+`LoadModelAsync` and `UnloadModelAsync` send an empty `/api/generate` with `keep_alive` and return false on an HTTP error (for example, a model that is not pulled). To keep a model loaded across ordinary requests, set `KeepAlive` on `OllamaCompletionOptions` or `OllamaEmbeddingOptions` (sent as whole seconds; `TimeSpan.Zero` unloads after the request, any negative value keeps the model loaded, and null uses the server default of 5 minutes).
+
+`ModelInformation.SupportsTools` is best-effort and set only by Ollama; other providers leave it null. Ollama lists the `tools` capability for some models whose prompt template drops tools without a word (deepseek-r1 builds, for one), so PolyPrompt reports true only when `tools` is listed and the model has a built-in renderer or a template that references tools (`.Tools` in a Go template, `tools` in a Jinja one). It is null when the server reports no capabilities. The raw `capabilities`, `template`, `renderer`, and `parser` values are in `Metadata` for callers that want to decide for themselves.
 
 `AnthropicModelClient` and `CohereModelClient` page through their catalogs (`PageSize`, 1 to 1,000), and `GeminiModelClient` follows `nextPageToken`.
 
@@ -1077,9 +1095,19 @@ foreach (CallDetail detail in client.CallDetails)
 // CallDetails is a detached snapshot. MaxCallDetails bounds retention (0 disables recording).
 client.MaxCallDetails = 100;
 client.ClearCallDetails();
+
+// Record request and response bodies too (they contain prompts and model output).
+client.CallDetailCapture = CallDetailCapture.Full;
 ```
 
-Call details record the request headers, which include credentials; treat them as sensitive.
+What is recorded is controlled per client:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `CallDetailCapture` | `Metadata` | `Metadata` records URL, method, headers, status, timing, success, and error, with `RequestBody` and `ResponseBody` left null. `Full` adds the bodies. `None` records nothing. For harness processes, `Metadata` also leaves out `Arguments` (which can carry a system prompt) and `StandardInput`; the executable, working directory, exit code, standard error, and failure details are kept. |
+| `RedactCredentials` | `true` | Replaces credential header values with `[redacted]`: `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `x-api-key`, `api-key`, `x-goog-api-key`, `x-amz-security-token`, any header whose name contains `api-key`, `apikey`, `auth`, `secret`, or `password`, and any whose name ends in `token`. Rate-limit headers such as `x-ratelimit-remaining-tokens` are kept. Set to false only to debug authentication or request signing. |
+
+Both apply to calls recorded after the change, and neither changes what is sent upstream. Before 3.7.0, bodies and credential headers were always recorded; set `CallDetailCapture = CallDetailCapture.Full` and `RedactCredentials = false` to get that behavior back.
 
 ### Telemetry (Metrics and Traces)
 
@@ -1230,6 +1258,8 @@ Clients with provider-shaped credentials or routing:
 | `Endpoint`, `ApiKey` | every HTTP client | Read-only |
 | `TimeoutMs` | every client | HTTP request or harness run timeout in milliseconds (default 120,000, must be greater than zero) |
 | `CallDetails`, `MaxCallDetails`, `ClearCallDetails()` | every client | Recorded HTTP calls and harness processes (default retention 1,000) |
+| `CallDetailCapture`, `RedactCredentials` | every client | What call details record (default `Metadata`, no bodies) and whether credential headers are redacted (default true); see [Inspect Call Details](#inspect-call-details) |
+| `SendDefaultMaxTokens` | completion clients | Send 4096 when nothing sets `MaxTokens` (default true; false on Ollama) |
 | `ValidateConnectivityAsync()` | every client | `bool` on HTTP clients (see [Validate Connectivity](#validate-connectivity)); `CliConnectivityResult` on harness clients |
 | `Executable`, `Model`, `PermissionMode`, `WorkingDirectory`, `Environment`, `SupportsSessionResume` | harness clients | See [Agent Harnesses](#agent-harnesses) |
 | `Defaults` | every client except model clients | Client-wide settings of the capability's options type |
@@ -1239,6 +1269,7 @@ Clients with provider-shaped credentials or routing:
 | `ApiVersion` | Azure OpenAI clients | `api-version` query value (default `AzureOpenAiDefaults.ApiVersion`) |
 | `PageSize` | `AnthropicModelClient`, `CohereModelClient` | Model-list page size, 1 to 1,000 |
 | `PullTimeout`, `PullModelAsync`, `DeleteModelAsync` | `OllamaModelClient` | Model pull and delete |
+| `LoadModelAsync`, `UnloadModelAsync` | `OllamaModelClient` | Load a model into memory (with an optional keep-alive) or unload it |
 
 ### Options
 
@@ -1253,7 +1284,7 @@ Clients with provider-shaped credentials or routing:
 
 Provider-specific parameters:
 
-- **Ollama**: `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`; embeddings add `ContextLength` and `Truncate` (bool).
+- **Ollama**: `ContextLength`, `TopK`, `RepeatPenalty`, `Seed`, `MinP`, `RepeatLastN`, `KeepAlive` (`TimeSpan`); embeddings add `ContextLength`, `Truncate` (bool), and `KeepAlive`.
 - **xAI**: Responses-specific settings are in `XAiCompletionOptions`; embeddings use `XAiEmbeddingOptions` (including Dimensions/EncodingFormat, Preview, and User). See the xAI section for the complete native API.
 - **OpenAI and Azure OpenAI**: `FrequencyPenalty`, `PresencePenalty`, `Seed`, and, for generation only, `Echo`, `Suffix`, and `Logprobs`; embeddings add `Dimensions` and `EncodingFormat` (`float` or `base64`).
 - **Gemini and Vertex AI**: `TopK`, `CandidateCount`, `PresencePenalty`, `FrequencyPenalty`, `ToolSchemaMode`; embeddings add `TaskType` and `Title`, and Vertex AI adds `OutputDimensionality` and `AutoTruncate`.
@@ -1409,7 +1440,7 @@ dotnet build src/PolyPrompt.sln
 
 ## Running the Automated Tests
 
-The local suite (796 cases, including streaming lifecycle, telemetry, serializer, and agent harness cases) runs against an in-process mock server and a fake agent CLI (`src/Test.Shared/FakeCli`, a POSIX shell shim placed first on the client's `PATH`, so macOS or Linux), and needs no credentials:
+The local suite (805 cases, including streaming lifecycle, telemetry, serializer, and agent harness cases) runs against an in-process mock server and a fake agent CLI (`src/Test.Shared/FakeCli`, a POSIX shell shim placed first on the client's `PATH`, so macOS or Linux), and needs no credentials:
 
 ```bash
 dotnet run --project src/Test.Automated --framework net8.0 -- selftest

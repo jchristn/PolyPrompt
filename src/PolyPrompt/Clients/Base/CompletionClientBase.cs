@@ -17,9 +17,19 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Maximum tokens sent when neither the call nor <see cref="Defaults"/> sets one.
+        /// Maximum tokens sent when neither the call nor <see cref="Defaults"/> sets one and
+        /// <see cref="SendDefaultMaxTokens"/> is true, or the provider requires a limit.
         /// </summary>
         public const int DefaultMaxTokens = 4096;
+
+        /// <summary>
+        /// Whether <see cref="DefaultMaxTokens"/> is sent when neither the call nor <see cref="Defaults"/> sets
+        /// <c>MaxTokens</c>. When false, no output limit is sent and the provider's own default applies (for Ollama, no
+        /// limit; for most hosted APIs, the model's maximum). Providers whose API requires a limit (Anthropic, and
+        /// Anthropic models on Bedrock) still send <see cref="DefaultMaxTokens"/>. An explicit <c>MaxTokens</c> is always
+        /// sent. Default: true, except on <c>OllamaCompletionClient</c>, where it is false.
+        /// </summary>
+        public bool SendDefaultMaxTokens { get; set; } = true;
 
         /// <summary>
         /// Client-wide default settings. Each provider exposes its own options type here (for example
@@ -235,6 +245,17 @@ namespace PolyPrompt.Clients
         protected abstract Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token);
 
         /// <summary>
+        /// Whether the provider's API rejects a request without an output token limit for this model. When true,
+        /// <see cref="DefaultMaxTokens"/> is sent even if <see cref="SendDefaultMaxTokens"/> is false. Default: false.
+        /// </summary>
+        /// <param name="model">Resolved model name.</param>
+        /// <returns>True when a limit must be sent.</returns>
+        protected virtual bool RequiresMaxTokens(string model)
+        {
+            return false;
+        }
+
+        /// <summary>
         /// Merge per-call options over <see cref="Defaults"/>.
         /// </summary>
         /// <param name="options">Per-call options (nullable).</param>
@@ -249,7 +270,7 @@ namespace PolyPrompt.Clients
 
             return new ResolvedCompletion(
                 model,
-                options?.MaxTokens ?? defaults.MaxTokens ?? DefaultMaxTokens,
+                options?.MaxTokens ?? defaults.MaxTokens ?? (SendDefaultMaxTokens || RequiresMaxTokens(model) ? DefaultMaxTokens : (int?)null),
                 options?.Temperature ?? defaults.Temperature,
                 options?.TopP ?? defaults.TopP,
                 options?.SystemPrompt ?? defaults.SystemPrompt,
@@ -589,9 +610,9 @@ namespace PolyPrompt.Clients
             public string Model { get; }
 
             /// <summary>
-            /// Maximum tokens to generate.
+            /// Maximum tokens to generate, or null to send no limit (see <see cref="SendDefaultMaxTokens"/>).
             /// </summary>
-            public int MaxTokens { get; }
+            public int? MaxTokens { get; }
 
             /// <summary>
             /// Sampling temperature, or null to send none.
@@ -631,7 +652,7 @@ namespace PolyPrompt.Clients
             /// <param name="call">Per-call options.</param>
             public ResolvedCompletion(
                 string model,
-                int maxTokens,
+                int? maxTokens,
                 double? temperature,
                 double? topP,
                 string? systemPrompt,

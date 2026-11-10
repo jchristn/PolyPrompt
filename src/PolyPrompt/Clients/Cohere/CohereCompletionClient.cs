@@ -191,9 +191,9 @@ namespace PolyPrompt.Clients
             {
                 { "model", settings.Model },
                 { "messages", messages },
-                { "max_tokens", settings.MaxTokens },
                 { "stream", stream }
             };
+            if (settings.MaxTokens.HasValue) body["max_tokens"] = settings.MaxTokens.Value;
 
             ApplySampling(body, settings);
             if (chat) ApplyReasoning(body, settings.ReasoningEffort);
@@ -206,9 +206,9 @@ namespace PolyPrompt.Clients
             {
                 { "model", settings.Model },
                 { "messages", BuildMessages(messages) },
-                { "max_tokens", settings.MaxTokens },
                 { "stream", stream }
             };
+            if (settings.MaxTokens.HasValue) body["max_tokens"] = settings.MaxTokens.Value;
 
             ApplySampling(body, settings);
 

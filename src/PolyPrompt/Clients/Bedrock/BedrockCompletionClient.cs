@@ -74,6 +74,13 @@ namespace PolyPrompt.Clients
         #region Protected-Methods
 
         /// <inheritdoc />
+        /// <remarks>Anthropic models (including cross-region inference profiles such as <c>us.anthropic.*</c>) always get a limit, as on the Anthropic API.</remarks>
+        protected override bool RequiresMaxTokens(string model)
+        {
+            return model.Contains("anthropic.", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <inheritdoc />
         protected override Task PrepareRequestAsync(HttpRequestMessage request, byte[] body, CancellationToken token)
         {
             BedrockProtocol.Sign(request, body, _CredentialProvider, _Region);
@@ -208,7 +215,8 @@ namespace PolyPrompt.Clients
             string? toolChoice,
             ReasoningEffort? reasoningEffort)
         {
-            Dictionary<string, object> inferenceConfig = new Dictionary<string, object> { { "maxTokens", settings.MaxTokens } };
+            Dictionary<string, object> inferenceConfig = new Dictionary<string, object>();
+            if (settings.MaxTokens.HasValue) inferenceConfig["maxTokens"] = settings.MaxTokens.Value;
 
             bool thinkingEnabled = reasoningEffort != null
                 && settings.Model.StartsWith("anthropic.", StringComparison.OrdinalIgnoreCase)

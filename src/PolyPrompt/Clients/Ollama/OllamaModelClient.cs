@@ -238,6 +238,41 @@ namespace PolyPrompt.Clients
             }, token).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Load a model into memory so the first real request does not wait for it, by sending Ollama an empty
+        /// <c>/api/generate</c> request. Use this for chat and generation models; Ollama loads an embedding model on its
+        /// first <c>/api/embed</c> call.
+        /// </summary>
+        /// <param name="model">The model name to load, for example gemma3:4b.</param>
+        /// <param name="keepAlive">How long the model stays loaded afterwards; see
+        /// <see cref="Options.OllamaCompletionOptions.KeepAlive"/>. A negative value keeps it loaded until the server stops.
+        /// Null uses the server default (5 minutes unless <c>OLLAMA_KEEP_ALIVE</c> is set).</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the server loaded the model, false on an HTTP error (for example, the model is not pulled)
+        /// or a transport failure.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled or the request times out.</exception>
+        public Task<bool> LoadModelAsync(string model, TimeSpan? keepAlive = null, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(model)) throw new ArgumentNullException(nameof(model));
+            return SendKeepAliveAsync(PolyPromptTelemetryNames.OperationModelLoad, "load", model, keepAlive, token);
+        }
+
+        /// <summary>
+        /// Unload a model from memory now, freeing its RAM or VRAM, by sending Ollama an empty <c>/api/generate</c> request
+        /// with <c>keep_alive</c> 0. The model stays on disk.
+        /// </summary>
+        /// <param name="model">The model name to unload.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>True when the server accepted the request, false on an HTTP error or a transport failure.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when model is null, empty, or whitespace.</exception>
+        /// <exception cref="OperationCanceledException">Thrown when the token is cancelled or the request times out.</exception>
+        public Task<bool> UnloadModelAsync(string model, CancellationToken token = default)
+        {
+            if (string.IsNullOrWhiteSpace(model)) throw new ArgumentNullException(nameof(model));
+            return SendKeepAliveAsync(PolyPromptTelemetryNames.OperationModelUnload, "unload", model, TimeSpan.Zero, token);
+        }
+
         #endregion
 
         #region Protected-Methods
@@ -285,7 +320,21 @@ namespace PolyPrompt.Clients
                 CopyString(responseObj, info, "license");
                 CopyString(responseObj, info, "template");
                 CopyString(responseObj, info, "parameters");
-                if (responseObj.ContainsKey("capabilities")) info.Metadata["capabilities"] = _Serializer.SerializeJson(responseObj["capabilities"], false);
+                CopyString(responseObj, info, "renderer");
+                CopyString(responseObj, info, "parser");
+
+                List<string>? capabilities = null;
+                if (responseObj.ContainsKey("capabilities") && responseObj["capabilities"] != null)
+                {
+                    string capabilitiesJson = _Serializer.SerializeJson(responseObj["capabilities"], false);
+                    info.Metadata["capabilities"] = capabilitiesJson;
+                    capabilities = ParseStringList(capabilitiesJson);
+                }
+
+                info.SupportsTools = DetectToolSupport(
+                    capabilities,
+                    info.Metadata.TryGetValue("template", out string? template) ? template : null,
+                    info.Metadata.TryGetValue("renderer", out string? renderer) ? renderer : null);
 
                 return info;
             }
@@ -303,6 +352,62 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Private-Methods
+
+        /// <summary>
+        /// Decide whether an Ollama model can actually use tools. Ollama lists the <c>tools</c> capability for some models
+        /// whose prompt template drops tools without a word (deepseek-r1 builds, for one), so the listing alone is not
+        /// enough: the model also needs a built-in renderer, or a template that references tools (a Go template using
+        /// <c>.Tools</c> or a Jinja template using <c>tools</c>). Returns null when the server reports no capabilities.
+        /// </summary>
+        internal static bool? DetectToolSupport(List<string>? capabilities, string? template, string? renderer)
+        {
+            if (capabilities == null) return null;
+            bool listed = capabilities.Exists(c => string.Equals(c, "tools", StringComparison.OrdinalIgnoreCase));
+            if (!listed) return false;
+            if (!string.IsNullOrWhiteSpace(renderer) || template == null) return true;
+            return template.Contains(".Tools", StringComparison.Ordinal) || template.Contains("tools", StringComparison.Ordinal);
+        }
+
+        private List<string>? ParseStringList(string json)
+        {
+            if (!TryParseJson(json, out System.Text.Json.JsonElement element) || element.ValueKind != System.Text.Json.JsonValueKind.Array) return null;
+            List<string> values = new List<string>();
+            foreach (System.Text.Json.JsonElement item in element.EnumerateArray())
+            {
+                if (item.ValueKind == System.Text.Json.JsonValueKind.String) values.Add(item.GetString() ?? "");
+            }
+            return values;
+        }
+
+        private async Task<bool> SendKeepAliveAsync(string operation, string verb, string model, TimeSpan? keepAlive, CancellationToken token)
+        {
+            return await InstrumentBoolAsync(operation, model, async () =>
+            {
+                string url = BuildUrl("/api/generate");
+                Dictionary<string, object> body = new Dictionary<string, object> { { "model", model }, { "stream", false } };
+                if (keepAlive.HasValue) body["keep_alive"] = OllamaProtocol.KeepAliveSeconds(keepAlive.Value);
+
+                _Logging.Debug(_Header + "POST " + url + " (" + verb + " " + model + ")");
+
+                try
+                {
+                    HttpCallResult result = await PostJsonAsync(url, body, token).ConfigureAwait(false);
+                    if (result.IsSuccessStatusCode) return true;
+
+                    _Logging.Warn(_Header + verb + " request failed with status " + result.StatusCode + ": " + result.ResponseBody);
+                    return false;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _Logging.Warn(_Header + verb + " request failed: " + ex.Message);
+                    return false;
+                }
+            }, token).ConfigureAwait(false);
+        }
 
         private static void CopyString(Dictionary<string, object> source, ModelInformation info, string key)
         {

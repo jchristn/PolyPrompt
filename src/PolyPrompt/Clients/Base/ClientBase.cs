@@ -24,6 +24,10 @@ namespace PolyPrompt.Clients
         private readonly object _CallDetailsLock = new object();
         private readonly List<CallDetail> _CallDetails = new List<CallDetail>();
         private int _MaxCallDetails = 1000;
+        private CallDetailCapture _CallDetailCapture = CallDetailCapture.Metadata;
+        private bool _RedactCredentials = true;
+
+        private const string Redacted = "[redacted]";
 
         private bool _Disposed = false;
 
@@ -114,6 +118,33 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
+        /// How much of each upstream call is recorded in <see cref="CallDetails"/>. Default:
+        /// <see cref="Models.CallDetailCapture.Metadata"/>, which records URL, method, headers, status, timing, and errors
+        /// but no request or response bodies (they contain prompts and model output). Set to
+        /// <see cref="Models.CallDetailCapture.Full"/> to record bodies, or <see cref="Models.CallDetailCapture.None"/> to
+        /// record nothing. Applies to calls recorded after the change.
+        /// </summary>
+        public CallDetailCapture CallDetailCapture
+        {
+            get { return _CallDetailCapture; }
+            set { _CallDetailCapture = value; }
+        }
+
+        /// <summary>
+        /// Whether credential headers are replaced with <c>[redacted]</c> in recorded <see cref="CallDetails"/>. Covers
+        /// <c>Authorization</c>, <c>Proxy-Authorization</c>, <c>Cookie</c>, <c>Set-Cookie</c>, <c>x-api-key</c>,
+        /// <c>api-key</c>, <c>x-goog-api-key</c>, <c>x-amz-security-token</c>, any header whose name contains
+        /// <c>api-key</c>, <c>apikey</c>, <c>auth</c>, <c>secret</c>, or <c>password</c>, and any whose name ends in
+        /// <c>token</c> (rate-limit headers such as <c>x-ratelimit-remaining-tokens</c> are kept). Default: true. Set to false
+        /// only to debug authentication or request signing. Applies to calls recorded after the change.
+        /// </summary>
+        public bool RedactCredentials
+        {
+            get { return _RedactCredentials; }
+            set { _RedactCredentials = value; }
+        }
+
+        /// <summary>
         /// Bounded provider label used on telemetry, for example <c>openai</c> or <c>aws.bedrock</c>.
         /// </summary>
         internal string TelemetryProvider
@@ -198,8 +229,17 @@ namespace PolyPrompt.Clients
             lock (_CallDetailsLock)
             {
                 if (_MaxCallDetails == 0) return;
+                if (_CallDetailCapture == CallDetailCapture.None) return;
 
-                _CallDetails.Add(CloneCallDetail(detail));
+                CallDetail clone = CloneCallDetail(detail);
+                if (_CallDetailCapture == CallDetailCapture.Metadata) StripBodies(clone);
+                if (_RedactCredentials)
+                {
+                    RedactHeaders(clone.RequestHeaders);
+                    RedactHeaders(clone.ResponseHeaders);
+                }
+
+                _CallDetails.Add(clone);
                 TrimCallDetailsIfNeeded();
             }
         }
@@ -677,6 +717,53 @@ namespace PolyPrompt.Clients
             {
                 scope?.Fail(ex);
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Whether a header name carries a credential that <see cref="RedactCredentials"/> hides.
+        /// </summary>
+        /// <param name="name">Header name.</param>
+        /// <returns>True when the header value is a credential.</returns>
+        internal static bool IsCredentialHeader(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string n = name.ToLowerInvariant();
+            switch (n)
+            {
+                case "authorization":
+                case "proxy-authorization":
+                case "cookie":
+                case "set-cookie":
+                case "x-api-key":
+                case "api-key":
+                case "x-goog-api-key":
+                case "x-amz-security-token":
+                    return true;
+            }
+            // "token" only as a suffix, so rate-limit headers such as x-ratelimit-remaining-tokens stay readable.
+            return n.Contains("api-key") || n.Contains("apikey") || n.Contains("auth") || n.Contains("secret")
+                || n.Contains("password") || n.EndsWith("token", StringComparison.Ordinal);
+        }
+
+        private static void RedactHeaders(Dictionary<string, string>? headers)
+        {
+            if (headers == null || headers.Count == 0) return;
+            List<string> keys = new List<string>(headers.Keys);
+            foreach (string key in keys)
+            {
+                if (IsCredentialHeader(key)) headers[key] = Redacted;
+            }
+        }
+
+        private static void StripBodies(CallDetail detail)
+        {
+            detail.RequestBody = null;
+            detail.ResponseBody = null;
+            if (detail is ProcessCallDetail process)
+            {
+                process.Arguments = new List<string>();
+                process.StandardInput = null;
             }
         }
 

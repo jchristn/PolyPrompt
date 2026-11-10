@@ -71,6 +71,8 @@ namespace PolyPrompt.Clients
             int? contextLength = Pick<OllamaEmbeddingOptions, int>(options, Defaults, o => o.ContextLength);
             if (truncate.HasValue) body["truncate"] = truncate.Value;
             if (contextLength.HasValue) body["options"] = new Dictionary<string, object> { { "num_ctx", contextLength.Value } };
+            TimeSpan? keepAlive = Pick<OllamaEmbeddingOptions, TimeSpan>(options, Defaults, o => o.KeepAlive);
+            if (keepAlive.HasValue) body["keep_alive"] = OllamaProtocol.KeepAliveSeconds(keepAlive.Value);
 
             EmbeddingResponse response = new EmbeddingResponse { Model = model };
             return ExecutePostAsync(response, "embed", BuildUrl("/api/embed"), body, ParseEmbeddings, token);

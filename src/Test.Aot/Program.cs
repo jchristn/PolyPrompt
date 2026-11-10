@@ -54,6 +54,7 @@ namespace Test.Aot
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             await RunClientChecksAsync(server).ConfigureAwait(false);
             await RunXAiAdvancedChecksAsync(server).ConfigureAwait(false);
+            await RunReleaseThreeSevenChecksAsync(server).ConfigureAwait(false);
             foreach (string provider in new[] { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere", "ollamacloud", "azure", "vertex" })
                 foreach (bool streaming in new[] { false, true })
                 {
@@ -291,6 +292,49 @@ namespace Test.Aot
         #endregion
 
         #region Client-Checks
+
+        /// <summary>
+        /// 3.7.0 paths: Ollama keep_alive (a boxed long in the request graph), model load and unload, SupportsTools from
+        /// /api/show, the optional output limit, and metadata-only call details with redacted credentials.
+        /// </summary>
+        private static async Task RunReleaseThreeSevenChecksAsync(LocalOpenAiTestServer server)
+        {
+            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "aot-secret") { Model = "test-model" };
+            ollama.Defaults.KeepAlive = TimeSpan.FromMinutes(2);
+            await CheckAsync("ollama: chat with keep_alive and no default limit", async () =>
+            {
+                Ok(await ollama.ChatAsync("keep alive").ConfigureAwait(false));
+                string body = server.RequestBodies.Last();
+                Expect(true, body.Contains("\"keep_alive\":120", StringComparison.Ordinal), "keep_alive seconds in " + body);
+                Expect(false, body.Contains("num_predict", StringComparison.Ordinal), "no num_predict");
+            }).ConfigureAwait(false);
+
+            Check("call details: metadata only, credentials redacted", () =>
+            {
+                CallDetail detail = ollama.CallDetails.Last();
+                Expect(true, detail.RequestBody == null && detail.ResponseBody == null, "bodies dropped");
+                Expect("[redacted]", detail.RequestHeaders?["Authorization"], "authorization");
+            });
+
+            using OllamaModelClient models = new OllamaModelClient(server.Endpoint);
+            await CheckAsync("ollama: load and unload", async () =>
+            {
+                Expect(true, await models.LoadModelAsync("test-model", Timeout.InfiniteTimeSpan).ConfigureAwait(false), "load");
+                Expect(true, server.RequestBodies.Last().Contains("\"keep_alive\":-1", StringComparison.Ordinal), "keep_alive -1");
+                Expect(true, await models.UnloadModelAsync("test-model").ConfigureAwait(false), "unload");
+            }).ConfigureAwait(false);
+
+            await CheckAsync("ollama: SupportsTools from /api/show", async () =>
+            {
+                ModelInformation? info = await models.GetModelInformationAsync("probe-renderer").ConfigureAwait(false);
+                Expect(true, info?.SupportsTools == true, "renderer handles tools");
+                Expect("qwen3-coder", info?.Metadata["parser"], "parser");
+                ModelInformation? deepseek = await models.GetModelInformationAsync("probe-deepseek").ConfigureAwait(false);
+                Expect(true, deepseek?.SupportsTools == false, "deepseek template drops tools");
+                string json = System.Text.Json.JsonSerializer.Serialize(info!, PolyPromptJsonContext.Default.ModelInformation);
+                Expect(true, json.Contains("SupportsTools\":true", StringComparison.OrdinalIgnoreCase), "serialized SupportsTools in " + json);
+            }).ConfigureAwait(false);
+        }
 
         private static async Task RunXAiAdvancedChecksAsync(LocalOpenAiTestServer server)
         {

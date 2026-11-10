@@ -309,6 +309,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CohereCompletionClient client = CreateCohereClient(server);
+            WireCapture.Full(client);
 
             CohereCompletionOptions options = new CohereCompletionOptions();
             options.SystemPrompt = "Be brief.";
@@ -1054,6 +1055,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using TeiEmbeddingClient client = CreateTeiClient(server);
+            WireCapture.Full(client);
 
             TeiEmbeddingOptions options = new TeiEmbeddingOptions();
             options.Normalize = false;
@@ -1090,6 +1092,7 @@ namespace Test.Shared
             SharedAssert.False(client.CallDetails[0].RequestHeaders.ContainsKey("Authorization"), "TEI without an API key should not send Authorization.");
 
             using TeiEmbeddingClient secured = new TeiEmbeddingClient(server.Endpoint, "tei-secret");
+            WireCapture.Full(secured);
             await secured.EmbedAsync("x", token: token).ConfigureAwait(false);
             SharedAssert.True(secured.CallDetails[0].RequestHeaders.TryGetValue("Authorization", out string? auth) && auth == "Bearer tei-secret",
                 "TEI with an API key should send a bearer Authorization header.");
@@ -1392,6 +1395,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using BedrockRerankClient client = CreateBedrockRerankClient(server);
+            WireCapture.Full(client);
 
             SharedAssert.Equal("cohere.rerank-v3-5:0", client.Model, "Bedrock should default to the Cohere rerank model.");
             await SharedAssert.ThrowsExactAsync<ArgumentNullException>(

@@ -17,6 +17,7 @@ namespace PolyPrompt.Options
         private int? _Seed = null;
         private double? _MinP = null;
         private int? _RepeatLastN = null;
+        private TimeSpan? _KeepAlive = null;
 
         #endregion
 
@@ -104,6 +105,18 @@ namespace PolyPrompt.Options
                 else
                     _RepeatLastN = null;
             }
+        }
+
+        /// <summary>
+        /// How long Ollama keeps the model loaded after this request (<c>keep_alive</c>), sent as whole seconds.
+        /// <see cref="TimeSpan.Zero"/> unloads the model as soon as the request finishes; a negative value (for example
+        /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>) keeps it loaded until the server stops. Null uses the
+        /// server default (5 minutes unless <c>OLLAMA_KEEP_ALIVE</c> is set).
+        /// </summary>
+        public TimeSpan? KeepAlive
+        {
+            get { return _KeepAlive; }
+            set { _KeepAlive = value; }
         }
 
         #endregion

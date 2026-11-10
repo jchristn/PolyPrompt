@@ -46,7 +46,8 @@ namespace Test.Shared
                 Case(suiteId, "arch_rerank_validation", "Every rerank client rejects bad queries, documents, and TopN before sending", RunRerankValidationAsync),
                 Case(suiteId, "arch_classification_model_validation", "Classification and model clients reject bad input before sending", RunClassificationAndModelValidationAsync),
                 Case(suiteId, "arch_no_model", "Clients that need a model throw InvalidOperationException without one, and a per-call model suffices", RunNoModelAsync),
-                Case(suiteId, "arch_completion_merge", "Every completion client merges per-call options over Defaults field by field, with MaxTokens defaulting to 4096", RunCompletionMergeAsync),
+                Case(suiteId, "arch_completion_merge", "Every completion client merges per-call options over Defaults field by field, with MaxTokens defaulting to 4096 (none on Ollama)", RunCompletionMergeAsync),
+                Case(suiteId, "arch_default_max_tokens_optout", "SendDefaultMaxTokens = false sends no output limit, except where the provider requires one; an explicit MaxTokens always wins", RunDefaultMaxTokensOptOutAsync),
                 Case(suiteId, "arch_shared_httpclient", "Clients sharing an HttpClient send their own credentials per request and never touch DefaultRequestHeaders or dispose it", RunSharedHttpClientAsync),
                 Case(suiteId, "arch_gemini_key_header", "Gemini clients send the API key only in the x-goog-api-key header, never in a URL or call detail URL", RunGeminiKeyHeaderAsync),
                 Case(suiteId, "arch_connectivity_success", "Every client's ValidateConnectivityAsync returns true against a reachable server", RunConnectivitySuccessAsync),
@@ -440,7 +441,9 @@ namespace Test.Shared
                     using JsonDocument b2 = JsonDocument.Parse(bodies[2]);
                     using JsonDocument b3 = JsonDocument.Parse(bodies[3]);
 
-                    SharedAssert.Equal<int?>(CompletionClientBase.DefaultMaxTokens, wire.MaxTokens(b0.RootElement), name + " should send the built-in MaxTokens when nothing sets it.");
+                    int? builtIn = live is OllamaCompletionClient ? null : CompletionClientBase.DefaultMaxTokens;
+                    SharedAssert.Equal(!(live is OllamaCompletionClient), live.SendDefaultMaxTokens, name + " SendDefaultMaxTokens default.");
+                    SharedAssert.Equal<int?>(builtIn, wire.MaxTokens(b0.RootElement), name + " should send the built-in MaxTokens (none on Ollama) when nothing sets it.");
                     SharedAssert.True(wire.Temperature(b0.RootElement) == null, name + " should send no temperature when nothing sets it.");
                     SharedAssert.True(wire.UsesModel(b0.RootElement, urls[0], defaultModel), name + " should use the default model.");
 
@@ -458,6 +461,48 @@ namespace Test.Shared
                     SharedAssert.Equal(defaultModel, live.Model, name + " a per-call model should not change the client's model.");
                 }
             }
+        }
+
+        private static async Task RunDefaultMaxTokensOptOutAsync(CancellationToken token)
+        {
+            foreach (CompletionClientBase probe in LocalClients.Completion("http://127.0.0.1:1"))
+            {
+                Type type = probe.GetType();
+                probe.Dispose();
+                using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+                using CompletionClientBase live = LocalClients.Completion(server.Endpoint).First(c => c.GetType() == type);
+                string name = type.Name;
+                CompletionWire wire = WireFor(live);
+                bool required = live is AnthropicCompletionClient || live is BedrockCompletionClient;
+
+                live.SendDefaultMaxTokens = false;
+                SharedAssert.True((await live.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, name + " chat with no default limit should succeed.");
+                SharedAssert.True((await live.ChatAsync("hi", new CompletionOptions { MaxTokens = 50 }, token).ConfigureAwait(false)).Success, name + " chat with an explicit limit should succeed.");
+                live.SendDefaultMaxTokens = true;
+                SharedAssert.True((await live.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, name + " chat with the default limit should succeed.");
+
+                List<string> bodies = server.RequestBodies;
+                using JsonDocument off = JsonDocument.Parse(bodies[0]);
+                using JsonDocument explicitLimit = JsonDocument.Parse(bodies[1]);
+                using JsonDocument on = JsonDocument.Parse(bodies[2]);
+                SharedAssert.Equal<int?>(required ? CompletionClientBase.DefaultMaxTokens : null, wire.MaxTokens(off.RootElement),
+                    name + (required ? " must still send a limit, because the API requires one." : " should send no limit."));
+                SharedAssert.Equal<int?>(50, wire.MaxTokens(explicitLimit.RootElement), name + " should send an explicit MaxTokens.");
+                SharedAssert.Equal<int?>(CompletionClientBase.DefaultMaxTokens, wire.MaxTokens(on.RootElement), name + " should send the built-in limit when asked to.");
+            }
+
+            using LocalOpenAiTestServer bedrockServer = LocalOpenAiTestServer.Start();
+            using BedrockCompletionClient bedrock = (BedrockCompletionClient)LocalClients.Completion(bedrockServer.Endpoint).First(c => c is BedrockCompletionClient);
+            bedrock.SendDefaultMaxTokens = false;
+            bedrock.Model = "meta.llama3-8b-instruct-v1:0";
+            SharedAssert.True((await bedrock.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Bedrock Llama chat should succeed.");
+            bedrock.Model = "us.anthropic.claude-sonnet-4-20250514-v1:0";
+            SharedAssert.True((await bedrock.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Bedrock Anthropic profile chat should succeed.");
+            CompletionWire bedrockWire = WireFor(bedrock);
+            using JsonDocument llama = JsonDocument.Parse(bedrockServer.RequestBodies[0]);
+            using JsonDocument claude = JsonDocument.Parse(bedrockServer.RequestBodies[1]);
+            SharedAssert.Equal<int?>(null, bedrockWire.MaxTokens(llama.RootElement), "Bedrock non-Anthropic models get no limit.");
+            SharedAssert.Equal<int?>(CompletionClientBase.DefaultMaxTokens, bedrockWire.MaxTokens(claude.RootElement), "Bedrock Anthropic inference profiles still get a limit.");
         }
 
         #endregion

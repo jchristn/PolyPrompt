@@ -192,6 +192,8 @@ namespace Test.Shared
 
                 if (await LocalXAiRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
 
+                if (await LocalOllamaRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
+
                 if (await LocalGeminiToolRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false))
                 {
                     return;

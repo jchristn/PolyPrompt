@@ -53,6 +53,15 @@ namespace PolyPrompt.Models
         public int? OutputTokenLimit { get; set; } = null;
 
         /// <summary>
+        /// Whether the model can use tools (function calling), or null when the provider does not say. Best-effort: on
+        /// Ollama it is true only when the server lists the <c>tools</c> capability and the model's renderer or prompt
+        /// template actually renders tools (some templates, such as deepseek-r1 builds, are listed with <c>tools</c> but
+        /// drop them). The raw <c>capabilities</c>, <c>template</c>, and <c>renderer</c> values stay in
+        /// <see cref="Metadata"/> for callers that want to decide for themselves. Other providers leave it null.
+        /// </summary>
+        public bool? SupportsTools { get; set; } = null;
+
+        /// <summary>
         /// Provider-specific metadata as key-value pairs. Contains fields such as parameter_size,
         /// quantization_level, family, format, digest (Ollama), object type (OpenAI),
         /// or supportedGenerationMethods (Gemini).

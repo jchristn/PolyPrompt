@@ -155,7 +155,8 @@ namespace PolyPrompt.Clients
 
         private Dictionary<string, object> BuildGenerationConfig(ResolvedCompletion settings, bool applyReasoning)
         {
-            Dictionary<string, object> config = new Dictionary<string, object> { { "maxOutputTokens", settings.MaxTokens } };
+            Dictionary<string, object> config = new Dictionary<string, object>();
+            if (settings.MaxTokens.HasValue) config["maxOutputTokens"] = settings.MaxTokens.Value;
 
             if (settings.Temperature.HasValue) config["temperature"] = settings.Temperature.Value;
             if (settings.TopP.HasValue) config["topP"] = settings.TopP.Value;

@@ -506,6 +506,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using TypeSafeDecisionClient client = Client(server);
+            WireCapture.Full(client);
 
             await client.DecideAsync(Request("refund"), null, token).ConfigureAwait(false);
             await client.DecideAsync(Request("err429"), null, token).ConfigureAwait(false);

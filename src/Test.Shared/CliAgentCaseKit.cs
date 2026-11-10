@@ -54,6 +54,7 @@ namespace Test.Shared
             FakeCli fake = FakeCli.Create(p.ExecutableName, scenario);
             CliAgentClientBase client = fake.Attach(p.Create());
             client.TimeoutMs = 30000;
+            WireCapture.Full(client);
             return (fake, client);
         }
 

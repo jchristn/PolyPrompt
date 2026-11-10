@@ -30,6 +30,7 @@ namespace TypeSafeConsole
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
             _Client = new TypeSafeDecisionClient(endpoint, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey);
+            _Client.CallDetailCapture = CallDetailCapture.Full;   // the "call details" command can show bodies
             _Client.Model = model;
             _Client.TimeoutMs = timeoutMs;
 

@@ -145,13 +145,13 @@ namespace PolyPrompt.Telemetry
         /// <summary>
         /// Record the request's completion settings on the span.
         /// </summary>
-        /// <param name="maxTokens">Max tokens.</param>
+        /// <param name="maxTokens">Max tokens, or null when no limit is sent.</param>
         /// <param name="temperature">Temperature, or null.</param>
         /// <param name="topP">Top-p, or null.</param>
-        public void SetCompletionSettings(int maxTokens, double? temperature, double? topP)
+        public void SetCompletionSettings(int? maxTokens, double? temperature, double? topP)
         {
             if (Activity == null) return;
-            SetTag(PolyPromptTelemetryNames.RequestMaxTokens, maxTokens);
+            if (maxTokens.HasValue) SetTag(PolyPromptTelemetryNames.RequestMaxTokens, maxTokens.Value);
             if (temperature.HasValue) SetTag(PolyPromptTelemetryNames.RequestTemperature, temperature.Value);
             if (topP.HasValue) SetTag(PolyPromptTelemetryNames.RequestTopP, topP.Value);
         }

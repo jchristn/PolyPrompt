@@ -49,6 +49,9 @@ namespace PolyPrompt.Clients
             : base(endpoint, apiKey, logging ?? new LoggingModule(), httpClient)
         {
             _Header = OllamaProtocol.Header;
+
+            // Ollama's own default (num_predict unset) is no limit; a fixed 4096 cuts reasoning models off mid-answer.
+            SendDefaultMaxTokens = false;
         }
 
         #endregion
@@ -127,7 +130,7 @@ namespace PolyPrompt.Clients
         private Dictionary<string, object> BuildModelOptions(ResolvedCompletion settings)
         {
             Dictionary<string, object> modelOptions = new Dictionary<string, object>();
-            modelOptions["num_predict"] = settings.MaxTokens;
+            if (settings.MaxTokens.HasValue) modelOptions["num_predict"] = settings.MaxTokens.Value;
 
             int? contextLength = Pick<OllamaCompletionOptions, int>(settings.Call, Defaults, o => o.ContextLength);
             int? topK = Pick<OllamaCompletionOptions, int>(settings.Call, Defaults, o => o.TopK);
@@ -166,6 +169,7 @@ namespace PolyPrompt.Clients
             };
 
             ApplyReasoning(body, settings.ReasoningEffort);
+            ApplyKeepAlive(body, settings);
             return body;
         }
 
@@ -180,6 +184,7 @@ namespace PolyPrompt.Clients
             };
 
             ApplyReasoning(body, settings.ReasoningEffort);
+            ApplyKeepAlive(body, settings);
 
             if (request.Tools != null && request.Tools.Count > 0 && !IsToolChoiceNone(request.ToolChoice))
             {
@@ -191,13 +196,21 @@ namespace PolyPrompt.Clients
 
         private Dictionary<string, object> BuildGenerateBody(string prompt, ResolvedCompletion settings, bool stream)
         {
-            return new Dictionary<string, object>
+            Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
                 { "prompt", prompt },
                 { "stream", stream },
                 { "options", BuildModelOptions(settings) }
             };
+            ApplyKeepAlive(body, settings);
+            return body;
+        }
+
+        private void ApplyKeepAlive(Dictionary<string, object> body, ResolvedCompletion settings)
+        {
+            TimeSpan? keepAlive = Pick<OllamaCompletionOptions, TimeSpan>(settings.Call, Defaults, o => o.KeepAlive);
+            if (keepAlive.HasValue) body["keep_alive"] = OllamaProtocol.KeepAliveSeconds(keepAlive.Value);
         }
 
         /// <summary>

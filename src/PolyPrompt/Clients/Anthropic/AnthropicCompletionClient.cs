@@ -98,6 +98,13 @@ namespace PolyPrompt.Clients
         #region Protected-Methods
 
         /// <inheritdoc />
+        /// <remarks>The Messages API rejects a request without <c>max_tokens</c>, so a limit is always sent.</remarks>
+        protected override bool RequiresMaxTokens(string model)
+        {
+            return true;
+        }
+
+        /// <inheritdoc />
         protected override Task PrepareRequestAsync(HttpRequestMessage request, byte[] body, CancellationToken token)
         {
             AnthropicProtocol.ApplyHeaders(request, _ApiKey, _AnthropicVersion, _WorkspaceId);
@@ -192,7 +199,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
-                { "max_tokens", settings.MaxTokens },
+                { "max_tokens", settings.MaxTokens ?? DefaultMaxTokens },
                 { "messages", new List<Dictionary<string, object>> { new Dictionary<string, object> { { "role", "user" }, { "content", prompt } } } }
             };
 
@@ -208,7 +215,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
-                { "max_tokens", settings.MaxTokens },
+                { "max_tokens", settings.MaxTokens ?? DefaultMaxTokens },
                 { "messages", BuildMessages(messages) }
             };
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## v3.7.0 (2026-11-10)
+
+### Changed (behavior)
+
+- **Call details no longer record bodies by default.** The new `ClientBase.CallDetailCapture` (`None`, `Metadata`, `Full`) defaults to `Metadata`: URL, method, headers, status, timing, success, and error are recorded, and `RequestBody` and `ResponseBody` are null, since they hold prompts and model output. For agent harness processes, `Metadata` also leaves out `Arguments` (which can carry a system prompt) and `StandardInput`. **To keep the 3.6 behavior, set `client.CallDetailCapture = CallDetailCapture.Full;`**.
+- **Credential headers are redacted in call details by default.** The new `ClientBase.RedactCredentials` (default true) records `[redacted]` for `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `x-api-key`, `api-key`, `x-goog-api-key`, `x-amz-security-token`, and any header whose name contains `api-key`, `apikey`, `auth`, `secret`, or `password` or ends in `token` (rate-limit headers such as `x-ratelimit-remaining-tokens` are kept). Before 3.7.0, API keys, bearer tokens, and SigV4 signatures were recorded verbatim, so any application that logged or returned `CallDetails` exposed them. Set it to false only to debug authentication or signing. Neither setting changes what is sent upstream.
+- **Ollama sends no `num_predict` unless one is set.** `OllamaCompletionClient` now uses Ollama's own default (no limit) when neither the call nor `Defaults` sets `MaxTokens`, instead of 4096, which cut reasoning models off mid-answer. Set `SendDefaultMaxTokens = true` on the client to restore the cap.
+
+### Added
+
+- `CompletionClientBase.SendDefaultMaxTokens` (default true; false on Ollama): when false, no output limit is sent unless the call or `Defaults` sets `MaxTokens`, so the provider's own default applies. Anthropic, and Anthropic models on Bedrock (including inference profiles such as `us.anthropic.*`), require a limit and always send 4096 when nothing else is set. The protected `RequiresMaxTokens(model)` hook lets a derived client declare that requirement, and `gen_ai.request.max_tokens` is only tagged when a limit is sent.
+- `KeepAlive` (`TimeSpan?`) on `OllamaCompletionOptions` and `OllamaEmbeddingOptions`, sent as `keep_alive` in whole seconds (a fractional second rounds up, `TimeSpan.Zero` unloads after the request, any negative value keeps the model loaded). A number is sent rather than a duration string because Ollama's duration parser rejects `"-1"`.
+- `OllamaModelClient.LoadModelAsync(model, keepAlive)` and `UnloadModelAsync(model)`, which send an empty `/api/generate` with `keep_alive` to load a model ahead of the first request or free its memory; telemetry operations `model_load` and `model_unload`.
+- `ModelInformation.SupportsTools` (`bool?`). Ollama sets it from `/api/show`: true only when the `tools` capability is listed and the model has a built-in renderer or a template that references tools, so models such as deepseek-r1 builds, which are listed with `tools` but whose template drops them, report false. Null when the server reports no capabilities, and on every other provider.
+- Ollama model information now copies `renderer` and `parser` from `/api/show` into `ModelInformation.Metadata`, next to `capabilities` and `template`.
+
+### Changed (source compatibility for derived clients)
+
+- `ResolvedCompletion.MaxTokens` (a protected nested type used by completion client implementations) is now `int?`; null means send no limit. Only code that subclasses `CompletionClientBase` is affected.
+
+### Validation
+
+- 805 local cases on .NET 8 and .NET 10 in Test.Automated, xUnit, and NUnit, none skipped (796 existing plus 9 new): default metadata capture and redaction for OpenAI, Anthropic, and Azure with the key still on the wire; the redaction rules, including kept rate-limit and request-id headers; `Full`, unredacted, and `None` capture and switching between them; metadata capture of a harness process; the output-limit opt-out for every completion client, including the Anthropic and Bedrock requirement; Ollama keep-alive on chat, tool chat, generate, and embed; load and unload; and `SupportsTools` for renderer, Go-template, Jinja, deepseek-style, no-tools, no-template, and no-capabilities models. Wire-format cases that read bodies or credential headers from `CallDetails` now opt into `Full` capture without redaction.
+- Native AOT: 149 checks per framework (4 new: keep-alive and the omitted limit, metadata capture with redaction, load and unload, and `SupportsTools` with source-generated `ModelInformation` serialization), with JIT and native request digests matching on .NET 8 and .NET 10.
+
 ## v3.6.0 (2026-10-28)
 
 ### Added

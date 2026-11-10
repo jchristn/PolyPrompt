@@ -177,9 +177,9 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
-                { "messages", messages },
-                { "max_tokens", settings.MaxTokens }
+                { "messages", messages }
             };
+            if (settings.MaxTokens.HasValue) body["max_tokens"] = settings.MaxTokens.Value;
 
             ApplySampling(body, settings);
             ApplyReasoning(body, settings.ReasoningEffort);
@@ -192,9 +192,9 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
-                { "messages", BuildMessages(messages) },
-                { "max_tokens", settings.MaxTokens }
+                { "messages", BuildMessages(messages) }
             };
+            if (settings.MaxTokens.HasValue) body["max_tokens"] = settings.MaxTokens.Value;
 
             ApplySampling(body, settings);
 
@@ -218,9 +218,9 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = new Dictionary<string, object>
             {
                 { "model", settings.Model },
-                { "prompt", prompt },
-                { "max_tokens", settings.MaxTokens }
+                { "prompt", prompt }
             };
+            if (settings.MaxTokens.HasValue) body["max_tokens"] = settings.MaxTokens.Value;
 
             ApplySampling(body, settings);
 

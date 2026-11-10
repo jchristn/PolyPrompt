@@ -522,6 +522,16 @@ namespace PolyPrompt.Telemetry
         public const string OperationModelDelete = "model_delete";
 
         /// <summary>
+        /// Operation label: load a model into memory (Ollama).
+        /// </summary>
+        public const string OperationModelLoad = "model_load";
+
+        /// <summary>
+        /// Operation label: unload a model from memory (Ollama).
+        /// </summary>
+        public const string OperationModelUnload = "model_unload";
+
+        /// <summary>
         /// Operation value: <c>ValidateConnectivityAsync</c>.
         /// </summary>
         public const string OperationValidateConnectivity = "validate_connectivity";
