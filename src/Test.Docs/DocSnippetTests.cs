@@ -60,16 +60,20 @@ public sealed class DocSnippetTests
     {
         List<string> usings = new List<string>(_DefaultUsings);
         StringBuilder body = new StringBuilder();
+        StringBuilder types = new StringBuilder();
+        bool inTypes = false;
         foreach (string line in snippet.Code.Split('\n'))
         {
             Match match = Regex.Match(line, @"^\s*using\s+([A-Za-z_][\w.]*)\s*;\s*$");
             if (match.Success) { usings.Add(match.Groups[1].Value); continue; }
-            body.AppendLine(line);
+            // Type declarations at column 0 (and everything after them) go to namespace scope.
+            if (Regex.IsMatch(line, @"^(public |internal )?((sealed|static|abstract|partial) )*(class|record|struct|interface) ")) inTypes = true;
+            (inTypes ? types : body).AppendLine(line);
         }
 
         string source = string.Join("\n", usings.Distinct().Select(u => "using " + u + ";")) + "\n"
             + "namespace DocSnippets\n{\n    internal static class Snippet\n    {\n        internal static async Task RunAsync()\n        {\n"
-            + body + "\n            await Task.CompletedTask;\n        }\n    }\n}\n";
+            + body + "\n            await Task.CompletedTask;\n        }\n    }\n" + types + "\n}\n";
 
         CSharpCompilation compilation = CSharpCompilation.Create(
             "DocSnippet",

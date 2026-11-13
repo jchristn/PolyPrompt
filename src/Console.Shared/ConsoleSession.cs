@@ -103,7 +103,7 @@ public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntim
 
     private List<ChatMessage> BuildMessages()
     {
-        string system = (client.Defaults.Completion.SystemPrompt ?? "") + "\nWorking directory: " + WorkingDirectory
+        string system = (client.Defaults.Completion?.SystemPrompt ?? "") + "\nWorking directory: " + WorkingDirectory
             + "\nUse the provided tools to inspect files or perform requested actions; do not invent tool results. Tool paths may be relative to the working directory.";
         return new[] { ChatMessage.System(system) }.Concat(_Messages).ToList();
     }

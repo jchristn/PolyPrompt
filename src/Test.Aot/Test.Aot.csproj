@@ -35,7 +35,7 @@
     <Compile Include="..\Test.Shared\LocalClients.cs" Link="Shared\LocalClients.cs" />
     <Compile Include="..\Test.Shared\LocalAnthropic*.cs" Link="Shared\%(Filename)%(Extension)" />
     <Compile Include="..\Test.Shared\LocalGemini*.cs" Exclude="..\Test.Shared\LocalGeminiToolCases.cs;..\Test.Shared\LocalGeminiToolRoutes.cs;..\Test.Shared\LocalGeminiCliAgentCases.cs" Link="Shared\%(Filename)%(Extension)" />
-    <Compile Include="..\Test.Shared\LocalOpenAi*.cs" Exclude="..\Test.Shared\LocalOpenAiTestServer.cs" Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\Test.Shared\LocalOpenAi*.cs" Exclude="..\Test.Shared\LocalOpenAiTestServer.cs;..\Test.Shared\LocalOpenAiResponsesCases.cs" Link="Shared\%(Filename)%(Extension)" />
     <Compile Include="..\Test.Shared\LocalEmbeddingRequest.cs" Link="Shared\LocalEmbeddingRequest.cs" />
     <Compile Include="..\Test.Shared\LocalGenerateRequest.cs" Link="Shared\LocalGenerateRequest.cs" />
     <Compile Include="..\Test.Shared\FakeCli\FakeCli.cs" Link="Shared\FakeCli.cs" />

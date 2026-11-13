@@ -184,7 +184,7 @@ public sealed class ConsoleTests
             "gemini" => new GeminiClient("test-key", server.Endpoint, new ClientOptions { HttpClient = http }),
             _ => new CohereClient("test-key", server.Endpoint, new ClientOptions { HttpClient = http })
         };
-        client.Defaults.Completion.Model = "test-model";
+        client.Defaults.Completion!.Model = "test-model";
         using StringWriter output = new();
         await GenerationHarness.RunAsync(client, streaming, output);
         Assert.That(output.ToString(), Does.Contain("generation thought").And.Contain("generated answer").And.Contain("--- Thinking ---").And.Contain("--- Answer ---").And.Not.Contain("Error:"));

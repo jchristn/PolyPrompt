@@ -1,6 +1,6 @@
 # PolyPrompt 4.0 Plan
 
-> **Status:** proposed.
+> **Status:** implemented in 4.0.0 (2026-11-12). See section 16 for the as-built record.
 > **Baseline:** `main` @ `03b221a` (3.7.0).
 > **Target:** PolyPrompt **4.0.0** (major; breaking).
 > **Scope:** the whole product: library API, OpenAI Responses support, documentation (README, XML docs, STREAMING, TELEMETRY, AOT, migration guide, CHANGELOG), samples, Postman fixtures, tests, packaging, and release.
@@ -831,3 +831,48 @@ The default-model IDs above were read from provider model pages and API specs, n
 - All local, AOT, docs, and console tests pass on net8.0 and net10.0 with none skipped.
 - The version is 4.0.0, and `PolyPrompt.4.0.0.nupkg` and `.snupkg` are on nuget.org.
 - All work is committed and pushed to `main`.
+
+## 16. As-built record (4.0.0)
+
+### 16.1 Section 14.2 outcomes
+
+No provider credentials were available during the release, so no live payloads were captured and no live calls were made. Each item was settled from the providers' official documentation and API specifications on 2026-11-12, and the plan's fallback was taken where a fact could not be confirmed.
+
+| Item | Outcome |
+|---|---|
+| Citation offset units (OpenAI, xAI, Anthropic, Cohere) | Not confirmed from a live payload. Treated as UTF-16 code units (.NET string indices); Gemini byte offsets are converted. Covered by fixtures with accented, CJK, and emoji text. |
+| OpenAI Chat Completions `end_index` inclusive? | Not confirmed (the reference says "the index of the last character"). Kept as reported. |
+| xAI top-level `citations` array; xAI annotation stream events | No top-level array in the documented response; annotations only. |
+| Bedrock citation location fields | `documentChar`/`documentPage`/`documentChunk` {`documentIndex`, `start`, `end`}, `searchResultLocation` {`searchResultIndex`, `start`, `end`}, `web` {`url`, `domain`}; all mapped. |
+| Gemini `url_citation` shape in `generateContent` | Not confirmed; grounding metadata and `citationMetadata` only. |
+| xAI `/v1/embeddings` | Gone: docs.x.ai lists no embedding models and the API reference has no `/v1/embeddings`. Flag cleared, code removed. |
+| Cohere `/v1/classify` | Still documented, no endpoint deprecation (some fields deprecated). Kept; Embed recommendation documented. |
+| Azure `/openai/v1/embeddings`, `/openai/v1/models`, `/cancel`, `/responses/input_tokens` | Embeddings, models, and cancel are in the Azure OpenAI v1 GA spec (`azure-rest-api-specs`); `input_tokens` is not. v1 routes used; `CancelResponseAsync` on Azure; `CountInputTokensAsync` OpenAI only. |
+| Gemini default; Vertex ID | No GA Gemini 4 Flash-tier model; `gemini-3.8-flash` (Stable) kept for both. |
+| Cohere `command-a-plus-05-2026` | Listed as Live and newest; used. |
+| Vertex `text-embedding-005` | No longer listed on Vertex's model page; default switched to `gemini-embedding-001` and called out as breaking. |
+| xAI `/cancel` and `/input_tokens` | Not documented (background is marked unsupported); OpenAI (and Azure cancel) only. |
+| Probe routes | Models route where one exists (OpenAI family, xAI, Anthropic, Gemini, Cohere, Bedrock control plane, Ollama `/api/tags`); TEI `/health`; Vertex `:countTokens`; VoyageAI embeds a probe word; TypeSafe tries `/v1/models` then a minimal decision. |
+| Default-model live check (14.1 note) | Not performed (no credentials). |
+| Fixed-value string audit | `ServiceTier`, `ReasoningSummary`, and `ReasoningEffortValue` became extensible values. Other fixed-set strings (Cohere `InputType`/`EmbeddingType`/`Truncate`, VoyageAI `InputType`/`OutputDtype`, TEI `TruncationDirection`) remain strings, already normalized or validated by their options; deferred. |
+
+### 16.2 Deviations from the plan
+
+- **Public operations are not virtual.** `ProviderClientBase`'s public operations validate, check the capability, merge options, and record telemetry, then call protected virtual `...CoreAsync` members whose base implementations throw `CapabilityNotSupportedException`. Providers override the core members; the behavior contract test checks that exactly the supported capabilities' core members are overridden.
+- **Engine layout.** The Responses engine is the partial class `ResponsesApiClientBase` split across `ResponsesApiRequestBuilder.cs`, `ResponsesApiParser.cs`, and `ResponsesApiStreamReader.cs`, plus the internal `ResponsesApiDialect` and `ResponsesApiJson`, instead of separate internal builder, parser, and reader types. OpenAI-only fields live in the internal `OpenAiResponsesFields`, shared by `OpenAiClient` and `AzureOpenAiClient`.
+- **`ResponsesApiClientBase` cannot be subclassed outside the library** (its dialect member is `private protected`); derive from `OpenAiClient`, `AzureOpenAiClient`, or `XAiClient`.
+- **`GenerateContentClientBase`** is a new public abstract base shared by `GeminiClient` and `VertexAiClient` (the plan placed both directly under `ProviderClientBase`). `OllamaCloudClient` derives from `OllamaClient`.
+- **`ProviderName`** is a new public property, used in exception messages.
+- **Unsupported defaults sections** are hidden on each provider defaults type with `[Obsolete(error: true)]` and `[EditorBrowsable(Never)]` `new` properties, so they are compile errors there and null through `ClientDefaults`.
+- **No Azure `deployment` constructor parameter** (as planned); the deployment is `Defaults.Completion.Model`.
+- **xAI `Embed`** removed per the P0 outcome; `ListEmbeddingModelsAsync` stays on `XAiClient` as a catalog listing.
+- **Telemetry:** `validate_connectivity` reports capability `connectivity` (a new value) because one client spans capabilities; the active-clients gauge reports `provider`.
+- **Responses `content_filter`** maps to `content_filter` for xAI too (3.x reported `incomplete`).
+- **Streaming citations** for Cohere, Bedrock, and Chat Completions accumulate on the streaming response object as events arrive; they are complete once the stream completes.
+- **xAI digest gate.** The overall `Test.Aot` request digest changes because the client set changed (one client per provider). The xAI gate was checked directly instead: 13 representative xAI requests built with 3.7.0 and 4.0 are byte-identical.
+- **Live and simulation runs (9.4).** The Postman simulations were run against the mock servers with Node directly, not the Postman CLI. Live suites were not run.
+
+### 16.3 Validation
+
+See the CHANGELOG v4.0.0 Validation section for counts per runner and framework.
+

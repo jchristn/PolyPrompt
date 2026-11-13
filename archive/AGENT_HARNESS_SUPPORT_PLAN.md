@@ -1,5 +1,7 @@
 # Agent Harness Support Plan
 
+> **Superseded names (4.0):** the client and base-class names in this document are from PolyPrompt 3.x. In 4.0 each provider has one client (for example `OpenAiClient`) and the harness clients are renamed (`CodexAgentClient` is `CodexClient`). See [MIGRATION_V3_TO_V4.md](../MIGRATION_V3_TO_V4.md).
+
 > **Status:** implemented and released in PolyPrompt 3.6.0 (P0 through P3 complete; see section 13 for the as-built record).
 > **Baseline:** `main` @ `d70f310`.
 > **Target:** PolyPrompt 3.6.0 (minor release; supersedes the earlier 4.0 heading). Additive for every concrete client; `Endpoint`, `ApiKey`, and the boolean `ValidateConnectivityAsync` moved from `ClientBase` to `HttpClientBase` (see section 13).

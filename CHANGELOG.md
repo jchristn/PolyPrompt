@@ -1,5 +1,71 @@
 # Changelog
 
+## v4.0.0 (2026-11-12)
+
+4.0 has one client per provider instead of one per capability, and `OpenAiClient` speaks the Responses API. See [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md) for every rename and a checklist.
+
+### Breaking
+
+- **One client per provider.** The 39 capability clients are replaced by 14 provider clients: `OpenAiClient`, `OpenAiCompatibleClient`, `AzureOpenAiClient`, `XAiClient`, `AnthropicClient`, `GeminiClient`, `VertexAiClient`, `BedrockClient`, `OllamaClient`, `OllamaCloudClient`, `CohereClient`, `VoyageAiClient`, `TeiClient`, and `TypeSafeClient`. Fix: construct the provider client once and call any operation on it (mapping table in the migration guide).
+- **Capability bases removed.** `CompletionClientBase`, `EmbeddingClientBase`, `SparseEmbeddingClientBase`, `RerankClientBase`, `ClassificationClientBase`, `DecisionClientBase`, and `ModelClientBase` are replaced by `ProviderClientBase`. Fix: type provider-agnostic code as `ProviderClientBase` and check `Supports(Capability.X)`.
+- **OpenAI uses the Responses API.** `OpenAiClient` sends `/v1/responses`. Fix: for vLLM, Ollama `/v1`, LM Studio, gateways, or Chat Completions on OpenAI, use `OpenAiCompatibleClient` (the 3.x `OpenAiCompletionClient` behavior).
+- **Options renamed.** The Chat Completions `OpenAiCompletionOptions` is now `OpenAiCompatibleCompletionOptions`; `OpenAiCompletionOptions` is now the OpenAI Responses options. `XAiCompletionOptions` derives from the new `ResponsesApiCompletionOptions`. Fix: rename.
+- **xAI result types removed without aliases.** `XAiResponse`, `XAiJsonResponse`, `XAiResponseEvent`, `XAiStreamingResponse`, and `XAiHostedTool` are now `ResponsesApiResponse`, `ResponsesApiJsonResponse`, `ResponsesApiEvent`, `ResponsesApiStreamingResponse`, and `ResponsesApiHostedTool`. Fix: rename.
+- **xAI embeddings removed.** xAI lists no embedding models and documents no `/v1/embeddings`; `XAiEmbeddingClient`, `XAiEmbeddingOptions`, and the token-embedding methods are gone, and `XAiClient.EmbedAsync` throws `CapabilityNotSupportedException`. Fix: use another provider's embeddings.
+- **`ReasoningEffortOverride` replaced** by `ReasoningEffortValue` (an extensible value). `ReasoningSummary` and `ServiceTier` are now extensible values that convert from strings. Fix: rename `ReasoningEffortOverride`; string assignments keep compiling.
+- **`Model` shorthand removed; `Defaults` is sectioned.** Fix: `client.Model = x` becomes `client.Defaults.Completion.Model = x` (or `.Embedding`, `.Rerank`, `.Classification`, `.Decision`, `.SparseEmbedding`), and `client.Defaults.X` becomes `client.Defaults.<Section>.X`.
+- **Constructors.** Trailing `logging` and `httpClient` parameters are replaced by `ClientOptions`; keyed providers take the key first and require it; Bedrock takes `(region, credential)`; TEI requires an endpoint. Fix: see the constructor table in the migration guide.
+- **Fail-fast validation.** Blank, whitespace, and URL-shaped keys, and endpoints that are not absolute http(s) URLs, throw `ArgumentException` at construction. Fix: pass a valid key and endpoint.
+- **Another provider's options type throws** `ArgumentException` (3.x silently ignored its fields). Fix: pass the base options type or the client's own type.
+- **Unsupported operations throw `CapabilityNotSupportedException`** synchronously, with no request, call detail, or telemetry. Fix: check `Supports` first.
+- **Azure OpenAI moves to the v1 API.** Requests go to `/openai/v1/...` with the deployment as `model`; the deployment-in-path routes, `api-version`, `ApiVersion`, the `apiVersion` constructor parameter, and `AzureOpenAiDefaults` are removed. Fix: `new AzureOpenAiClient(endpoint, key)` and set `Defaults.Completion.Model` to the deployment.
+- **`Store` is sent explicitly as `false`** on Responses clients unless set (OpenAI's own default is `true`). Fix: set `Store = true` to keep responses.
+- **Continuation state is written in the 4.0 envelope** `{ protocol, provider, scope, value }` for every provider, including xAI (3.x wrote a bare output array) and Chat Completions (protocol `chat_completions`, 3.x wrote `openai`). 3.x state is still read. State from another provider, protocol, or endpoint falls back to plain history. Fix: none needed unless you parse `ProviderState` yourself.
+- **Reasoning effort levels** gain `None`, `XHigh`, and `Max`; `None` is first, so numeric enum values shift. `ToOpenAiWireValue` and `ToAnthropicEffort` return `string?`. Fix: persist level names, not numbers.
+- **Harness clients renamed:** `ClaudeCodeAgentClient` → `ClaudeCodeClient`, `CodexAgentClient` → `CodexClient`, `GeminiCliAgentClient` → `GeminiCliClient`, `CursorAgentClient` → `CursorClient`, `MuxAgentClient` → `MuxClient`, `PiAgentClient` → `PiClient`, `OpenCodeAgentClient` → `OpenCodeClient`; constructors take `ClientOptions`. Fix: rename.
+- **Changed default models.** `OpenAiClient` `gpt-6.1-sol` (was `gpt-4o-mini`); `AnthropicClient` `claude-sonnet-5-5` (was `claude-opus-4-8`); `GeminiClient` and `VertexAiClient` `gemini-3.8-flash` (was `gemini-2.5-flash`); `VertexAiClient` embedding `gemini-embedding-001` (was `text-embedding-005`, no longer listed by Vertex; vectors are not comparable); `CohereClient` `command-a-plus-05-2026` (was `command-a-03-2025`) and rerank `rerank-v5.0-fast` (was `rerank-v3.5`); `VoyageAiClient` rerank `rerank-3` (was `rerank-2.5`). No default (set one, or calls throw `InvalidOperationException`): `OpenAiCompatibleClient` (was `gpt-4o-mini` / `text-embedding-3-small`), Bedrock completion (was `anthropic.claude-3-5-sonnet-20240620-v1:0`), and `OllamaCloudClient` (was the local Ollama defaults).
+- **Responses `incomplete` with `content_filter`** now reports `FinishReason = "content_filter"` (was `incomplete`); other reasons pass through by name.
+- **Custom client hooks renamed:** `ListModelsAsync` overrides become `ListModelsCoreAsync`; `RequiresModel` becomes `EmbeddingRequiresModel`, `SparseEmbeddingRequiresModel`, `RerankRequiresModel`, or `ClassificationRequiresModel`; `ResolveModel` becomes `ResolveEmbeddingModel`, `ResolveSparseEmbeddingModel`, `ResolveClassificationModel`, or `ResolveDecisionModel`.
+- TypeSafe, Anthropic, Gemini, Cohere, and VoyageAI keys are now required (a local Ollaya server accepts any value).
+
+### Added
+
+- `ProviderClientBase` with every model operation, `Capability` flags, `Capabilities`, `Supports`, `ProviderName`, and `CapabilityNotSupportedException` (`Provider`, `Capability`, `Operation`, and a link to the README capability matrix).
+- `ClientDefaults` and per-provider defaults types (`OpenAiDefaults`, `AnthropicDefaults`, ...) with covariant sections; unsupported sections are compile errors on the provider type and null through `ClientDefaults`.
+- `ClientOptions` (`Logging`, `HttpClient`, `TimeoutMs`, `CallDetailCapture`, `RedactCredentials`) and `OpenAiCompatibleClientOptions.AuthPlacement` (`Bearer`, `Header(name)`, `Query(name)`).
+- `OpenAiClient` on the Responses API, and `ResponsesApiClientBase`, the Responses engine shared by OpenAI, Azure OpenAI, and xAI, with `CreateResponseAsync`, `CreateResponseStreamingAsync`, `ContinueResponseAsync` (rejects unstored responses before sending), `GetResponseAsync`, `DeleteResponseAsync`, `ListResponseInputItemsAsync`, and `CompactConversationAsync` (now with `previousResponseId`, `instructions`, `promptCacheKey`, and `serviceTier`); `CancelResponseAsync` on OpenAI and Azure; `CountInputTokensAsync` on OpenAI.
+- `OpenAiCompletionOptions` Responses fields: `Metadata`, `Background` (requires `Store`), `Conversation`, `MaxToolCalls`, `TopLogprobs`, `PromptCacheOptions`, `ContextManagement`, and `StreamOptions`.
+- `ResponsesApiEventKind` on native stream events, and the typed tool factories `ResponsesApiTools`, `OpenAiTools`, and `XAiTools`.
+- `RawResponse`, `Citations` (normalized `Citation` with UTF-16 spans, `CitationKind`, and `CitationSourceLocation`), and `AppliedReasoningEffort` on every response. Citations are parsed for OpenAI, Azure, xAI, Anthropic, Gemini, Vertex AI, Cohere, Bedrock, and Chat Completions, streaming and not.
+- Reasoning effort levels `None`, `XHigh`, and `Max`, `ReasoningEffort.ToOpenAiResponsesWireValue` and `ToXAiWireValue`, and the telemetry span attribute `polyprompt.reasoning.effort`.
+- Extensible values `ServiceTier`, `ReasoningSummary`, and `ReasoningEffortValue`, with JSON converters and per-provider validation of known values.
+- `cache_write_tokens` mapped to `TokenUsage.CacheCreationTokens` on Responses clients.
+- 404/405 hint on `/responses` pointing to `OpenAiCompatibleClient`, and an `invalid_encrypted_content` proxy hint on Azure.
+- `GenerateContentClientBase`, the generateContent engine shared by Gemini and Vertex AI.
+- `llms.txt` (in the repository and the package), `MIGRATION_V3_TO_V4.md`, and the OpenAI Responses Postman fixtures (`postman/openai-responses.openapi.json`, `postman/mocks/openai-responses`, `postman/simulations/openai-responses.sim.yaml`).
+- Consoles hold one provider client; `OpenAIConsole` defaults to `OpenAiClient` and adds `--compatible <url>`; `OllamaCloudConsole` prompts for an endpoint; `AotConsole` adds `openai-compatible`.
+- XML documentation for every public member, enforced: missing documentation (CS1591) is a Release build error.
+
+### Changed
+
+- The telemetry `polyprompt.capability` attribute is derived from the operation called rather than the client type (same values as 3.x; connectivity probes report `connectivity`, and the active-clients gauge reports `provider` for provider clients).
+- Ollama strips a trailing `/v1` from its endpoint; `OllamaCloudClient` accepts an endpoint override.
+- `ValidateConnectivityAsync` probes one route per provider (the models route where there is one).
+
+### Removed
+
+- The 39 capability clients and 7 capability base classes, `XAi*` result types, `XAiEmbeddingClient`, `XAiEmbeddingOptions`, `ReasoningEffortOverride`, the `Model` shorthand, `AzureOpenAiDefaults.ApiVersion`, and Azure's deployment-in-path routing.
+
+### Validation
+
+- Local suite: 882 cases on .NET 8 and .NET 10 in Test.Automated (846 passed, 0 failed, 36 live-only cases skipped without credentials); 846 passed in Test.Xunit and in Test.Nunit on each framework. The 805 3.7.0 cases were migrated (802 remain: the xAI embedding cases collapsed into one unsupported-capability case, and Azure's Chat Completions continuation cases moved to the Responses suite), plus 24 OpenAI Responses cases, 15 cross-provider 4.0 cases (capability contract for every unsupported operation on every client, constructors, options types, extensible values, effort mapping for every provider and level, citations per provider, offsets over non-BMP text, raw responses, the state envelope, Azure v1, telemetry, and missing defaults), and 5 contract tests.
+- Contract tests: the README capability matrix and default-model table equal the code; each defaults type exposes exactly its supported sections; each provider client's XML summary names its supported capabilities and links the matrix; no OpenAI or shared Responses type references an xAI type (reflection and source). All pass.
+- Test.Docs compiles every C# block in README.md, STREAMING.md, and MIGRATION_V3_TO_V4.md: all pass on .NET 8 and .NET 10.
+- Test.Console: 83 cases per framework (80 passed, 3 env-gated simulation cases skipped by default), including new in-process runs of all eleven provider consoles against the local fixture.
+- Native AOT: 133 checks per framework (fewer clients than 3.7.0, plus new OpenAI Responses, envelope, citation, extensible-value, and capability checks), with JIT and native request digests matching on .NET 8 and .NET 10.
+- xAI wire regression: 13 representative xAI requests (every effort level, the full xAI option set, tool chat, history replay, generation, both streaming forms, native create, and compaction) are byte-identical to 3.7.0.
+- Postman simulations (OpenAI Responses, xAI, Ollama Cloud) pass against the mock servers run directly with Node; the Postman CLI was not used. No live provider calls were made: no provider credentials were available, so the P0 verification items were settled from official documentation (recorded in V4_PLAN.md).
+
 ## v3.7.0 (2026-11-10)
 
 ### Changed (behavior)

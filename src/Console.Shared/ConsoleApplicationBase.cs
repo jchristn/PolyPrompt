@@ -100,9 +100,9 @@ public abstract class ConsoleApplicationBase
             case "reset": _Session?.Reset(); Console.WriteLine("Conversation cleared."); return true;
             case "reasoning":
                 if (client == null) { Console.WriteLine("This provider has no chat reasoning capability."); return true; }
-                if (argument.Equals("default", StringComparison.OrdinalIgnoreCase)) client.Defaults.Completion.ReasoningEffort = null;
+                if (argument.Equals("default", StringComparison.OrdinalIgnoreCase)) client.Defaults.Completion!.ReasoningEffort = null;
                 else if (Enum.TryParse(argument, true, out ReasoningEffortLevel level) && Enum.IsDefined(level))
-                    client.Defaults.Completion.ReasoningEffort = new ReasoningEffort(level);
+                    client.Defaults.Completion!.ReasoningEffort = new ReasoningEffort(level);
                 else { Console.WriteLine("Usage: reasoning default|minimal|low|medium|high"); return true; }
                 Console.WriteLine("Reasoning setting updated. Returned thinking is always displayed separately.");
                 return true;

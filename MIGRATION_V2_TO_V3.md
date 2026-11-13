@@ -1,5 +1,7 @@
 # Migrating from PolyPrompt 2.x to 3.0
 
+> **Superseded names (4.0):** the client and base-class names in this document are from PolyPrompt 3.x. In 4.0 each provider has one client (for example `OpenAiClient`) and the harness clients are renamed (`CodexAgentClient` is `CodexClient`). See [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md).
+
 PolyPrompt 3.0 replaces the single `CompletionClientBase` hierarchy, where every provider client carried every operation and threw `NotSupportedException` for the ones it could not do, with **one client per capability per provider**. It also consolidates settings into reusable options classes, adds decision models (TypeSafe and Ollaya), and fixes a number of long-standing inconsistencies.
 
 The wire protocols are unchanged except where noted under [Behavior changes](#behavior-changes). Most migrations are mechanical: pick the client for the operation, and move settings into `Defaults` or the per-call options.

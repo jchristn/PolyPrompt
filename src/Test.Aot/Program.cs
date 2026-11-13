@@ -54,6 +54,7 @@ namespace Test.Aot
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             await RunClientChecksAsync(server).ConfigureAwait(false);
             await RunXAiAdvancedChecksAsync(server).ConfigureAwait(false);
+            await RunVersionFourChecksAsync(server).ConfigureAwait(false);
             await RunReleaseThreeSevenChecksAsync(server).ConfigureAwait(false);
             foreach (string provider in new[] { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere", "ollamacloud", "vertex" })
                 foreach (bool streaming in new[] { false, true })
@@ -359,6 +360,53 @@ namespace Test.Aot
             {
                 Ok(await client.GetResponseAsync("resp-test")); Ok(await client.ListResponseInputItemsAsync("resp-test"));
                 Ok(await client.CompactConversationAsync(prompt.RootElement)); Ok(await client.DeleteResponseAsync("resp-test"));
+            });
+        }
+
+        /// <summary>
+        /// 4.0 paths: OpenAI Responses tool chat (streaming and not) with encrypted-state replay, a native create, the 4.0
+        /// continuation envelope through source-generated JSON, extensible values, citations, and the capability exception.
+        /// </summary>
+        private static async Task RunVersionFourChecksAsync(LocalOpenAiTestServer server)
+        {
+            using OpenAiClient openai = new OpenAiClient(LocalOpenAiResponsesRoutes.Key, server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } };
+            await CheckAsync("OpenAI Responses: tool chat and encrypted replay", async () =>
+            {
+                ToolChatRequest request = WeatherToolRequest();
+                ToolChatResponse first = await openai.ToolChatAsync(request).ConfigureAwait(false);
+                Ok(first);
+                string json = JsonSerializer.Serialize(first.ToAssistantMessage(), PolyPromptJsonContext.Default.ChatMessage);
+                ChatMessage restored = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ChatMessage)!;
+                Expect("responses", restored.ProviderState!.Value.GetProperty("protocol").GetString(), "4.0 envelope protocol");
+                request.Messages.Add(restored);
+                foreach (ToolCall call in first.ToolCalls) request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "sunny"));
+                Ok(await openai.ToolChatAsync(request).ConfigureAwait(false));
+                Expect(true, server.RequestBodies.Last().Contains("oai-encrypted-state", StringComparison.Ordinal), "encrypted reasoning replayed");
+            }).ConfigureAwait(false);
+            await CheckAsync("OpenAI Responses: streaming tool chat", async () =>
+            {
+                ToolChatStreamingResponse stream = await openai.ToolChatStreamingAsync(WeatherToolRequest()).ConfigureAwait(false);
+                await foreach (ToolChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
+                Expect(true, stream.Success && stream.ToolCalls.Count > 0, "streamed tool call: " + stream.Error);
+            }).ConfigureAwait(false);
+            await CheckAsync("OpenAI Responses: native create, citations, values", async () =>
+            {
+                using JsonDocument input = JsonDocument.Parse("\"oai-citations\"");
+                ResponsesApiResponse created = await openai.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.OpenAiCompletionOptions { ServiceTier = ServiceTier.Flex, ReasoningEffortValue = ReasoningEffortValue.XHigh }).ConfigureAwait(false);
+                Ok(created);
+                Expect(3, created.Citations.Count, "citations");
+                Expect("xhigh", created.AppliedReasoningEffort, "applied effort");
+                string citations = JsonSerializer.Serialize(created.Citations, PolyPromptJsonContext.Default.ListCitation);
+                Expect(true, citations.Contains("https://example.com/source", StringComparison.Ordinal), "citation JSON");
+                string tier = JsonSerializer.Serialize(ServiceTier.Priority, PolyPromptJsonContext.Default.ServiceTier);
+                Expect("\"priority\"", tier, "extensible value JSON");
+                Expect(ServiceTier.Priority, JsonSerializer.Deserialize(tier, PolyPromptJsonContext.Default.ServiceTier), "extensible value round trip");
+            }).ConfigureAwait(false);
+            Check("Capability: unsupported operations throw without reflection", () =>
+            {
+                using AnthropicClient claude = new AnthropicClient("k", "http://127.0.0.1:1");
+                ExpectThrows<CapabilityNotSupportedException>(() => claude.EmbedAsync("x"), "embed on Anthropic");
+                Expect(false, claude.Supports(Capability.Embed), "Supports");
             });
         }
 

@@ -46,7 +46,7 @@ The application and PolyPrompt client run natively. Mux tools execute in the com
 
 ## What works without any setup
 
-Every client and every operation: chat, tool chat, generation, streaming, embeddings, sparse embeddings, reranking, classification, decisions, model management, connectivity checks, credential providers (including AWS SigV4 and Google service-account tokens), and telemetry.
+Every provider client and every operation: chat, tool chat, generation, streaming, embeddings, sparse embeddings, reranking, classification, decisions, model management, connectivity checks, credential providers (including AWS SigV4 and Google service-account tokens), and telemetry.
 
 Tool parameter schemas and other values work without setup when they are built from:
 
@@ -122,7 +122,7 @@ string json = JsonSerializer.Serialize(messages, PolyPromptJsonContext.Default.L
 List<ChatMessage>? restored = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ListChatMessage);
 ```
 
-It covers `ChatMessage`, `ToolCall`, `ToolDefinition`, `ToolChatRequest`, `CompletionOptions`, `ReasoningEffort`, `TokenUsage`, `CallDetail`, `ChatResponse`, `ToolChatResponse`, `GenerationResponse`, `EmbeddingResponse`, `SparseEmbeddingResponse`, `RerankResponse`, `ClassificationResponse`, `ModelInformation`, and lists of the common ones (`ListChatMessage`, `ListToolCall`, `ListToolDefinition`, `ListCallDetail`, `ListModelInformation`). Persist `ToolCall.ThoughtSignature` with the conversation; Gemini 3 models reject replayed tool calls without it, and the context includes it.
+It covers `ChatMessage` (including the 4.0 continuation envelope in `ProviderState`), `ToolCall`, `ToolDefinition`, `ToolChatRequest`, `CompletionOptions`, `ResponsesApiCompletionOptions`, `OpenAiCompletionOptions`, `XAiCompletionOptions`, `ReasoningEffort`, the extensible values `ServiceTier`, `ReasoningSummary`, and `ReasoningEffortValue` (written as strings by their own converters), `Capability`, `Citation`, `CitationSourceLocation`, `ResponsesApiResponse`, `ResponsesApiJsonResponse`, `ResponsesApiEvent`, `ResponsesApiHostedTool`, `TokenUsage`, `CallDetail`, `ChatResponse`, `ToolChatResponse`, `GenerationResponse`, `EmbeddingResponse`, `SparseEmbeddingResponse`, `RerankResponse`, `ClassificationResponse`, `ModelInformation`, and lists of the common ones (`ListChatMessage`, `ListToolCall`, `ListToolDefinition`, `ListCallDetail`, `ListModelInformation`, `ListCitation`, `ListResponsesApiHostedTool`). Persist `ToolCall.ThoughtSignature` with the conversation; Gemini 3 models reject replayed tool calls without it, and the context includes it.
 
 Decision questions and answers are abstract, polymorphic types and are not included.
 
@@ -167,13 +167,22 @@ The hermetic test suite (`Test.Automated`, `Test.Xunit`, `Test.Nunit`) includes 
 - The interactive console harnesses (`OllamaConsole` and the others) use an input library that is not verified for Native AOT; use them on the JIT. `AotConsole` is the native sample.
 - `UtcDateTimeConverter`, previously private, is now public so source-generated contexts (including your own) can use PolyPrompt's date format: `[JsonSourceGenerationOptions(Converters = new[] { typeof(UtcDateTimeConverter) })]`.
 
-## Streaming lifecycle in 3.5
+## PolyPrompt 4.0
 
-The shared `StreamingState`/`IStreamingResponse` contract uses ordinary typed properties and async iterators, without runtime reflection. It applies to generic completion streams and native xAI events in Native AOT. Continuation checks assert completed lifecycle state on the JIT and native builds. See [STREAMING.md](STREAMING.md) for final-state gating and cancellation behavior.
+- **Capabilities are constants.** Each client's `Capabilities` returns a constant flags value, and `Supports` is a bitwise check, so capability checks need no reflection. `CapabilityNotSupportedException` is thrown before any serialization happens.
+- **Covariant `Defaults` sections** are ordinary get-only properties; reading a section through `ClientDefaults` is a virtual call.
+- **The Responses engine** (OpenAI, Azure OpenAI, xAI) parses with `JsonDocument`/`JsonElement` and writes request bodies through PolyPrompt's serializer, exactly like the 3.x xAI client it came from. Citations are normalized from `JsonElement` trees.
+- **The 4.0 continuation envelope** is a JSON object built from dictionaries and `JsonElement` values, so it round-trips through `PolyPromptJsonContext.Default.ChatMessage` without registration.
 
-## Agent harness clients in 3.6
+`Test.Aot` covers OpenAI Responses tool chat (streaming and not) with encrypted-state replay, a native create with citations and extensible values, JSON round trips of the new types, and `CapabilityNotSupportedException`, on the JIT and as a native binary.
 
-The seven agent harness clients (`ClaudeCodeAgentClient`, `CodexAgentClient`, `GeminiCliAgentClient`, `CursorAgentClient`, `MuxAgentClient`, `PiAgentClient`, `OpenCodeAgentClient`) are Native AOT and trimming safe with no setup:
+## Streaming lifecycle
+
+The shared `StreamingState`/`IStreamingResponse` contract uses ordinary typed properties and async iterators, without runtime reflection. It applies to generic completion streams and native Responses events in Native AOT. Continuation checks assert completed lifecycle state on the JIT and native builds. See [STREAMING.md](STREAMING.md) for final-state gating and cancellation behavior.
+
+## Agent harness clients
+
+The seven agent harness clients (`ClaudeCodeClient`, `CodexClient`, `GeminiCliClient`, `CursorClient`, `MuxClient`, `PiClient`, `OpenCodeClient`) are Native AOT and trimming safe with no setup:
 
 - Processes are started with `System.Diagnostics.Process` (`UseShellExecute = false`, argument lists, no shell), which is AOT compatible. Output is read with `System.Threading.Channels` from the shared framework; there is no new package dependency.
 - Every harness output line is parsed with `JsonDocument`/`JsonElement`, so no reflection-based deserialization is involved. Commands written to a harness (Pi RPC) are produced with source-generated metadata or `Utf8JsonWriter`.

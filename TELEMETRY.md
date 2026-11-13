@@ -73,7 +73,7 @@ PolyPrompt has no telemetry settings of its own: emission is controlled entirely
 | Dropping a high-detail label | Your collector's views, for example dropping `gen_ai.request.model` if you pass many distinct model names. |
 | Export endpoints, service name | Your collector (for example Radiant's settings, modeled on `127.0.0.1` loopback defaults). |
 
-The client settings that shape what you see are the existing ones: `TimeoutMs` (what counts as a timeout), `MaxConcurrency` on decision clients (the decision queue), and `PullTimeout` on `OllamaModelClient`.
+The client settings that shape what you see are the existing ones: `TimeoutMs` (what counts as a timeout), `MaxConcurrency` on decision clients (the decision queue), and `PullTimeout` on `OllamaClient`.
 
 ## Spans
 
@@ -88,6 +88,13 @@ All spans come from the `PolyPrompt` activity source. Each span sets its status 
 | `exec {executable}` (for example `exec codex`, `exec claude`) | Client | Every process an agent harness client starts (runs, version and login checks, model lists) | The operation span | `gen_ai.provider.name`, `process.executable.name`, `process.pid`, `process.exit.code`, `error.type`. Arguments, prompts, and output are never recorded. |
 | `GET`, `POST`, `DELETE` | Client | Every outbound HTTP request to a provider | The operation span | `http.request.method`, `http.response.status_code`, `url.full` (query string removed), `server.address`, `server.port`, `gen_ai.provider.name`, `error.type` |
 | `{credential source} token` (for example `service_account token`, `adc token`) | Client | A credential cache miss that fetches a new OAuth token (Vertex AI) | The operation that needed the token | `polyprompt.credential.source`, outcome, `error.type` |
+
+In 4.0:
+
+- **Capability from the operation.** `polyprompt.capability` is derived from the operation (`embed` reports `embedding`, `model_exists` reports `model`, `validate_connectivity` reports `connectivity`), so the values are the same as in 3.x even though one client now runs every capability.
+- **Applied reasoning effort.** Operation spans carry `polyprompt.reasoning.effort`, the wire value actually sent after mapping (for example `xhigh`, `false`, or a thinking budget such as `8192`), whenever a reasoning field was sent. It is a span attribute only, not a metric label.
+- **Unsupported calls record nothing.** An operation outside a client's `Capabilities` throws `CapabilityNotSupportedException` before a span, metric, or call detail is created, because nothing was attempted.
+- **Responses native operations** (`CreateResponseAsync`, `ContinueResponseAsync`, `GetResponseAsync`, `CancelResponseAsync`, ...) report their own operation names, listed below.
 
 A streaming operation's span stays open until the stream ends, so its duration covers the whole response. It ends as `success` only when the final streaming `State` is `Completed`, `error` when protocol/provider/transport validation fails, `timeout` when the request times out, `cancelled` when the caller cancels, and `abandoned` when the caller stops enumerating early. The streaming HTTP span ends when the response is disposed.
 
@@ -185,9 +192,9 @@ Runtime metrics (GC, thread pool, exceptions) belong to the host: enable Radiant
 
 | Attribute | Values |
 |-----------|--------|
-| `gen_ai.provider.name` | `openai`, `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `xai`, `voyageai`, `typesafe`, and for agent harnesses `claude_code`, `codex`, `gemini_cli`, `cursor_cli`, `mux`, `pi`, `opencode`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from a capability base is labeled by its lower-cased type name without the `...Client` suffix. |
-| `polyprompt.capability` | `completion`, `embedding`, `sparse_embedding`, `rerank`, `classification`, `decision`, `model`, `agent` |
-| `polyprompt.operation` | `chat`, `chat_stream`, `tool_chat`, `tool_chat_stream`, `generate`, `generate_stream`, `embed`, `sparse_embed`, `rerank`, `classify`, `decide`, `decide_batch`, `model_info`, `model_exists`, `model_pull`, `model_delete`, `model_load`, `model_unload`, `validate_connectivity`, `agent_run`, `agent_run_stream`, `model_list` |
+| `gen_ai.provider.name` | `openai` (`OpenAiClient` and `OpenAiCompatibleClient`), `azure.ai.openai`, `gcp.gemini`, `gcp.vertex_ai`, `anthropic`, `aws.bedrock`, `cohere`, `ollama`, `tei`, `xai`, `voyageai`, `typesafe`, and for agent harnesses `claude_code`, `codex`, `gemini_cli`, `cursor_cli`, `mux`, `pi`, `opencode`. A client you derive from a PolyPrompt client inherits its provider; a client you derive directly from `ProviderClientBase` is labeled by its lower-cased type name without the `...Client` suffix. |
+| `polyprompt.capability` | `completion`, `embedding`, `sparse_embedding`, `rerank`, `classification`, `decision`, `model`, `connectivity`, `agent`; on `polyprompt.clients.active`, `provider` for provider clients. Since 4.0 one provider client runs every capability, so the value comes from the operation called, not the client type. |
+| `polyprompt.operation` | `chat`, `chat_stream`, `tool_chat`, `tool_chat_stream`, `generate`, `generate_stream`, `create_response`, `create_response_stream`, `get_response`, `delete_response`, `cancel_response`, `list_response_input`, `compact_response`, `count_input_tokens`, `embed`, `sparse_embed`, `rerank`, `classify`, `decide`, `decide_batch`, `model_info`, `model_exists`, `model_pull`, `model_delete`, `model_load`, `model_unload`, `validate_connectivity`, `agent_run`, `agent_run_stream`, `model_list` |
 | `gen_ai.operation.name` | `chat`, `text_completion`, `embeddings`, `rerank`, `classify`, `decide`, `invoke_agent` (and the PolyPrompt operation on spans for non-model operations) |
 | `polyprompt.outcome` | `success`, `error`, `timeout`, `cancelled`, `abandoned` |
 | `error.type` | An HTTP status code (`404`, `429`, `529`), `invalid_response` (a successful status with a body PolyPrompt could not use), `timeout` (exceeded `TimeoutMs`), `batch_item_failed`, `operation_failed` (a boolean operation returned false without a status), for agent harnesses `not_installed`, `not_authenticated`, `rate_limited`, `crashed`, `provider_error`, `invalid_input`, `turn_limit_reached`, `output_limit_exceeded` (plus `timeout` and `invalid_response`), or the exception's full type name (`System.Net.Http.HttpRequestException`). Absent on success and on cancellation. |
