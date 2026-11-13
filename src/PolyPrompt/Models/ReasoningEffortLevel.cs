@@ -2,8 +2,8 @@ namespace PolyPrompt.Models
 {
     /// <summary>
     /// Semantic reasoning effort level. Anchors a <see cref="ReasoningEffort"/> and supplies the per-provider defaults
-    /// each level implies; each provider maps every level to its nearest supported wire value (see the README's
-    /// reasoning effort table). Callers may override any individual provider value. The wire value actually sent is
+    /// each level implies; each provider maps every level to its nearest supported wire value (see the reasoning effort
+    /// tables in PROVIDERS.md). Callers may override any individual provider value. The wire value actually sent is
     /// reported on <see cref="ResponseBase.AppliedReasoningEffort"/>.
     /// </summary>
     public enum ReasoningEffortLevel

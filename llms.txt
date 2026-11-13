@@ -19,6 +19,8 @@ Key rules:
 
 Optional:
 
+- [PROVIDERS.md](https://github.com/jchristn/Polyprompt/blob/main/PROVIDERS.md): constructors, auth, per-provider behavior, Responses API, Gemini tool calling, reasoning-effort mapping, citations, options classes.
+- [HARNESSES.md](https://github.com/jchristn/Polyprompt/blob/main/HARNESSES.md): agent harness setup, permissions, requests and results.
 - [STREAMING.md](https://github.com/jchristn/Polyprompt/blob/main/STREAMING.md): streaming lifecycle and Responses API events.
 - [TELEMETRY.md](https://github.com/jchristn/Polyprompt/blob/main/TELEMETRY.md): metrics and traces.
 - [AOT.md](https://github.com/jchristn/Polyprompt/blob/main/AOT.md): Native AOT and source-generated JSON.
