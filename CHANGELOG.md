@@ -64,7 +64,7 @@
 - Test.Console: 89 cases per framework (80 passed; 9 skipped by default: env-gated Postman simulation cases and platform-gated cases), including new in-process runs of all eleven provider consoles against the local fixture.
 - Native AOT: 133 checks per framework (fewer clients than 3.7.0, plus new OpenAI Responses, envelope, citation, extensible-value, and capability checks), with JIT and native request digests matching on .NET 8 and .NET 10.
 - xAI wire regression: 13 representative xAI requests (every effort level, the full xAI option set, tool chat, history replay, generation, both streaming forms, native create, and compaction) are byte-identical to 3.7.0.
-- Postman simulations (OpenAI Responses 3 cases, xAI 3, Ollama Cloud 2) pass against the mock servers run directly with Node; the Postman CLI was not used. No live provider calls were made: no provider credentials were available, so the P0 verification items were settled from official documentation (recorded in V4_PLAN.md).
+- Postman simulations (OpenAI Responses 3 cases, xAI 3, Ollama Cloud 2) pass against the mock servers run directly with Node; the Postman CLI was not used. No live provider calls were made: no provider credentials were available, so the P0 verification items were settled from official documentation (recorded in archive/V4_PLAN.md).
 
 ## v3.7.0 (2026-11-10)
 
