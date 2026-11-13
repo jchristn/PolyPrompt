@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for OpenAI Codex through <see cref="CodexAgentClient"/> (<c>codex exec --json</c>).
+/// Interactive and one-shot console for OpenAI Codex through <see cref="CodexClient"/> (<c>codex exec --json</c>).
 /// Sessions resume by id across turns (<c>codex exec resume</c>).
 /// </summary>
 public static class Program
@@ -14,8 +14,8 @@ public static class Program
     {
         ApplicationName = "CodexConsole",
         HarnessName = "Codex",
-        CreateClient = () => new CodexAgentClient(),
-        ListModels = (client, _, token) => ((CodexAgentClient)client).ListModelsAsync(token),
+        CreateClient = () => new CodexClient(),
+        ListModels = (client, _, token) => ((CodexClient)client).ListModelsAsync(token),
         Prerequisites =
             "Codex setup:\n" +
             "  1. Install the CLI (https://developers.openai.com/codex/cli), for example: npm install -g @openai/codex\n" +

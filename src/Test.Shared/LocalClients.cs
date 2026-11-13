@@ -4,6 +4,7 @@ namespace Test.Shared
     using System.Text;
     using PolyPrompt.Auth;
     using PolyPrompt.Clients;
+    using PolyPrompt.Models;
 
     /// <summary>
     /// Builds one instance of every PolyPrompt client, pointed at a local endpoint, with test credentials. Used by the
@@ -19,100 +20,54 @@ namespace Test.Shared
         }
 
         /// <summary>
-        /// Every client, pointed at the endpoint. Cohere clients use the Cohere test key so the local server routes them.
+        /// One client per provider, pointed at the endpoint, with every section's model set so each supported operation
+        /// can run. Cohere clients use the Cohere test key so the local server routes them; OpenAiClient uses the OpenAI
+        /// Responses fixture key; Azure uses the v1 routes.
         /// </summary>
-        public static List<HttpClientBase> All(string endpoint, HttpClient? httpClient = null)
+        public static List<ProviderClientBase> All(string endpoint, HttpClient? httpClient = null)
         {
-            List<HttpClientBase> clients = new List<HttpClientBase>();
-            clients.AddRange(Completion(endpoint, httpClient));
-            clients.AddRange(Embedding(endpoint, httpClient));
-            clients.Add(new TeiSparseEmbeddingClient(endpoint, TestKey, httpClient: httpClient));
-            clients.AddRange(Rerank(endpoint, httpClient));
-            clients.AddRange(Classification(endpoint, httpClient));
-            clients.Add(new TypeSafeDecisionClient(endpoint, TestKey, httpClient: httpClient));
-            clients.AddRange(Models(endpoint, httpClient));
-            foreach (HttpClientBase client in clients) client.TimeoutMs = 3000;
-            return clients;
+            ClientOptions options = new ClientOptions { HttpClient = httpClient, TimeoutMs = 3000 };
+            return new List<ProviderClientBase>
+            {
+                new XAiClient(LocalXAiRoutes.Key, endpoint, options),
+                new OllamaClient(endpoint, TestKey, options),
+                new OpenAiCompatibleClient(endpoint, TestKey, options) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } },
+                new OpenAiClient(LocalOpenAiResponsesRoutes.Key, endpoint, options),
+                new AzureOpenAiClient(endpoint, TestKey, options) { Defaults = { Completion = { Model = "test-deployment" }, Embedding = { Model = "test-embedding-deployment" } } },
+                new GeminiClient(TestKey, endpoint, options),
+                new VertexAiClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint, options),
+                new AnthropicClient(TestKey, endpoint, options),
+                new CohereClient(LocalExtendedRoutes.CohereTestKey, endpoint, options),
+                new BedrockClient("us-east-1", AwsCredential(), endpoint, options) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } },
+                new VoyageAiClient(TestKey, endpoint, options),
+                new TeiClient(endpoint, TestKey, options),
+                new TypeSafeClient(TestKey, endpoint, options),
+            };
         }
 
-        public static List<CompletionClientBase> Completion(string endpoint, HttpClient? httpClient = null)
+        /// <summary>
+        /// The provider clients that support a capability; the others are disposed.
+        /// </summary>
+        public static List<ProviderClientBase> Supporting(Capability capability, string endpoint, HttpClient? httpClient = null)
         {
-            return Timed(new List<CompletionClientBase>
-            {
-                new XAiCompletionClient(TestKey, endpoint, httpClient: httpClient),
-                new OllamaCompletionClient(endpoint, TestKey, httpClient: httpClient),
-                new OpenAiCompletionClient(endpoint, TestKey, httpClient: httpClient),
-                new AzureOpenAiCompletionClient(endpoint, "test-deployment", TestKey, apiVersion: "2024-10-21", httpClient: httpClient),
-                new GeminiCompletionClient(endpoint, TestKey, httpClient: httpClient),
-                new VertexAiCompletionClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint, httpClient: httpClient),
-                new AnthropicCompletionClient(endpoint, TestKey, httpClient: httpClient),
-                new CohereCompletionClient(endpoint, LocalExtendedRoutes.CohereTestKey, httpClient: httpClient),
-                new BedrockCompletionClient(AwsCredential(), "us-east-1", endpoint, httpClient: httpClient),
-            });
+            List<ProviderClientBase> all = All(endpoint, httpClient);
+            foreach (ProviderClientBase client in all.Where(c => !c.Supports(capability))) client.Dispose();
+            return all.Where(c => c.Supports(capability)).ToList();
         }
 
-        public static List<EmbeddingClientBase> Embedding(string endpoint, HttpClient? httpClient = null)
-        {
-            return Timed(new List<EmbeddingClientBase>
-            {
-                new XAiEmbeddingClient(LocalXAiRoutes.Key, endpoint, httpClient: httpClient),
-                new OllamaEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
-                new OpenAiEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
-                new AzureOpenAiEmbeddingClient(endpoint, "test-embedding-deployment", TestKey, apiVersion: "2024-10-21", httpClient: httpClient),
-                new GeminiEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
-                new VertexAiEmbeddingClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint, httpClient: httpClient),
-                new BedrockEmbeddingClient(AwsCredential(), "us-east-1", endpoint, httpClient: httpClient),
-                new VoyageAiEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
-                new CohereEmbeddingClient(endpoint, LocalExtendedRoutes.CohereTestKey, httpClient: httpClient),
-                new TeiEmbeddingClient(endpoint, TestKey, httpClient: httpClient),
-            });
-        }
+        public static List<ProviderClientBase> Completion(string endpoint, HttpClient? httpClient = null) => Supporting(Capability.Chat, endpoint, httpClient);
 
-        public static List<RerankClientBase> Rerank(string endpoint, HttpClient? httpClient = null)
-        {
-            return Timed(new List<RerankClientBase>
-            {
-                new BedrockRerankClient(AwsCredential(), "us-east-1", endpoint, httpClient: httpClient),
-                new VoyageAiRerankClient(endpoint, TestKey, httpClient: httpClient),
-                new CohereRerankClient(endpoint, LocalExtendedRoutes.CohereTestKey, httpClient: httpClient),
-                new TeiRerankClient(endpoint, TestKey, httpClient: httpClient),
-            });
-        }
+        public static List<ProviderClientBase> Embedding(string endpoint, HttpClient? httpClient = null) => Supporting(Capability.Embed, endpoint, httpClient);
 
-        public static List<ClassificationClientBase> Classification(string endpoint, HttpClient? httpClient = null)
-        {
-            return Timed(new List<ClassificationClientBase>
-            {
-                new CohereClassificationClient(endpoint, LocalExtendedRoutes.CohereTestKey, httpClient: httpClient),
-                new TeiClassificationClient(endpoint, TestKey, httpClient: httpClient),
-            });
-        }
+        public static List<ProviderClientBase> Rerank(string endpoint, HttpClient? httpClient = null) => Supporting(Capability.Rerank, endpoint, httpClient);
 
-        public static List<ModelClientBase> Models(string endpoint, HttpClient? httpClient = null)
-        {
-            return Timed(new List<ModelClientBase>
-            {
-                new XAiModelClient(LocalXAiRoutes.Key, endpoint, httpClient: httpClient),
-                new OllamaModelClient(endpoint, TestKey, httpClient: httpClient),
-                new OpenAiModelClient(endpoint, TestKey, httpClient: httpClient),
-                new AzureOpenAiModelClient(endpoint, TestKey, apiVersion: "2024-10-21", httpClient: httpClient),
-                new GeminiModelClient(endpoint, TestKey, httpClient: httpClient),
-                new AnthropicModelClient(endpoint, TestKey, httpClient: httpClient),
-                new CohereModelClient(endpoint, LocalExtendedRoutes.CohereTestKey, httpClient: httpClient),
-                new BedrockModelClient(AwsCredential(), "us-east-1", endpoint, httpClient: httpClient),
-                new TeiModelClient(endpoint, TestKey, httpClient: httpClient),
-            });
-        }
+        public static List<ProviderClientBase> Classification(string endpoint, HttpClient? httpClient = null) => Supporting(Capability.Classify, endpoint, httpClient);
+
+        public static List<ProviderClientBase> Models(string endpoint, HttpClient? httpClient = null) => Supporting(Capability.Models, endpoint, httpClient);
 
         public static void DisposeAll(IEnumerable<HttpClientBase> clients)
         {
             foreach (HttpClientBase client in clients) client.Dispose();
-        }
-
-        private static List<T> Timed<T>(List<T> clients) where T : HttpClientBase
-        {
-            foreach (T client in clients) client.TimeoutMs = 3000;
-            return clients;
         }
     }
 

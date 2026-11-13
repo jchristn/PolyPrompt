@@ -4,33 +4,56 @@ namespace PolyPrompt.Helpers
     using System.Text.Json.Nodes;
     using PolyPrompt.Models;
 
-    // Tagged envelopes prevent a provider's native continuation fields leaking into another protocol.
-    // xAI's existing, public output-array representation remains unchanged.
+    // PolyPrompt 4.0 continuation envelope: { protocol, provider, scope, value }. A client replays only state tagged with
+    // its own protocol, provider, and scope (endpoint); anything else falls back to plain message history, so state can
+    // never leak across providers. 3.x envelopes ({ protocol, value[, scope] }) are still read; only 4.0 is written.
     internal static class ToolTurnState
     {
-        internal static void Set(ResponseBase response, string protocol, object value, string? scope = null)
+        internal static void Set(ResponseBase response, string protocol, string provider, string scope, object value)
         {
-            var state = new Dictionary<string, object> { ["protocol"] = protocol, ["value"] = value };
-            if (scope != null) state["scope"] = scope.TrimEnd('/');
+            var state = new Dictionary<string, object>
+            {
+                ["protocol"] = protocol,
+                ["provider"] = provider,
+                ["scope"] = NormalizeScope(scope),
+                ["value"] = value,
+            };
             using JsonDocument document = JsonDocument.Parse(new Serializer().SerializeJson(state, false));
             response.ProviderState = document.RootElement.Clone();
         }
 
-        internal static bool TryGet(ChatMessage message, string protocol, out JsonElement value, string? scope = null)
+        internal static bool TryGet(ChatMessage message, string protocol, string provider, string scope, out JsonElement value, string? legacyProtocol = null)
         {
             value = default;
-            return string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)
-                && message.ProviderState is JsonElement state && state.ValueKind == JsonValueKind.Object
-                && state.TryGetProperty("protocol", out JsonElement tag) && tag.ValueKind == JsonValueKind.String
-                && tag.GetString() == protocol
-                && (scope == null || state.TryGetProperty("scope", out JsonElement origin)
-                    && origin.ValueKind == JsonValueKind.String && origin.GetString() == scope.TrimEnd('/'))
-                && state.TryGetProperty("value", out value);
+            if (!string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) return false;
+            if (message.ProviderState is not JsonElement state || state.ValueKind != JsonValueKind.Object) return false;
+            if (!state.TryGetProperty("protocol", out JsonElement tag) || tag.ValueKind != JsonValueKind.String) return false;
+
+            if (state.TryGetProperty("provider", out JsonElement owner))
+            {
+                // 4.0 envelope: protocol, provider, and scope must all match.
+                return tag.GetString() == protocol
+                    && owner.ValueKind == JsonValueKind.String && owner.GetString() == provider
+                    && state.TryGetProperty("scope", out JsonElement origin) && origin.ValueKind == JsonValueKind.String
+                    && origin.GetString() == NormalizeScope(scope)
+                    && state.TryGetProperty("value", out value);
+            }
+
+            // 3.x envelope: protocol must match; a recorded scope must match too.
+            if (tag.GetString() != (legacyProtocol ?? protocol)) return false;
+            if (state.TryGetProperty("scope", out JsonElement legacyScope)
+                && (legacyScope.ValueKind != JsonValueKind.String || legacyScope.GetString() != NormalizeScope(scope))) return false;
+            return state.TryGetProperty("value", out value);
         }
 
-        internal static bool IsTagged(JsonElement state) => state.ValueKind == JsonValueKind.Object
+        /// <summary>
+        /// True when the state is a tagged envelope (3.x or 4.0) rather than a raw provider value.
+        /// </summary>
+        internal static bool IsEnvelope(JsonElement state) => state.ValueKind == JsonValueKind.Object
             && state.TryGetProperty("protocol", out JsonElement tag) && tag.ValueKind == JsonValueKind.String
-            && tag.GetString() is "ollama" or "openai" or "anthropic" or "bedrock" or "gemini" or "cohere";
+            && state.TryGetProperty("value", out _);
+
+        private static string NormalizeScope(string scope) => (scope ?? "").TrimEnd('/');
 
         internal static bool IsString(object? value) => value is string || value is JsonElement e && e.ValueKind == JsonValueKind.String;
 

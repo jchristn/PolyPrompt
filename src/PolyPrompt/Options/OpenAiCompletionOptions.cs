@@ -1,78 +1,58 @@
 namespace PolyPrompt.Options
 {
-    using PolyPrompt.Models;
+    using System.Text.Json;
 
     /// <summary>
-    /// OpenAI settings for chat, tool chat, and generation, mapped to the <c>/v1/chat/completions</c> and
-    /// <c>/v1/completions</c> request bodies. Also used by Azure OpenAI. Use this type for an OpenAI completion client's
-    /// <c>Defaults</c> or per call; per-call values override the defaults field by field.
+    /// OpenAI Responses API settings for <see cref="Clients.OpenAiClient"/> and <see cref="Clients.AzureOpenAiClient"/>:
+    /// the shared <see cref="ResponsesApiCompletionOptions"/> plus OpenAI-only request fields. (The 3.x Chat Completions
+    /// settings with this name are now <see cref="OpenAiCompatibleCompletionOptions"/>.) Fields PolyPrompt does not model
+    /// (<c>prompt</c>, <c>truncation</c>, <c>prompt_cache_retention</c>, <c>image</c>, <c>moderation</c>) go in
+    /// <see cref="ResponsesApiCompletionOptions.AdditionalParameters"/>.
     /// </summary>
-    public class OpenAiCompletionOptions : CompletionOptions
+    public class OpenAiCompletionOptions : ResponsesApiCompletionOptions
     {
-        #region Private-Members
-
-        private double? _FrequencyPenalty = null;
-        private double? _PresencePenalty = null;
-        private int? _Seed = null;
-
-        #endregion
-
-        #region Public-Members
+        /// <summary>
+        /// Up to 16 key/value pairs attached to the response (<c>metadata</c>).
+        /// </summary>
+        public Dictionary<string, string>? Metadata { get; set; }
 
         /// <summary>
-        /// Frequency penalty. Clamped to -2.0..2.0. Null uses API default (0).
+        /// Run the response in the background (<c>background</c>). Requires <see cref="ResponsesApiCompletionOptions.Store"/>
+        /// = true; PolyPrompt throws <see cref="ArgumentException"/> otherwise. Poll with <c>GetResponseAsync</c> and stop
+        /// with <c>CancelResponseAsync</c>.
         /// </summary>
-        public double? FrequencyPenalty
-        {
-            get { return _FrequencyPenalty; }
-            set
-            {
-                if (value.HasValue)
-                    _FrequencyPenalty = Math.Clamp(value.Value, -2.0, 2.0);
-                else
-                    _FrequencyPenalty = null;
-            }
-        }
+        public bool? Background { get; set; }
 
         /// <summary>
-        /// Presence penalty. Clamped to -2.0..2.0. Null uses API default (0).
+        /// Conversation id the response belongs to (<c>conversation</c>).
         /// </summary>
-        public double? PresencePenalty
-        {
-            get { return _PresencePenalty; }
-            set
-            {
-                if (value.HasValue)
-                    _PresencePenalty = Math.Clamp(value.Value, -2.0, 2.0);
-                else
-                    _PresencePenalty = null;
-            }
-        }
+        public string? Conversation { get; set; }
 
         /// <summary>
-        /// Random seed for reproducibility. Null uses random seed.
+        /// Maximum number of hosted tool calls in the response (<c>max_tool_calls</c>). Must be positive.
         /// </summary>
-        public int? Seed
-        {
-            get { return _Seed; }
-            set { _Seed = value; }
-        }
+        public int? MaxToolCalls { get; set; }
 
         /// <summary>
-        /// Echo the prompt back in the response. Text generation (<c>/v1/completions</c>) only. Null uses API default (false).
+        /// Number of most likely tokens to return per position, 0..20 (<c>top_logprobs</c>). Add
+        /// <c>message.output_text.logprobs</c> to <see cref="ResponsesApiCompletionOptions.Include"/> to receive them.
         /// </summary>
-        public bool? Echo { get; set; } = null;
+        public int? TopLogprobs { get; set; }
 
         /// <summary>
-        /// Suffix to append after the generated text. Text generation (<c>/v1/completions</c>) only. Default: null.
+        /// Prompt cache options object (<c>prompt_cache_options</c>), for example <c>{ "ttl": "24h" }</c>.
         /// </summary>
-        public string? Suffix { get; set; } = null;
+        public JsonElement? PromptCacheOptions { get; set; }
 
         /// <summary>
-        /// Number of log probabilities to include. Text generation (<c>/v1/completions</c>) only. Null uses API default.
+        /// Server-side context management (<c>context_management</c>), for example
+        /// <c>[{ "type": "compaction", "compact_threshold": 200000 }]</c>.
         /// </summary>
-        public int? Logprobs { get; set; } = null;
+        public JsonElement? ContextManagement { get; set; }
 
-        #endregion
+        /// <summary>
+        /// Streaming options object (<c>stream_options</c>), sent only on streaming calls.
+        /// </summary>
+        public JsonElement? StreamOptions { get; set; }
     }
 }

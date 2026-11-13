@@ -23,12 +23,15 @@ namespace PolyPrompt.Telemetry
 
         private static readonly string[] _CapabilitySuffixes = new[]
         {
-            "SparseEmbeddingClient", "ClassificationClient", "AgentClient", "CompletionClient", "EmbeddingClient", "DecisionClient", "RerankClient", "ModelClient", "Client"
+            "Client"
         };
 
         private static readonly Dictionary<string, string> _ProviderNames = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             { "OpenAi", "openai" },
+            { "OpenAiCompatible", "openai" },
+            { "XAi", "xai" },
+            { "OllamaCloud", "ollamacloud" },
             { "AzureOpenAi", "azure.ai.openai" },
             { "Gemini", "gcp.gemini" },
             { "VertexAi", "gcp.vertex_ai" },
@@ -270,7 +273,7 @@ namespace PolyPrompt.Telemetry
 
         /// <summary>
         /// Resolve the bounded provider label for a client type, for example <c>openai</c> for
-        /// <see cref="OpenAiCompletionClient"/> or any type derived from it.
+        /// <see cref="OpenAiClient"/> or any type derived from it.
         /// </summary>
         /// <param name="type">Client type.</param>
         /// <returns>The provider label.</returns>
@@ -282,7 +285,7 @@ namespace PolyPrompt.Telemetry
                 Type? current = t;
                 while (current != null && current.Assembly != library) current = current.BaseType;
 
-                // A custom client that derives straight from a capability base is labeled by its own type name.
+                // A custom client that derives straight from an abstract base is labeled by its own type name.
                 if (current == null || current.IsAbstract) current = t;
 
                 string prefix = StripCapabilitySuffix(current.Name);
@@ -292,21 +295,36 @@ namespace PolyPrompt.Telemetry
         }
 
         /// <summary>
-        /// Resolve the bounded capability label for a client.
+        /// Resolve the bounded capability label for an operation. Provider clients expose every capability, so the label
+        /// comes from the operation called: <c>completion</c>, <c>embedding</c>, <c>sparse_embedding</c>, <c>rerank</c>,
+        /// <c>classification</c>, <c>decision</c>, <c>model</c>, or <c>connectivity</c>. Agent harness clients report
+        /// <c>agent</c>. With no operation (the active-clients gauge), provider clients report <c>provider</c>.
         /// </summary>
         /// <param name="client">Client.</param>
+        /// <param name="operation">Operation label, or null.</param>
         /// <returns>The capability label.</returns>
-        public static string ResolveCapability(ClientBase client)
+        public static string ResolveCapability(ClientBase client, string? operation = null)
         {
-            if (client is CompletionClientBase) return "completion";
-            if (client is EmbeddingClientBase) return "embedding";
-            if (client is SparseEmbeddingClientBase) return "sparse_embedding";
-            if (client is RerankClientBase) return "rerank";
-            if (client is ClassificationClientBase) return "classification";
-            if (client is DecisionClientBase) return "decision";
-            if (client is ModelClientBase) return "model";
             if (client is CliAgentClientBase) return "agent";
-            return "other";
+            switch (operation)
+            {
+                case null: return client is ProviderClientBase ? "provider" : "other";
+                case PolyPromptTelemetryNames.OperationEmbed: return "embedding";
+                case PolyPromptTelemetryNames.OperationSparseEmbed: return "sparse_embedding";
+                case PolyPromptTelemetryNames.OperationRerank: return "rerank";
+                case PolyPromptTelemetryNames.OperationClassify: return "classification";
+                case PolyPromptTelemetryNames.OperationDecide:
+                case PolyPromptTelemetryNames.OperationDecideBatch: return "decision";
+                case PolyPromptTelemetryNames.OperationModelInfo:
+                case PolyPromptTelemetryNames.OperationModelExists:
+                case PolyPromptTelemetryNames.OperationModelPull:
+                case PolyPromptTelemetryNames.OperationModelDelete:
+                case PolyPromptTelemetryNames.OperationModelLoad:
+                case PolyPromptTelemetryNames.OperationModelUnload:
+                case PolyPromptTelemetryNames.OperationModelList: return "model";
+                case PolyPromptTelemetryNames.OperationValidateConnectivity: return "connectivity";
+                default: return "completion";
+            }
         }
 
         /// <summary>

@@ -10,7 +10,7 @@ namespace TypeSafeConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static TypeSafeDecisionClient _Client = null!;
+        private static TypeSafeClient _Client = null!;
 
         #endregion
 
@@ -24,14 +24,14 @@ namespace TypeSafeConsole
             Console.WriteLine("Use the hosted API (https://api.typesafe.ai) or a local Ollaya server (for example http://localhost:<port>).");
             Console.WriteLine("");
 
-            string endpoint = Inputty.GetString("Endpoint [https://api.typesafe.ai]:", TypeSafeDecisionClient.DefaultEndpoint, false);
+            string endpoint = Inputty.GetString("Endpoint [https://api.typesafe.ai]:", TypeSafeClient.DefaultEndpoint, false);
             string? apiKey = Inputty.GetString("API key (any value for a local Ollaya server):", null, true);
             string model = Inputty.GetString("Model [jev-latest]:", "jev-latest", false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new TypeSafeDecisionClient(endpoint, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey);
+            _Client = new TypeSafeClient(string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, endpoint);
             _Client.CallDetailCapture = CallDetailCapture.Full;   // the "call details" command can show bodies
-            _Client.Model = model;
+            _Client.Defaults.Decision.Model = model;
             _Client.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
@@ -145,7 +145,7 @@ namespace TypeSafeConsole
             Console.WriteLine("");
             Console.WriteLine("  Endpoint        : " + _Client.Endpoint);
             Console.WriteLine("  API key         : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Model           : " + _Client.Model);
+            Console.WriteLine("  Model           : " + _Client.Defaults.Decision.Model);
             Console.WriteLine("  Timeout ms      : " + _Client.TimeoutMs);
             Console.WriteLine("  Max concurrency : " + _Client.MaxConcurrency);
             Console.WriteLine("");
@@ -154,12 +154,12 @@ namespace TypeSafeConsole
         private static void SetModel()
         {
             Console.WriteLine("");
-            Console.WriteLine("Current model: " + _Client.Model);
+            Console.WriteLine("Current model: " + _Client.Defaults.Decision.Model);
             string? newModel = Inputty.GetString("Model [Enter to keep]:", null, true);
             if (!string.IsNullOrWhiteSpace(newModel))
             {
-                _Client.Model = newModel.Trim();
-                Console.WriteLine("Model set to " + _Client.Model + ".");
+                _Client.Defaults.Decision.Model = newModel.Trim();
+                Console.WriteLine("Model set to " + _Client.Defaults.Decision.Model + ".");
             }
             else
             {

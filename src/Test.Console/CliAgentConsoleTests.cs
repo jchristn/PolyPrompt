@@ -18,7 +18,7 @@ public sealed class CliAgentConsoleTests
     public async Task CodexRecordedReplayRunsWithoutLiveCli()
     {
         using FakeCli fake = FakeCli.Create("codex", "codex-happy");
-        using CodexAgentClient client = fake.Attach(new CodexAgentClient());
+        using CodexClient client = fake.Attach(new CodexClient());
 
         CliAgentResult result = await client.RunAsync(new CliAgentRequest("List the files."));
         Assert.That(result.Success, Is.True, result.Error);
@@ -86,7 +86,7 @@ public sealed class CliAgentConsoleTests
         Directory.CreateDirectory(directory);
         try
         {
-            using CodexAgentClient client = new CodexAgentClient { WorkingDirectory = directory, TimeoutMs = 300000 };
+            using CodexClient client = new CodexClient { WorkingDirectory = directory, TimeoutMs = 300000 };
             CliConnectivityResult status = await client.ValidateConnectivityAsync();
             Assert.That(status.Status, Is.EqualTo(CliConnectivityStatus.Ok), status.Message);
 

@@ -11,7 +11,7 @@ public abstract class ConsoleApplicationBase
     private static bool _ToolsEnabled = true;
     private static string _WorkingDirectory = Directory.GetCurrentDirectory();
 
-    protected static ConsoleSession GetSession(CompletionClientBase client) => _Session ??= new(client, new ProcessToolRuntime(), Console.Out)
+    protected static ConsoleSession GetSession(ProviderClientBase client) => _Session ??= new(client, new ProcessToolRuntime(), Console.Out)
     {
         WorkingDirectory = _WorkingDirectory
     };
@@ -37,7 +37,7 @@ public abstract class ConsoleApplicationBase
         return transport;
     }
 
-    protected static async Task RunSharedGenerationAsync(CompletionClientBase client, string prompt, bool streaming)
+    protected static async Task RunSharedGenerationAsync(ProviderClientBase client, string prompt, bool streaming)
     {
         ConsoleRenderer renderer = new(Console.Out);
         GenerationThinkingHandler.Current.Value = renderer;
@@ -61,7 +61,7 @@ public abstract class ConsoleApplicationBase
         finally { renderer.Finish(); GenerationThinkingHandler.Current.Value = null; }
     }
 
-    protected static async Task<bool> RunSharedChatAsync(CompletionClientBase client, string prompt, bool streaming)
+    protected static async Task<bool> RunSharedChatAsync(ProviderClientBase client, string prompt, bool streaming)
     {
         using CancellationTokenSource cancellation = new();
         ConsoleCancelEventHandler handler = (_, e) => { e.Cancel = true; cancellation.Cancel(); };
@@ -72,7 +72,7 @@ public abstract class ConsoleApplicationBase
         finally { Console.CancelKeyPress -= handler; }
     }
 
-    protected static async Task<bool> TryHandleSharedCommandAsync(string input, CompletionClientBase? client = null)
+    protected static async Task<bool> TryHandleSharedCommandAsync(string input, ProviderClientBase? client = null)
     {
         string[] parts = input.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0) return false;
@@ -100,9 +100,9 @@ public abstract class ConsoleApplicationBase
             case "reset": _Session?.Reset(); Console.WriteLine("Conversation cleared."); return true;
             case "reasoning":
                 if (client == null) { Console.WriteLine("This provider has no chat reasoning capability."); return true; }
-                if (argument.Equals("default", StringComparison.OrdinalIgnoreCase)) client.Defaults.ReasoningEffort = null;
+                if (argument.Equals("default", StringComparison.OrdinalIgnoreCase)) client.Defaults.Completion.ReasoningEffort = null;
                 else if (Enum.TryParse(argument, true, out ReasoningEffortLevel level) && Enum.IsDefined(level))
-                    client.Defaults.ReasoningEffort = new ReasoningEffort(level);
+                    client.Defaults.Completion.ReasoningEffort = new ReasoningEffort(level);
                 else { Console.WriteLine("Usage: reasoning default|minimal|low|medium|high"); return true; }
                 Console.WriteLine("Reasoning setting updated. Returned thinking is always displayed separately.");
                 return true;

@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="MuxAgentClient"/>: the shared harness kit plus model listing, sessions, the
+    /// Fake-CLI cases for <see cref="MuxClient"/>: the shared harness kit plus model listing, sessions, the
     /// permission mapping, refused tool calls, configuration errors, the turn limit, and the remaining JSONL event types.
     /// </summary>
     internal static class LocalMuxAgentCases
@@ -22,7 +22,7 @@ namespace Test.Shared
                 {
                     Id = "mux",
                     ExecutableName = "mux",
-                    Create = () => new MuxAgentClient(),
+                    Create = () => new MuxClient(),
                     HappyScenario = "mux-happy",
                     ErrorExitScenario = "mux-error-exit",
                     StderrOnlyScenario = "mux-stderr-only",
@@ -59,7 +59,7 @@ namespace Test.Shared
                         new CliAgentProfile.ArgvCase
                         {
                             Description = "WorkspaceWrite, endpoint, and model from the client",
-                            Client = c => { c.PermissionMode = CliPermissionMode.WorkspaceWrite; c.Model = "client-model"; ((MuxAgentClient)c).Endpoint = "vllm-coder"; },
+                            Client = c => { c.PermissionMode = CliPermissionMode.WorkspaceWrite; c.Model = "client-model"; ((MuxClient)c).Endpoint = "vllm-coder"; },
                             Expected = Args(new List<string> { "--endpoint", "vllm-coder", "--model", "client-model", "--approval-policy", "auto", "--sandbox", "workspace-write", "--deny-tools", "run_process" }, "--show-thinking"),
                         },
                         new CliAgentProfile.ArgvCase
@@ -85,7 +85,7 @@ namespace Test.Shared
                         new CliAgentProfile.ArgvCase
                         {
                             Description = "ShowThinking off",
-                            Client = c => ((MuxAgentClient)c).ShowThinking = false,
+                            Client = c => ((MuxClient)c).ShowThinking = false,
                             Expected = Args(_Restricted),
                         },
                         new CliAgentProfile.ArgvCase
@@ -126,7 +126,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                MuxAgentClient mux = (MuxAgentClient)client;
+                MuxClient mux = (MuxClient)client;
                 List<ModelInformation> models = new List<ModelInformation>();
                 await foreach (ModelInformation model in mux.ListModelsAsync(token).ConfigureAwait(false)) models.Add(model);
 
@@ -190,7 +190,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                MuxAgentClient mux = (MuxAgentClient)client;
+                MuxClient mux = (MuxClient)client;
 
                 CliAgentResult stateless = await client.RunAsync(new CliAgentRequest("hi"), token).ConfigureAwait(false);
                 SharedAssert.True(stateless.Success, "Stateless run succeeds: " + stateless.Error);
@@ -272,7 +272,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                ((MuxAgentClient)client).Endpoint = "no-such-endpoint";
+                ((MuxClient)client).Endpoint = "no-such-endpoint";
                 CliAgentResult result = await client.RunAsync(new CliAgentRequest("hi"), token).ConfigureAwait(false);
                 SharedAssert.Equal(CliFailureKind.InvalidInput, result.FailureKind, "endpoint_not_found is InvalidInput. Error: " + result.Error);
                 SharedAssert.True((result.Error ?? "").Contains("No endpoint named 'no-such-endpoint'", StringComparison.Ordinal), "Error message: " + result.Error);
@@ -335,7 +335,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                MuxAgentClient mux = (MuxAgentClient)client;
+                MuxClient mux = (MuxClient)client;
                 mux.Endpoint = "local-gpt-oss";
                 mux.Model = "gpt-oss:20b";
                 CliConnectivityResult ok = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);

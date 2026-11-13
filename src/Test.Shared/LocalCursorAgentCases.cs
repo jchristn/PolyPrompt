@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="CursorAgentClient"/>: the shared harness kit plus model listing, session resume,
+    /// Fake-CLI cases for <see cref="CursorClient"/>: the shared harness kit plus model listing, session resume,
     /// the partial-output de-duplication, stderr-reported failures, and the permission mapping. The Cursor CLI was not
     /// installed when these were written, so every scenario is constructed from Cursor's documentation and the published
     /// CLI package rather than recorded (each scenario header says so).
@@ -24,7 +24,7 @@ namespace Test.Shared
                 {
                     Id = "cursor",
                     ExecutableName = "cursor-agent",
-                    Create = () => new CursorAgentClient(),
+                    Create = () => new CursorClient(),
                     HappyScenario = "cursor-happy",
                     ErrorExitScenario = "cursor-error-exit",
                     StderrOnlyScenario = "cursor-stderr-only",
@@ -119,7 +119,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                CursorAgentClient cursor = (CursorAgentClient)client;
+                CursorClient cursor = (CursorClient)client;
                 List<ModelInformation> models = new List<ModelInformation>();
                 await foreach (ModelInformation model in cursor.ListModelsAsync(token).ConfigureAwait(false)) models.Add(model);
 

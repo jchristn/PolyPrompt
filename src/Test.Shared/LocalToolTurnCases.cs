@@ -15,17 +15,16 @@ namespace Test.Shared
     public static partial class LocalToolTurnCases
     {
         private static readonly string[] Providers = { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere" };
-        private static CompletionClientBase Client(string provider, string endpoint, HttpClient? http = null) => provider switch
+        private static ProviderClientBase Client(string provider, string endpoint, HttpClient? http = null) => provider switch
         {
-            "ollama" => new OllamaCompletionClient(endpoint),
-            "ollamacloud" => new OllamaCloudCompletionClient("fixture", httpClient: http),
-            "azure" => new AzureOpenAiCompletionClient(endpoint, "fixture-model", "fixture"),
-            "vertex" => new VertexAiCompletionClient("fixture-project", "us-central1", new StaticTokenCredential("fixture"), endpoint),
-            "openai" => new OpenAiCompletionClient(endpoint: endpoint, apiKey: "fixture"),
-            "anthropic" => new AnthropicCompletionClient(endpoint: endpoint, apiKey: "fixture"),
-            "bedrock" => new BedrockCompletionClient(new StaticAwsCredential("fixture", "fixture", "us-east-1"), "us-east-1", endpoint),
-            "gemini" => new GeminiCompletionClient(endpoint: endpoint, apiKey: "fixture"),
-            "cohere" => new CohereCompletionClient(endpoint: endpoint, apiKey: "fixture"),
+            "ollama" => new OllamaClient(endpoint),
+            "ollamacloud" => new OllamaCloudClient("fixture", options: new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } },
+            "vertex" => new VertexAiClient("fixture-project", "us-central1", new StaticTokenCredential("fixture"), endpoint),
+            "openai" => new OpenAiCompatibleClient(endpoint, "fixture") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } },
+            "anthropic" => new AnthropicClient("fixture", endpoint),
+            "bedrock" => new BedrockClient("us-east-1", new StaticAwsCredential("fixture", "fixture", "us-east-1"), endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } },
+            "gemini" => new GeminiClient("fixture", endpoint),
+            "cohere" => new CohereClient("fixture", endpoint),
             _ => throw new ArgumentException(provider)
         };
         private static ToolChatRequest Request(string provider, bool plain = false) => new()
@@ -38,7 +37,7 @@ namespace Test.Shared
             using var server = LocalOpenAiTestServer.Start();
             using var http = new HttpClient(new CloudTransport(server.Endpoint));
             using var client = Client(provider, server.Endpoint, http);
-            provider = provider switch { "ollamacloud" => "ollama", "azure" => "openai", "vertex" => "gemini", _ => provider };
+            provider = provider switch { "ollamacloud" => "ollama", "vertex" => "gemini", _ => provider };
             ToolChatRequest request = Request(provider);
             for (int turn = 0; turn < 3; turn++)
             {
@@ -148,7 +147,7 @@ namespace Test.Shared
             foreach (var call in scopedResponse.ToolCalls) scopedRequest.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "result"));
             SharedAssert.True((await openaiDestination.ToolChatAsync(scopedRequest, token)).Success, "Changing compatible endpoints succeeds");
             SharedAssert.False(otherServer.RequestBodies.Last().Contains("reasoning_content"), "Reasoning extensions stay at the endpoint that returned them");
-            using var xai = new XAiCompletionClient(LocalXAiRoutes.Key, server.Endpoint);
+            using var xai = new XAiClient(LocalXAiRoutes.Key, server.Endpoint);
             var xaiResponse = await xai.ToolChatAsync(new ToolChatRequest { Messages = new() { ChatMessage.User("hello") } }, token);
             SharedAssert.True(xaiResponse.Success, xaiResponse.Error ?? "xAI source failed");
             foreach (string source in Providers)

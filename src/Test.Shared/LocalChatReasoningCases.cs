@@ -36,25 +36,25 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using (OpenAiCompletionClient openAi = new OpenAiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 })
             {
                 SharedAssert.True((await openAi.ChatAsync("hello", token: token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
-                openAi.Defaults.ReasoningEffort = ReasoningEffort.High;
+                openAi.Defaults.Completion.ReasoningEffort = ReasoningEffort.High;
                 SharedAssert.True((await openAi.ChatAsync("hello", new CompletionOptions { Temperature = 0 }, token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
                 SharedAssert.True((await openAi.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Low }, token).ConfigureAwait(false)).Success, "OpenAI chat should succeed.");
             }
 
-            using (OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 })
             {
                 await ollama.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
 
-            using (GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (GeminiClient gemini = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 })
             {
                 await gemini.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
 
-            using (AnthropicCompletionClient anthropic = new AnthropicCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 })
+            using (AnthropicClient anthropic = new AnthropicClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 })
             {
                 await anthropic.ChatAsync("hello", token: token).ConfigureAwait(false);
             }
@@ -72,7 +72,7 @@ namespace Test.Shared
         private static async Task RunOllamaAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 };
 
             ChatResponse off = await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             SharedAssert.True(off.Success, "Ollama chat with thinking off should succeed.");
@@ -90,7 +90,7 @@ namespace Test.Shared
         private static async Task RunOpenAiAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 };
 
             ChatResponse high = await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
             SharedAssert.True(high.Success, "OpenAI chat with reasoning effort should succeed.");
@@ -107,7 +107,7 @@ namespace Test.Shared
         private static async Task RunGeminiAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 };
 
             ChatResponse off = await client.ChatAsync("hello", new CompletionOptions { Temperature = 0.3, ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             SharedAssert.True(off.Success, "Gemini chat with thinking off should succeed.");
@@ -124,7 +124,7 @@ namespace Test.Shared
         private static async Task RunAnthropicAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = new AnthropicCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 1000 };
+            using AnthropicClient client = new AnthropicClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 1000 };
 
             await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.High }, token).ConfigureAwait(false);
@@ -139,7 +139,7 @@ namespace Test.Shared
         private static async Task RunCohereAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = new CohereCompletionClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey) { Model = "cohere-test-model", TimeoutMs = 2000 };
+            using CohereClient client = new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint) { Defaults = { Completion = { Model = "cohere-test-model" } }, TimeoutMs = 2000 };
 
             await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Minimal }, token).ConfigureAwait(false);
             await client.ChatAsync("hello", new CompletionOptions { ReasoningEffort = ReasoningEffort.Medium }, token).ConfigureAwait(false);
@@ -153,10 +153,7 @@ namespace Test.Shared
         private static async Task RunBedrockAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = new BedrockCompletionClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint);
+            using BedrockClient client = new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } };
             client.TimeoutMs = 1000;
 
             ChatResponse plain = await client.ChatAsync("hello", token: token).ConfigureAwait(false);

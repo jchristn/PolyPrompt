@@ -54,7 +54,7 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            using (OpenAiCompletionClient warm = new OpenAiCompletionClient("http://127.0.0.1:1", "k"))
+            using (OpenAiCompatibleClient warm = new OpenAiCompatibleClient("http://127.0.0.1:1", "k") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } })
             {
             }
 
@@ -91,11 +91,11 @@ namespace Test.Shared
         private static async Task RunNoListenerAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient chat = NewOpenAi(server.Endpoint, "test-model");
-            using OpenAiEmbeddingClient embed = new OpenAiEmbeddingClient(server.Endpoint, "test-key");
-            embed.Model = "test-embed";
-            using TypeSafeDecisionClient decide = new TypeSafeDecisionClient(server.Endpoint, "ts-key");
-            using OllamaModelClient models = new OllamaModelClient(server.Endpoint, "test-key");
+            using OpenAiCompatibleClient chat = NewOpenAi(server.Endpoint, "test-model");
+            using OpenAiCompatibleClient embed = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            embed.Defaults.Embedding.Model = "test-embed";
+            using TypeSafeClient decide = new TypeSafeClient("ts-key", server.Endpoint);
+            using OllamaClient models = new OllamaClient(server.Endpoint, "test-key");
 
             SharedAssert.True((await chat.ChatAsync("ping", token: token).ConfigureAwait(false)).Success, "Chat should succeed without a listener.");
             ChatStreamingResponse stream = await chat.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
@@ -113,8 +113,8 @@ namespace Test.Shared
         private static async Task RunListenerFaultsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = NewOpenAi(server.Endpoint, "test-model");
-            using TypeSafeDecisionClient decide = new TypeSafeDecisionClient(server.Endpoint, "ts-key");
+            using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, "test-model");
+            using TypeSafeClient decide = new TypeSafeClient("ts-key", server.Endpoint);
 
             // Open a trace for this test and make both listeners throw only inside it, so concurrently running tests
             // are unaffected.
@@ -169,7 +169,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             string model = UniqueModel("toolchat");
-            using OpenAiCompletionClient client = NewOpenAi(server.Endpoint, model);
+            using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, model);
             using TelemetryCapture capture = new TelemetryCapture("tel_tool_chat");
 
             ToolChatRequest request = new ToolChatRequest();
@@ -229,7 +229,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             string model = UniqueModel("stream");
-            using OpenAiCompletionClient client = NewOpenAi(server.Endpoint, model);
+            using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, model);
             using TelemetryCapture capture = new TelemetryCapture("tel_streaming");
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
@@ -260,7 +260,7 @@ namespace Test.Shared
         private static async Task RunStreamAbandonedAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = NewOpenAi(server.Endpoint, UniqueModel("abandon"));
+            using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, UniqueModel("abandon"));
             using TelemetryCapture capture = new TelemetryCapture("tel_stream_abandoned");
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
@@ -281,7 +281,7 @@ namespace Test.Shared
         private static async Task RunHttpErrorAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = NewOpenAi(server.Endpoint + "/missing", UniqueModel("err"));
+            using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint + "/missing", UniqueModel("err"));
             using TelemetryCapture capture = new TelemetryCapture("tel_http_error");
 
             ChatResponse chat = await client.ChatAsync("fail", token: token).ConfigureAwait(false);
@@ -306,7 +306,7 @@ namespace Test.Shared
 
         private static async Task RunTransportFailureAsync(CancellationToken token)
         {
-            using OpenAiCompletionClient client = NewOpenAi("http://127.0.0.1:1", UniqueModel("down"));
+            using OpenAiCompatibleClient client = NewOpenAi("http://127.0.0.1:1", UniqueModel("down"));
             using TelemetryCapture capture = new TelemetryCapture("tel_transport_failure");
 
             ChatResponse chat = await client.ChatAsync("ping", token: token).ConfigureAwait(false);
@@ -330,7 +330,7 @@ namespace Test.Shared
             using TelemetryCapture capture = new TelemetryCapture("tel_timeout_cancel");
 
             // Streaming timeout: the server sends one chunk and hangs; TimeoutMs covers the whole response.
-            using (OpenAiCompletionClient timed = NewOpenAi(server.Endpoint, UniqueModel("timeout")))
+            using (OpenAiCompatibleClient timed = NewOpenAi(server.Endpoint, UniqueModel("timeout")))
             {
                 timed.TimeoutMs = 300;
                 ChatStreamingResponse stream = await timed.ChatStreamingAsync("hang stream", token: token).ConfigureAwait(false);
@@ -348,7 +348,7 @@ namespace Test.Shared
             SharedAssert.Equal(ActivityStatusCode.Error, timedOut.Status, "A timed out stream should have status Error.");
 
             // Streaming cancellation by the caller.
-            using (OpenAiCompletionClient cancelled = NewOpenAi(server.Endpoint, UniqueModel("cancel")))
+            using (OpenAiCompatibleClient cancelled = NewOpenAi(server.Endpoint, UniqueModel("cancel")))
             using (CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token))
             {
                 cancelled.TimeoutMs = 10000;
@@ -368,7 +368,7 @@ namespace Test.Shared
             SharedAssert.True(Tag(streams[1], N.ErrorType) == null, "Cancellation is not an error.");
 
             // Non-streaming timeout: the decision route waits 150 ms on "slow".
-            using (TypeSafeDecisionClient slow = new TypeSafeDecisionClient(server.Endpoint, "ts-key"))
+            using (TypeSafeClient slow = new TypeSafeClient("ts-key", server.Endpoint))
             {
                 slow.TimeoutMs = 50;
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(
@@ -377,7 +377,7 @@ namespace Test.Shared
             SharedAssert.Equal("timeout", Tag(capture.Span("typesafe decide"), N.Outcome), "A non-streaming timeout should end as timeout.");
 
             // Non-streaming caller cancellation.
-            using (OpenAiCompletionClient client = NewOpenAi(server.Endpoint, UniqueModel("precancel")))
+            using (OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, UniqueModel("precancel")))
             using (CancellationTokenSource cts = new CancellationTokenSource())
             {
                 cts.Cancel();
@@ -395,7 +395,7 @@ namespace Test.Shared
         private static async Task RunInvalidResponseAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = new TypeSafeDecisionClient(server.Endpoint, "ts-key");
+            using TypeSafeClient client = new TypeSafeClient("ts-key", server.Endpoint);
             using TelemetryCapture capture = new TelemetryCapture("tel_invalid_response");
 
             DecisionResponse response = await client.DecideAsync(Decision("notjson"), null, token).ConfigureAwait(false);
@@ -415,11 +415,11 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             string model = UniqueModel("embed");
-            using OpenAiEmbeddingClient embed = new OpenAiEmbeddingClient(server.Endpoint, "test-key");
-            embed.Model = model;
-            using TeiSparseEmbeddingClient sparse = new TeiSparseEmbeddingClient(server.Endpoint, "test-key");
-            using TeiRerankClient rerank = new TeiRerankClient(server.Endpoint, "test-key");
-            using TeiClassificationClient classify = new TeiClassificationClient(server.Endpoint, "test-key");
+            using OpenAiCompatibleClient embed = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            embed.Defaults.Embedding.Model = model;
+            using TeiClient sparse = new TeiClient(server.Endpoint, "test-key");
+            using TeiClient rerank = new TeiClient(server.Endpoint, "test-key");
+            using TeiClient classify = new TeiClient(server.Endpoint, "test-key");
             using TelemetryCapture capture = new TelemetryCapture("tel_capabilities");
 
             SharedAssert.True((await embed.EmbedAsync(new List<string> { "a", "b" }, token: token).ConfigureAwait(false)).Success, "Embedding should succeed.");
@@ -446,7 +446,7 @@ namespace Test.Shared
         private static async Task RunDecisionBatchAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = new TypeSafeDecisionClient(server.Endpoint, "ts-key");
+            using TypeSafeClient client = new TypeSafeClient("ts-key", server.Endpoint);
             client.MaxConcurrency = 1;
             using TelemetryCapture capture = new TelemetryCapture("tel_decision_batch");
 
@@ -487,8 +487,8 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             TelemetryTestCredential credential = new TelemetryTestCredential();
-            using VertexAiCompletionClient client = new VertexAiCompletionClient("test-project", "us-central1", credential, endpoint: server.Endpoint);
-            client.Model = "test-model";
+            using VertexAiClient client = new VertexAiClient("test-project", "us-central1", credential, server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 3000;
             using TelemetryCapture capture = new TelemetryCapture("tel_credentials");
 
@@ -509,8 +509,8 @@ namespace Test.Shared
             capture.Require(N.CredentialRefreshes, N.CredentialSource, source, N.Outcome, "success");
 
             TelemetryTestCredential failing = new TelemetryTestCredential { Fail = true };
-            using VertexAiCompletionClient broken = new VertexAiCompletionClient("test-project", "us-central1", failing, endpoint: server.Endpoint);
-            broken.Model = "test-model";
+            using VertexAiClient broken = new VertexAiClient("test-project", "us-central1", failing, server.Endpoint);
+            broken.Defaults.Completion.Model = "test-model";
             ChatResponse failed = await broken.ChatAsync("denied", token: token).ConfigureAwait(false);
             SharedAssert.False(failed.Success, "A chat whose credential fails should fail.");
 
@@ -523,7 +523,7 @@ namespace Test.Shared
         private static async Task RunModelOpsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaModelClient client = new OllamaModelClient(server.Endpoint, "test-key");
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
             using TelemetryCapture capture = new TelemetryCapture("tel_model_ops");
 
             SharedAssert.True(await client.ModelExistsAsync("test-model", token).ConfigureAwait(false), "The model should exist.");
@@ -539,9 +539,9 @@ namespace Test.Shared
             SharedAssert.Equal("success", Tag(pull, N.Outcome), "model_pull outcome.");
             SharedAssert.True(capture.Spans("POST").Any(h => h.ParentSpanId == pull.SpanId && Tag(h, N.HttpStatusCode) == "200"), "The pull request should nest under model_pull.");
             SharedAssert.True(capture.Spans("DELETE").Any(h => h.ParentSpanId == capture.Span("ollama model_delete").SpanId), "The delete request should nest under model_delete.");
-            SharedAssert.Equal("model", Tag(capture.Span("ollama validate_connectivity"), N.Capability), "Connectivity capability.");
+            SharedAssert.Equal("connectivity", Tag(capture.Span("ollama validate_connectivity"), N.Capability), "Connectivity capability.");
 
-            using OllamaModelClient down = new OllamaModelClient("http://127.0.0.1:1", "test-key");
+            using OllamaClient down = new OllamaClient("http://127.0.0.1:1", "test-key");
             down.TimeoutMs = 3000;
             SharedAssert.False(await down.ValidateConnectivityAsync(token).ConfigureAwait(false), "Connectivity to a closed port should fail.");
             SharedAssert.False(await down.ModelExistsAsync("test-model", token).ConfigureAwait(false), "Lookup against a closed port should fail.");
@@ -556,7 +556,7 @@ namespace Test.Shared
         private static async Task RunProviderLabelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
                 using TelemetryCapture capture = new TelemetryCapture("tel_provider_labels");
@@ -590,19 +590,19 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using TelemetryCapture capture = new TelemetryCapture("tel_gauges");
 
-            long before = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "rerank");
-            List<TeiRerankClient> created = new List<TeiRerankClient>
+            long before = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "provider");
+            List<TeiClient> created = new List<TeiClient>
             {
-                new TeiRerankClient(server.Endpoint, "k"), new TeiRerankClient(server.Endpoint, "k"), new TeiRerankClient(server.Endpoint, "k")
+                new TeiClient(server.Endpoint, "k"), new TeiClient(server.Endpoint, "k"), new TeiClient(server.Endpoint, "k")
             };
-            long during = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "rerank");
+            long during = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "provider");
             SharedAssert.True(during >= before + 3, "Creating three clients should raise the active client gauge by three (" + before + " -> " + during + ").");
-            foreach (TeiRerankClient client in created) client.Dispose();
-            foreach (TeiRerankClient client in created) client.Dispose();
-            long after = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "rerank");
+            foreach (TeiClient client in created) client.Dispose();
+            foreach (TeiClient client in created) client.Dispose();
+            long after = LatestGauge(capture, N.ActiveClients, N.Provider, "tei", N.Capability, "provider");
             SharedAssert.True(after <= during - 3, "Disposing the clients (twice) should lower the gauge by exactly three (" + during + " -> " + after + ").");
 
-            using OpenAiCompletionClient hanging = NewOpenAi(server.Endpoint, UniqueModel("gauge"));
+            using OpenAiCompatibleClient hanging = NewOpenAi(server.Endpoint, UniqueModel("gauge"));
             hanging.TimeoutMs = 10000;
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             ChatStreamingResponse stream = await hanging.ChatStreamingAsync("hang stream", token: cts.Token).ConfigureAwait(false);
@@ -663,9 +663,9 @@ namespace Test.Shared
 
             using (TelemetryCapture capture = new TelemetryCapture("tel_logging_isolation"))
             {
-                using (OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key", logging))
+                using (OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "test-key", new ClientOptions { Logging = logging }) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } })
                 {
-                    client.Model = UniqueModel("logging");
+                    client.Defaults.Completion.Model = UniqueModel("logging");
                     client.TimeoutMs = 3000;
 
                     await logging.InfoAsync("tel_logging_isolation entry").ConfigureAwait(false);
@@ -692,10 +692,10 @@ namespace Test.Shared
 
         #region Helpers
 
-        private static OpenAiCompletionClient NewOpenAi(string endpoint, string model)
+        private static OpenAiCompatibleClient NewOpenAi(string endpoint, string model)
         {
-            OpenAiCompletionClient client = new OpenAiCompletionClient(endpoint, "test-key");
-            client.Model = model;
+            OpenAiCompatibleClient client = new OpenAiCompatibleClient(endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            client.Defaults.Completion.Model = model;
             client.TimeoutMs = 3000;
             return client;
         }

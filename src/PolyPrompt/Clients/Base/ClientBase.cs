@@ -13,7 +13,7 @@ namespace PolyPrompt.Clients
     /// Base class for every PolyPrompt client, independent of transport. It owns logging, the call timeout
     /// (<see cref="TimeoutMs"/>), the record of upstream calls (<see cref="CallDetails"/>), telemetry scopes, JSON
     /// parsing helpers, and disposal. It declares no model operations and no transport: HTTP API clients derive from
-    /// <see cref="HttpClientBase"/> (through one capability base per capability), and agent harness clients that drive a
+    /// <see cref="HttpClientBase"/> (through <see cref="ProviderClientBase"/>), and agent harness clients that drive a
     /// local CLI process derive from <see cref="CliAgentClientBase"/>.
     /// </summary>
     public abstract class ClientBase : IDisposable
@@ -590,7 +590,7 @@ namespace PolyPrompt.Clients
                         case GenerationStreamingResponse generation:
                             generation.Chunks = StreamingLifecycle.Wrap(generation.Chunks, generation, c => c.Done, token);
                             break;
-                        case XAiStreamingResponse native:
+                        case ResponsesApiStreamingResponse native:
                             native.Events = StreamingLifecycle.Wrap(native.Events, native, e => e.Type == "response.completed" || e.Type == "response.incomplete", token);
                             break;
                     }

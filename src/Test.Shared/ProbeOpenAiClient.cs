@@ -4,11 +4,11 @@ namespace Test.Shared
     using PolyPrompt.Clients;
     using PolyPrompt.Models;
 
-    internal sealed class ProbeOpenAiClient : OpenAiCompletionClient
+    internal sealed class ProbeOpenAiClient : OpenAiCompatibleClient
     {
         internal ProbeOpenAiClient(string endpoint, string apiKey) : base(endpoint, apiKey)
         {
-            Model = "test-model";
+            Defaults.Completion.Model = "test-model";
         }
 
         internal async Task<HttpCallResult> PostProbeAsync(CancellationToken token)

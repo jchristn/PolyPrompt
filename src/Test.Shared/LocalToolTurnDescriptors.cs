@@ -5,7 +5,7 @@ namespace Test.Shared
     {
         public static IEnumerable<TestCaseDescriptor> Create(string suite)
         {
-            foreach (string provider in Providers.Concat(new[] { "ollamacloud", "azure", "vertex" }))
+            foreach (string provider in Providers.Concat(new[] { "ollamacloud", "vertex" }))
                 foreach (bool stream in new[] { false, true })
                 {
                     string p = provider; bool s = stream;

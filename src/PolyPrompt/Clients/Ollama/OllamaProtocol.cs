@@ -12,6 +12,15 @@ namespace PolyPrompt.Clients
         internal const string TagsPath = "/api/tags";
 
         /// <summary>
+        /// Remove a trailing <c>/v1</c> (the OpenAI-compatible API) so native <c>/api/*</c> routes resolve.
+        /// </summary>
+        internal static string NormalizeEndpoint(string endpoint)
+        {
+            string trimmed = endpoint.TrimEnd('/');
+            return trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? trimmed.Substring(0, trimmed.Length - 3) : trimmed;
+        }
+
+        /// <summary>
         /// Attach the bearer token, when one is configured (Ollama itself needs none; proxies in front of it may).
         /// </summary>
         internal static void ApplyAuth(HttpRequestMessage request, string? apiKey)

@@ -12,8 +12,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Base class for every HTTP API client. It owns the HTTP transport (endpoint, per-request credentials, timeouts,
     /// cancellation), recording of HTTP calls into <see cref="ClientBase.CallDetails"/>, and the HTTP connectivity probe.
-    /// It declares no model operations: each capability (completions, embeddings, reranking, and so on) has its own base
-    /// class that derives from this one, and each provider supplies one client per capability.
+    /// It declares no model operations: <see cref="ProviderClientBase"/> derives from it and declares them all.
     /// </summary>
     public abstract class HttpClientBase : ClientBase
     {
@@ -271,7 +270,7 @@ namespace PolyPrompt.Clients
                         string errorBody = await httpResponse.Content.ReadAsStringAsync(streamingResult.Token).ConfigureAwait(false);
                         _Logging.Warn(_Header + "streaming " + operation + " request failed with status " + (int)httpResponse.StatusCode + ": " + errorBody);
                         response.Success = false;
-                        response.Error = "HTTP " + (int)httpResponse.StatusCode + ": " + errorBody;
+                        response.Error = AppendHint("HTTP " + (int)httpResponse.StatusCode + ": " + errorBody, (int)httpResponse.StatusCode, url, errorBody);
                     }
 
                     sw.Stop();
@@ -617,6 +616,25 @@ namespace PolyPrompt.Clients
             return "HTTP " + result.StatusCode + ": " + result.ResponseBody;
         }
 
+        /// <summary>
+        /// A hint appended to an HTTP error message, for example suggesting another client when the route does not exist.
+        /// Default: null.
+        /// </summary>
+        /// <param name="statusCode">HTTP status code.</param>
+        /// <param name="url">Request URL.</param>
+        /// <param name="body">Response body.</param>
+        /// <returns>The hint, or null.</returns>
+        private protected virtual string? HttpErrorHint(int statusCode, string url, string? body)
+        {
+            return null;
+        }
+
+        private string AppendHint(string message, int statusCode, string url, string? body)
+        {
+            string? hint = HttpErrorHint(statusCode, url, body);
+            return string.IsNullOrEmpty(hint) ? message : message + " " + hint;
+        }
+
         private protected Dictionary<string, object> ParseStreamingObject(string json, string provider)
         {
             Dictionary<string, object>? record = TryDeserializeObject(json);
@@ -658,12 +676,13 @@ namespace PolyPrompt.Clients
                 {
                     _Logging.Warn(_Header + operation + " request failed with status " + result.StatusCode + ": " + result.ResponseBody);
                     response.Success = false;
-                    response.Error = DescribeHttpError(result);
+                    response.Error = AppendHint(DescribeHttpError(result), result.StatusCode, url, result.ResponseBody);
                     return response;
                 }
 
                 response.Error = null;
                 parse(result.ResponseBody, response);
+                if (response.RawResponse == null && TryParseJson(result.ResponseBody, out JsonElement raw)) response.RawResponse = raw;
                 response.Success = response.Error == null;
                 if (!response.Success) _Logging.Warn(_Header + operation + " response could not be parsed: " + response.Error);
             }

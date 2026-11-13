@@ -12,6 +12,9 @@ namespace PolyPrompt.Models
     {
         #region Presets
 
+        /// <summary>A <see cref="ReasoningEffortLevel.None"/> effort with default provider values.</summary>
+        public static ReasoningEffort None => new ReasoningEffort(ReasoningEffortLevel.None);
+
         /// <summary>A <see cref="ReasoningEffortLevel.Minimal"/> effort with default provider values.</summary>
         public static ReasoningEffort Minimal => new ReasoningEffort(ReasoningEffortLevel.Minimal);
 
@@ -23,6 +26,12 @@ namespace PolyPrompt.Models
 
         /// <summary>A <see cref="ReasoningEffortLevel.High"/> effort with default provider values.</summary>
         public static ReasoningEffort High => new ReasoningEffort(ReasoningEffortLevel.High);
+
+        /// <summary>A <see cref="ReasoningEffortLevel.XHigh"/> effort with default provider values.</summary>
+        public static ReasoningEffort XHigh => new ReasoningEffort(ReasoningEffortLevel.XHigh);
+
+        /// <summary>A <see cref="ReasoningEffortLevel.Max"/> effort with default provider values.</summary>
+        public static ReasoningEffort Max => new ReasoningEffort(ReasoningEffortLevel.Max);
 
         #endregion
 
@@ -63,7 +72,7 @@ namespace PolyPrompt.Models
         // falls back to the Level-derived default — the same "silently clamp to a valid value" idiom the
         // existing Temperature/TopP setters use, rather than throwing.
         private static readonly HashSet<string> _OpenAiValues =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "minimal", "low", "medium", "high" };
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "none", "minimal", "low", "medium", "high", "xhigh", "max" };
 
         private static readonly HashSet<string> _OllamaValues =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "low", "medium", "high", "true", "false" };
@@ -92,9 +101,11 @@ namespace PolyPrompt.Models
         }
 
         /// <summary>
-        /// OpenAI reasoning_effort override. Null derives from <see cref="Level"/>. Set values are
-        /// normalized (trimmed, lower-cased) and clamped to the accepted set
-        /// ("minimal"/"low"/"medium"/"high"); an unrecognized value reverts to null.
+        /// Chat Completions <c>reasoning_effort</c> override, used by <c>OpenAiCompatibleClient</c>. Null derives from
+        /// <see cref="Level"/>. Set values are normalized (trimmed, lower-cased) and clamped to the accepted set
+        /// ("none"/"minimal"/"low"/"medium"/"high"/"xhigh"/"max"); an unrecognized value reverts to null. Responses API
+        /// clients (<c>OpenAiClient</c>, <c>XAiClient</c>, <c>AzureOpenAiClient</c>) use
+        /// <c>ResponsesApiCompletionOptions.ReasoningEffortValue</c> instead.
         /// </summary>
         public string? OpenAiValue
         {
@@ -132,8 +143,8 @@ namespace PolyPrompt.Models
         /// <summary>
         /// Anthropic output_config.effort override. Null derives from <see cref="Level"/>. Set values are
         /// normalized (trimmed, lower-cased) and clamped to the accepted set
-        /// ("low"/"medium"/"high"/"xhigh"/"max"); an unrecognized value reverts to null. "xhigh" and "max"
-        /// have no level preset and are reachable only through this override.
+        /// ("low"/"medium"/"high"/"xhigh"/"max"); an unrecognized value reverts to null. "xhigh" and "max" are also
+        /// reached through <see cref="ReasoningEffortLevel.XHigh"/> and <see cref="ReasoningEffortLevel.Max"/>.
         /// </summary>
         public string? AnthropicEffort
         {
@@ -177,19 +188,68 @@ namespace PolyPrompt.Models
 
         #region Public-Methods
 
-        /// <summary>Returns the OpenAI reasoning_effort wire value (override if set, else derived from Level).</summary>
-        /// <returns>One of "minimal"/"low"/"medium"/"high", or the configured override.</returns>
+        /// <summary>
+        /// Returns the Chat Completions <c>reasoning_effort</c> wire value (override if set, else derived from Level), or
+        /// null to send no field. <see cref="ReasoningEffortLevel.None"/> sends no field (servers differ on "none");
+        /// XHigh and Max map to "high".
+        /// </summary>
+        /// <returns>One of "minimal"/"low"/"medium"/"high", the configured override, or null.</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
-        public string ToOpenAiWireValue()
+        public string? ToOpenAiWireValue()
         {
             if (_OpenAiValue != null) return _OpenAiValue;
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:    return null;
+                case ReasoningEffortLevel.Minimal: return "minimal";
+                case ReasoningEffortLevel.Low:     return "low";
+                case ReasoningEffortLevel.Medium:  return "medium";
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return "high";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the OpenAI Responses API <c>reasoning.effort</c> wire value derived from Level: every level maps to the
+        /// value of the same name ("none", "minimal", "low", "medium", "high", "xhigh", "max").
+        /// </summary>
+        /// <returns>The wire value.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public string ToOpenAiResponsesWireValue()
+        {
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.None:    return "none";
                 case ReasoningEffortLevel.Minimal: return "minimal";
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
                 case ReasoningEffortLevel.High:    return "high";
+                case ReasoningEffortLevel.XHigh:   return "xhigh";
+                case ReasoningEffortLevel.Max:     return "max";
+                default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
+            }
+        }
+
+        /// <summary>
+        /// Returns the xAI Responses API <c>reasoning.effort</c> wire value derived from Level, or null to send no
+        /// reasoning field (<see cref="ReasoningEffortLevel.None"/>). Minimal maps to "low"; Max maps to "xhigh".
+        /// </summary>
+        /// <returns>One of "low"/"medium"/"high"/"xhigh", or null.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
+        public string? ToXAiWireValue()
+        {
+            switch (_Level)
+            {
+                case ReasoningEffortLevel.None:    return null;
+                case ReasoningEffortLevel.Minimal:
+                case ReasoningEffortLevel.Low:     return "low";
+                case ReasoningEffortLevel.Medium:  return "medium";
+                case ReasoningEffortLevel.High:    return "high";
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return "xhigh";
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
@@ -203,10 +263,13 @@ namespace PolyPrompt.Models
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:
                 case ReasoningEffortLevel.Minimal: return 0;      // thinking off
                 case ReasoningEffortLevel.Low:     return 1024;
                 case ReasoningEffortLevel.Medium:  return 8192;
-                case ReasoningEffortLevel.High:    return -1;     // dynamic budget
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return -1;     // dynamic budget
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
@@ -226,27 +289,34 @@ namespace PolyPrompt.Models
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:
                 case ReasoningEffortLevel.Minimal: return false;  // disable thinking
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
-                case ReasoningEffortLevel.High:    return "high";
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return "high";
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
 
         /// <summary>Returns the Anthropic output_config.effort wire value (override if set, else derived from Level).</summary>
-        /// <returns>One of "low"/"medium"/"high", or the configured override ("xhigh"/"max" included).</returns>
+        /// <returns>One of "low"/"medium"/"high"/"xhigh"/"max", the configured override, or null for
+        /// <see cref="ReasoningEffortLevel.None"/> (no effort or thinking field is sent).</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown for an undefined <see cref="Level"/>.</exception>
-        public string ToAnthropicEffort()
+        public string? ToAnthropicEffort()
         {
             if (_AnthropicEffort != null) return _AnthropicEffort;
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:    return null;
                 case ReasoningEffortLevel.Minimal: return "low";
                 case ReasoningEffortLevel.Low:     return "low";
                 case ReasoningEffortLevel.Medium:  return "medium";
                 case ReasoningEffortLevel.High:    return "high";
+                case ReasoningEffortLevel.XHigh:   return "xhigh";
+                case ReasoningEffortLevel.Max:     return "max";
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
@@ -265,10 +335,13 @@ namespace PolyPrompt.Models
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:
                 case ReasoningEffortLevel.Minimal: return 0;      // thinking off
                 case ReasoningEffortLevel.Low:     return 1024;
                 case ReasoningEffortLevel.Medium:  return 4096;
-                case ReasoningEffortLevel.High:    return 16384;
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return 16384;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
@@ -286,10 +359,13 @@ namespace PolyPrompt.Models
 
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:
                 case ReasoningEffortLevel.Minimal: return 0;      // thinking off
                 case ReasoningEffortLevel.Low:     return 1024;   // Anthropic's minimum enabled budget
                 case ReasoningEffortLevel.Medium:  return 4096;
-                case ReasoningEffortLevel.High:    return 16384;
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return 16384;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }
@@ -306,10 +382,13 @@ namespace PolyPrompt.Models
         {
             switch (_Level)
             {
+                case ReasoningEffortLevel.None:
                 case ReasoningEffortLevel.Minimal: return false;
                 case ReasoningEffortLevel.Low:
                 case ReasoningEffortLevel.Medium:
-                case ReasoningEffortLevel.High:    return true;
+                case ReasoningEffortLevel.High:
+                case ReasoningEffortLevel.XHigh:
+                case ReasoningEffortLevel.Max:     return true;
                 default: throw new ArgumentOutOfRangeException(nameof(Level), _Level, "Unknown reasoning effort level.");
             }
         }

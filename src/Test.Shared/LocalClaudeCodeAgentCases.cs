@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="ClaudeCodeAgentClient"/>: the shared harness kit plus session resume and history,
+    /// Fake-CLI cases for <see cref="ClaudeCodeClient"/>: the shared harness kit plus session resume and history,
     /// the system prompt option, structured error codes, turn limits, permission denials, and a recorded-output replay.
     /// </summary>
     internal static class LocalClaudeCodeAgentCases
@@ -24,7 +24,7 @@ namespace Test.Shared
                 {
                     Id = "claudecode",
                     ExecutableName = "claude",
-                    Create = () => new ClaudeCodeAgentClient(),
+                    Create = () => new ClaudeCodeClient(),
                     HappyScenario = "claudecode-happy",
                     ErrorExitScenario = "claudecode-error-exit",
                     StderrOnlyScenario = "claudecode-stderr-only",

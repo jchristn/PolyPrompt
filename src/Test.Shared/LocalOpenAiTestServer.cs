@@ -190,6 +190,8 @@ namespace Test.Shared
 
                 if (await LocalToolTurnCases.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
 
+                if (await LocalOpenAiResponsesRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
+
                 if (await LocalXAiRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;
 
                 if (await LocalOllamaRoutes.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;

@@ -102,7 +102,7 @@ namespace Test.Shared
         private static async Task RunValidationRequestAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.DecideAsync((DecisionRequest)null!, null, token), "A null request should be rejected.").ConfigureAwait(false);
             await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.DecideAsync(new DecisionRequest { Questions = { Binary() } }, null, token), "A null state should be rejected.").ConfigureAwait(false);
@@ -116,7 +116,7 @@ namespace Test.Shared
         private static async Task RunValidationQuestionsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             List<(string Label, DecisionQuestion?[] Questions, string MessageFragment)> cases = new List<(string, DecisionQuestion?[], string)>
             {
@@ -173,7 +173,7 @@ namespace Test.Shared
         private static async Task RunValidationBatchAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.DecideAsync((List<DecisionRequest>)null!, null, token), "A null batch should be rejected.").ConfigureAwait(false);
             await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.DecideAsync(new List<DecisionRequest>(), null, token), "An empty batch should be rejected.").ConfigureAwait(false);
@@ -199,7 +199,7 @@ namespace Test.Shared
         private static async Task RunWireFormatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = new TypeSafeDecisionClient(server.Endpoint, "ts-key");
+            using TypeSafeClient client = new TypeSafeClient("ts-key", server.Endpoint);
 
             DecisionRequest request = new DecisionRequest
             {
@@ -244,7 +244,7 @@ namespace Test.Shared
             SharedAssert.Equal("score", tone.GetProperty("type").GetString(), "Score questions should be score questions.");
             SharedAssert.Equal("calm,annoyed,angry", string.Join(",", tone.GetProperty("criteria").EnumerateArray().Select(e => e.GetString())), "Levels should be sent as an ordered array.");
 
-            client.Model = "jev-default";
+            client.Defaults.Decision.Model = "jev-default";
             await client.DecideAsync(request, new DecisionOptions { Model = "jev-override" }, token).ConfigureAwait(false);
             await client.DecideAsync(request, null, token).ConfigureAwait(false);
             using JsonDocument overridden = JsonDocument.Parse(server.RequestBodies[1]);
@@ -252,15 +252,17 @@ namespace Test.Shared
             SharedAssert.Equal("jev-override", overridden.RootElement.GetProperty("model").GetString(), "A per-call model should be sent.");
             SharedAssert.Equal("jev-default", defaulted.RootElement.GetProperty("model").GetString(), "The client model should be sent otherwise.");
 
-            using TypeSafeDecisionClient anonymous = new TypeSafeDecisionClient(server.Endpoint);
-            await anonymous.DecideAsync(request, null, token).ConfigureAwait(false);
-            SharedAssert.False(server.RequestHeaders[3].ContainsKey("Authorization"), "A client without a key (a local Ollaya server) should send no Authorization header.");
+            // 4.0 requires a key (a local Ollaya server accepts any value) and always sends it as a bearer token.
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => { new TypeSafeClient(" ", server.Endpoint).Dispose(); return Task.CompletedTask; }, "A blank key should throw.").ConfigureAwait(false);
+            using TypeSafeClient local = new TypeSafeClient("ollaya", server.Endpoint);
+            await local.DecideAsync(request, null, token).ConfigureAwait(false);
+            SharedAssert.Equal("Bearer ollaya", server.RequestHeaders[3]["Authorization"], "The key is sent as a bearer token.");
         }
 
         private static async Task RunStructuredStateAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             DecisionRequest request = new DecisionRequest
             {
@@ -281,7 +283,7 @@ namespace Test.Shared
         private static async Task RunParsingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             DecisionResponse response = await client.DecideAsync(Request("customer wants a refund"), new DecisionOptions { Model = "jev-parse" }, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "The decision should succeed. " + response.Error);
@@ -320,7 +322,7 @@ namespace Test.Shared
         private static async Task RunScoreClampAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             DecisionResponse response = await client.DecideAsync(Request("scorehigh"), null, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "The decision should succeed. " + response.Error);
@@ -332,7 +334,7 @@ namespace Test.Shared
         private static async Task RunHttpErrorsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             foreach ((string magic, int status, string message) in new[] { ("err422", 422, "at least two options"), ("err429", 429, "rate limit"), ("err529", 529, "overloaded") })
             {
@@ -347,7 +349,7 @@ namespace Test.Shared
         private static async Task RunMalformedAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             DecisionResponse missing = await client.DecideAsync(Request("missinganswer"), null, token).ConfigureAwait(false);
             SharedAssert.False(missing.Success, "A response missing an answer should fail.");
@@ -393,7 +395,7 @@ namespace Test.Shared
         private static async Task RunBatchOrderAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
             client.MaxConcurrency = 8;
 
             string[] intents = new[] { "billing", "refund", "praise", "other", "refund slow", "billing", "praise slow", "other" };
@@ -419,7 +421,7 @@ namespace Test.Shared
             });
 
             using HttpClient http = new HttpClient(handler);
-            using TypeSafeDecisionClient client = new TypeSafeDecisionClient("http://polyprompt.test", "k", httpClient: http);
+            using TypeSafeClient client = new TypeSafeClient("k", "http://polyprompt.test", new ClientOptions { HttpClient = http });
             client.MaxConcurrency = 2;
 
             List<DecisionResponse> responses = await client.DecideAsync(Enumerable.Range(0, 8).Select(i => Request("r" + i)).ToList(), null, token).ConfigureAwait(false);
@@ -432,13 +434,13 @@ namespace Test.Shared
             SharedAssert.Equal(1, client.MaxConcurrency, "MaxConcurrency should clamp to at least 1.");
             client.MaxConcurrency = 1000;
             SharedAssert.Equal(64, client.MaxConcurrency, "MaxConcurrency should clamp to at most 64.");
-            SharedAssert.Equal(4, new TypeSafeDecisionClient().MaxConcurrency, "MaxConcurrency should default to 4.");
+            SharedAssert.Equal(4, new TypeSafeClient("test-key").MaxConcurrency, "MaxConcurrency should default to 4.");
         }
 
         private static async Task RunBatchPartialFailureAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
 
             List<DecisionResponse> responses = await client.DecideAsync(new List<DecisionRequest> { Request("refund"), Request("err429"), Request("billing") }, null, token).ConfigureAwait(false);
             SharedAssert.True(responses[0].Success && responses[2].Success, "The requests around a failure should succeed.");
@@ -450,7 +452,7 @@ namespace Test.Shared
         private static async Task RunCancellationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
             using CancellationTokenSource cancelled = new CancellationTokenSource();
             cancelled.Cancel();
 
@@ -465,7 +467,7 @@ namespace Test.Shared
         private static async Task RunConnectivityAsync(CancellationToken token)
         {
             using (LocalOpenAiTestServer server = LocalOpenAiTestServer.Start())
-            using (TypeSafeDecisionClient client = Client(server))
+            using (TypeSafeClient client = Client(server))
             {
                 SharedAssert.True(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), "A server with /v1/models (Ollaya) should validate.");
                 SharedAssert.Equal("/v1/models", server.RequestPaths.Single(), "The probe should use /v1/models alone when it exists.");
@@ -476,7 +478,7 @@ namespace Test.Shared
                     ? LocalFakeHandler.Json(HttpStatusCode.NotFound, "{}")
                     : LocalFakeHandler.Json(HttpStatusCode.OK, "{\"answers\":{\"reachable\":{\"noul\":0.9}}}")));
             using (HttpClient http = new HttpClient(hosted))
-            using (TypeSafeDecisionClient client = new TypeSafeDecisionClient("http://polyprompt.test", "k", httpClient: http))
+            using (TypeSafeClient client = new TypeSafeClient("k", "http://polyprompt.test", new ClientOptions { HttpClient = http }))
             {
                 SharedAssert.True(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), "The hosted API (no /v1/models) should validate with a probe decision.");
                 SharedAssert.Equal(2, hosted.Count, "A 404 from /v1/models should fall back to one probe decision.");
@@ -488,14 +490,14 @@ namespace Test.Shared
                     ? LocalFakeHandler.Json(HttpStatusCode.NotFound, "{}")
                     : LocalFakeHandler.Json(HttpStatusCode.Unauthorized, "{\"error\":{\"message\":\"bad key\"}}")));
             using (HttpClient http = new HttpClient(failingProbe))
-            using (TypeSafeDecisionClient client = new TypeSafeDecisionClient("http://polyprompt.test", "k", httpClient: http))
+            using (TypeSafeClient client = new TypeSafeClient("k", "http://polyprompt.test", new ClientOptions { HttpClient = http }))
             {
                 SharedAssert.False(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), "A rejected probe decision should fail.");
             }
 
             LocalFakeHandler serverError = LocalFakeHandler.Always(HttpStatusCode.InternalServerError);
             using (HttpClient http = new HttpClient(serverError))
-            using (TypeSafeDecisionClient client = new TypeSafeDecisionClient("http://polyprompt.test", "k", httpClient: http))
+            using (TypeSafeClient client = new TypeSafeClient("k", "http://polyprompt.test", new ClientOptions { HttpClient = http }))
             {
                 SharedAssert.False(await client.ValidateConnectivityAsync(token).ConfigureAwait(false), "An HTTP 500 from /v1/models should fail without a probe decision.");
                 SharedAssert.Equal(1, serverError.Count, "Only a 404 should trigger the probe decision.");
@@ -505,7 +507,7 @@ namespace Test.Shared
         private static async Task RunCallDetailsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TypeSafeDecisionClient client = Client(server);
+            using TypeSafeClient client = Client(server);
             WireCapture.Full(client);
 
             await client.DecideAsync(Request("refund"), null, token).ConfigureAwait(false);
@@ -530,9 +532,9 @@ namespace Test.Shared
             public override DecisionQuestionType Type => DecisionQuestionType.Binary;
         }
 
-        private static TypeSafeDecisionClient Client(LocalOpenAiTestServer server)
+        private static TypeSafeClient Client(LocalOpenAiTestServer server)
         {
-            return new TypeSafeDecisionClient(server.Endpoint, "ts-key") { TimeoutMs = 3000 };
+            return new TypeSafeClient("ts-key", server.Endpoint) { TimeoutMs = 3000 };
         }
 
         private static DecisionQuestion Binary()

@@ -55,7 +55,7 @@ namespace Test.Aot
             await RunClientChecksAsync(server).ConfigureAwait(false);
             await RunXAiAdvancedChecksAsync(server).ConfigureAwait(false);
             await RunReleaseThreeSevenChecksAsync(server).ConfigureAwait(false);
-            foreach (string provider in new[] { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere", "ollamacloud", "azure", "vertex" })
+            foreach (string provider in new[] { "ollama", "openai", "anthropic", "bedrock", "gemini", "cohere", "ollamacloud", "vertex" })
                 foreach (bool streaming in new[] { false, true })
                 {
                     try { await LocalToolTurnCases.RunAsync(provider, streaming, CancellationToken.None, _ContinuationBodies); _Passed++; }
@@ -95,13 +95,13 @@ namespace Test.Aot
 
             List<(string Name, string Executable, string Scenario, Func<CliAgentClientBase> Create)> harnesses = new()
             {
-                ("codex", "codex", "codex-happy", () => new CodexAgentClient()),
-                ("claudecode", "claude", "claudecode-happy", () => new ClaudeCodeAgentClient()),
-                ("geminicli", "gemini", "geminicli-happy", () => new GeminiCliAgentClient()),
-                ("cursor", "cursor-agent", "cursor-happy", () => new CursorAgentClient()),
-                ("mux", "mux", "mux-happy", () => new MuxAgentClient()),
-                ("pi", "pi", "pi-happy", () => new PiAgentClient()),
-                ("opencode", "opencode", "opencode-happy", () => new OpenCodeAgentClient()),
+                ("codex", "codex", "codex-happy", () => new CodexClient()),
+                ("claudecode", "claude", "claudecode-happy", () => new ClaudeCodeClient()),
+                ("geminicli", "gemini", "geminicli-happy", () => new GeminiCliClient()),
+                ("cursor", "cursor-agent", "cursor-happy", () => new CursorClient()),
+                ("mux", "mux", "mux-happy", () => new MuxClient()),
+                ("pi", "pi", "pi-happy", () => new PiClient()),
+                ("opencode", "opencode", "opencode-happy", () => new OpenCodeClient()),
             };
 
             foreach ((string name, string executable, string scenario, Func<CliAgentClientBase> create) in harnesses)
@@ -133,11 +133,11 @@ namespace Test.Aot
                     List<string> models = new List<string>();
                     IAsyncEnumerable<ModelInformation>? listing = client switch
                     {
-                        CodexAgentClient c => c.ListModelsAsync(),
-                        CursorAgentClient c => c.ListModelsAsync(),
-                        MuxAgentClient c => c.ListModelsAsync(),
-                        PiAgentClient c => c.ListModelsAsync(),
-                        OpenCodeAgentClient c => c.ListModelsAsync(),
+                        CodexClient c => c.ListModelsAsync(),
+                        CursorClient c => c.ListModelsAsync(),
+                        MuxClient c => c.ListModelsAsync(),
+                        PiClient c => c.ListModelsAsync(),
+                        OpenCodeClient c => c.ListModelsAsync(),
                         _ => null,
                     };
                     if (listing != null)
@@ -253,7 +253,7 @@ namespace Test.Aot
                 LocalFakeHandler handler = LocalFakeHandler.Always(System.Net.HttpStatusCode.OK, "{}");
                 using HttpClient http = new HttpClient(handler);
 
-                using TypeSafeDecisionClient decision = new TypeSafeDecisionClient("http://127.0.0.1:1", "test-key", httpClient: http) { Model = Model };
+                using TypeSafeClient decision = new TypeSafeClient("test-key", "http://127.0.0.1:1", new ClientOptions { HttpClient = http }) { Defaults = { Decision = { Model = Model } } };
                 DecisionResponse decided = await decision.DecideAsync(new DecisionRequest
                 {
                     State = new UnregisteredState { Note = "x" },
@@ -261,7 +261,7 @@ namespace Test.Aot
                 }).ConfigureAwait(false);
                 ExpectFailureWithGuidance(decided, "decision with an unregistered state type");
 
-                using OpenAiCompletionClient completion = new OpenAiCompletionClient("http://127.0.0.1:1", "test-key", httpClient: http) { Model = Model };
+                using OpenAiCompatibleClient completion = new OpenAiCompatibleClient("http://127.0.0.1:1", "test-key", new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = Model } } };
                 ToolChatRequest request = WeatherToolRequest();
                 request.Tools[0].Parameters["x-extra"] = new UnregisteredState { Note = "x" };
                 ExpectFailureWithGuidance(await completion.ToolChatAsync(request).ConfigureAwait(false), "tool schema with an unregistered value type");
@@ -299,8 +299,8 @@ namespace Test.Aot
         /// </summary>
         private static async Task RunReleaseThreeSevenChecksAsync(LocalOpenAiTestServer server)
         {
-            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "aot-secret") { Model = "test-model" };
-            ollama.Defaults.KeepAlive = TimeSpan.FromMinutes(2);
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "aot-secret") { Defaults = { Completion = { Model = "test-model" } } };
+            ollama.Defaults.Completion.KeepAlive = TimeSpan.FromMinutes(2);
             await CheckAsync("ollama: chat with keep_alive and no default limit", async () =>
             {
                 Ok(await ollama.ChatAsync("keep alive").ConfigureAwait(false));
@@ -316,7 +316,7 @@ namespace Test.Aot
                 Expect("[redacted]", detail.RequestHeaders?["Authorization"], "authorization");
             });
 
-            using OllamaModelClient models = new OllamaModelClient(server.Endpoint);
+            using OllamaClient models = new OllamaClient(server.Endpoint);
             await CheckAsync("ollama: load and unload", async () =>
             {
                 Expect(true, await models.LoadModelAsync("test-model", Timeout.InfiniteTimeSpan).ConfigureAwait(false), "load");
@@ -338,11 +338,11 @@ namespace Test.Aot
 
         private static async Task RunXAiAdvancedChecksAsync(LocalOpenAiTestServer server)
         {
-            using XAiCompletionClient client = new(LocalXAiRoutes.Key, server.Endpoint);
+            using XAiClient client = new(LocalXAiRoutes.Key, server.Endpoint);
             using JsonDocument prompt = JsonDocument.Parse("\"native xAI\"");
             await CheckAsync("XAi: raw Responses and saved encrypted state", async () =>
             {
-                XAiResponse response = await client.CreateResponseAsync(prompt.RootElement);
+                ResponsesApiResponse response = await client.CreateResponseAsync(prompt.RootElement);
                 Ok(response);
                 Ok(await client.CreateResponseAsync(prompt.RootElement, new PolyPrompt.Options.XAiCompletionOptions { FunctionTools = WeatherToolRequest().Tools }));
                 string json = JsonSerializer.Serialize(response.ToAssistantMessage(), PolyPromptJsonContext.Default.ChatMessage);
@@ -351,8 +351,8 @@ namespace Test.Aot
             });
             await CheckAsync("XAi: native event stream", async () =>
             {
-                XAiStreamingResponse response = await client.CreateResponseStreamingAsync(prompt.RootElement);
-                await foreach (XAiResponseEvent _ in response.Events) { }
+                ResponsesApiStreamingResponse response = await client.CreateResponseStreamingAsync(prompt.RootElement);
+                await foreach (ResponsesApiEvent _ in response.Events) { }
                 Ok(response); Expect(true, response.Response != null, "terminal response parsed");
             });
             await CheckAsync("XAi: stored response resources", async () =>
@@ -360,51 +360,38 @@ namespace Test.Aot
                 Ok(await client.GetResponseAsync("resp-test")); Ok(await client.ListResponseInputItemsAsync("resp-test"));
                 Ok(await client.CompactConversationAsync(prompt.RootElement)); Ok(await client.DeleteResponseAsync("resp-test"));
             });
-            using XAiEmbeddingClient embedding = new(LocalXAiRoutes.Key, server.Endpoint) { Model = "test-model" };
-            await CheckAsync("XAi: token embeddings", async () => Ok(await embedding.EmbedTokensAsync(new[] { 1, 2 }, new PolyPrompt.Options.XAiEmbeddingOptions { EncodingFormat = "base64" })));
         }
 
         private static async Task RunClientChecksAsync(LocalOpenAiTestServer server)
         {
-            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
-                foreach (HttpClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     SetModel(client);
 
                     await CheckAsync(name + ": connectivity", async () => Expect(true, await client.ValidateConnectivityAsync().ConfigureAwait(false), "reachable")).ConfigureAwait(false);
 
-                    switch (client)
-                    {
-                        case CompletionClientBase completion:
-                            await RunCompletionAsync(name, completion).ConfigureAwait(false);
-                            break;
-                        case EmbeddingClientBase embedding:
-                            await CheckAsync(name + ": embed", async () => Ok(await embedding.EmbedAsync(new List<string> { "alpha", "beta" }).ConfigureAwait(false))).ConfigureAwait(false);
-                            break;
-                        case SparseEmbeddingClientBase sparse:
-                            await CheckAsync(name + ": sparse embed", async () => Ok(await sparse.EmbedSparseAsync("alpha").ConfigureAwait(false))).ConfigureAwait(false);
-                            break;
-                        case RerankClientBase rerank:
-                            await CheckAsync(name + ": rerank", async () => Ok(await rerank.RerankAsync("capital of France", new List<string> { "Paris", "Berlin" }).ConfigureAwait(false))).ConfigureAwait(false);
-                            break;
-                        case ClassificationClientBase classification:
-                            await CheckAsync(name + ": classify", async () => Ok(await classification.ClassifyAsync("I love it").ConfigureAwait(false))).ConfigureAwait(false);
-                            break;
-                        case DecisionClientBase decision:
-                            await CheckAsync(name + ": decide", async () => Ok(await decision.DecideAsync(DecisionRequestWithTypedState()).ConfigureAwait(false))).ConfigureAwait(false);
-                            break;
-                        case ModelClientBase models:
-                            await CheckAsync(name + ": list models", async () =>
-                            {
-                                int count = 0;
-                                await foreach (ModelInformation model in models.ListModelsAsync().ConfigureAwait(false)) count++;
-                                Expect(true, count > 0, "at least one model");
-                            }).ConfigureAwait(false);
-                            break;
-                    }
+                    if (client.Supports(Capability.Chat)) await RunCompletionAsync(name, client).ConfigureAwait(false);
+                    if (client.Supports(Capability.Embed))
+                        await CheckAsync(name + ": embed", async () => Ok(await client.EmbedAsync(new List<string> { "alpha", "beta" }).ConfigureAwait(false))).ConfigureAwait(false);
+                    if (client.Supports(Capability.SparseEmbed))
+                        await CheckAsync(name + ": sparse embed", async () => Ok(await client.EmbedSparseAsync("alpha").ConfigureAwait(false))).ConfigureAwait(false);
+                    if (client.Supports(Capability.Rerank))
+                        await CheckAsync(name + ": rerank", async () => Ok(await client.RerankAsync("capital of France", new List<string> { "Paris", "Berlin" }).ConfigureAwait(false))).ConfigureAwait(false);
+                    if (client.Supports(Capability.Classify))
+                        await CheckAsync(name + ": classify", async () => Ok(await client.ClassifyAsync("I love it").ConfigureAwait(false))).ConfigureAwait(false);
+                    if (client.Supports(Capability.Decide))
+                        await CheckAsync(name + ": decide", async () => Ok(await client.DecideAsync(DecisionRequestWithTypedState()).ConfigureAwait(false))).ConfigureAwait(false);
+                    if (client.Supports(Capability.Models))
+                        await CheckAsync(name + ": list models", async () =>
+                        {
+                            int count = 0;
+                            await foreach (ModelInformation model in client.ListModelsAsync().ConfigureAwait(false)) count++;
+                            Expect(true, count > 0, "at least one model");
+                        }).ConfigureAwait(false);
                 }
             }
             finally
@@ -413,7 +400,7 @@ namespace Test.Aot
             }
         }
 
-        private static async Task RunCompletionAsync(string name, CompletionClientBase client)
+        private static async Task RunCompletionAsync(string name, ProviderClientBase client)
         {
             await CheckAsync(name + ": chat", async () => Ok(await client.ChatAsync("Say hello.").ConfigureAwait(false))).ConfigureAwait(false);
             await CheckAsync(name + ": generate", async () => Ok(await client.GenerateAsync("Say hello.").ConfigureAwait(false))).ConfigureAwait(false);
@@ -436,17 +423,15 @@ namespace Test.Aot
             }).ConfigureAwait(false);
         }
 
-        private static void SetModel(HttpClientBase client)
+        private static void SetModel(ProviderClientBase client)
         {
-            switch (client)
-            {
-                case CompletionClientBase c: c.Model = Model; break;
-                case EmbeddingClientBase c: c.Model = Model; break;
-                case SparseEmbeddingClientBase c: c.Model = Model; break;
-                case RerankClientBase c: c.Model = RerankModel; break;
-                case ClassificationClientBase c: c.Model = Model; break;
-                case DecisionClientBase c: c.Model = Model; break;
-            }
+            ClientDefaults defaults = client.Defaults;
+            if (defaults.Completion != null) defaults.Completion.Model = Model;
+            if (defaults.Embedding != null) defaults.Embedding.Model = Model;
+            if (defaults.SparseEmbedding != null) defaults.SparseEmbedding.Model = Model;
+            if (defaults.Rerank != null) defaults.Rerank.Model = RerankModel;
+            if (defaults.Classification != null) defaults.Classification.Model = Model;
+            if (defaults.Decision != null) defaults.Decision.Model = Model;
         }
 
         private static ToolChatRequest WeatherToolRequest()

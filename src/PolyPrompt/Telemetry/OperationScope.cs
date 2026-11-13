@@ -72,7 +72,7 @@ namespace PolyPrompt.Telemetry
         {
             _StartTimestamp = Stopwatch.GetTimestamp();
             _Provider = client.TelemetryProvider;
-            _Capability = PolyPromptTelemetry.ResolveCapability(client);
+            _Capability = PolyPromptTelemetry.ResolveCapability(client, operation);
             _Operation = operation;
             _GenAiOperation = PolyPromptTelemetry.ToGenAiOperation(operation);
             _ModelLabel = PolyPromptTelemetry.Bound(model, 128);
@@ -514,7 +514,7 @@ namespace PolyPrompt.Telemetry
                 case EmbeddingResponse embedding:
                     usage = embedding.Usage;
                     break;
-                case XAiStreamingResponse native:
+                case ResponsesApiStreamingResponse native:
                     usage = native.Response?.Usage; responseId = native.Response?.ResponseId; finishReason = native.Response?.FinishReason; toolCalls = native.Response?.ToolCalls?.Count;
                     break;
                 case DecisionResponse decision:

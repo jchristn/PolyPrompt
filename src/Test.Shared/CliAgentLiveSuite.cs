@@ -18,13 +18,13 @@ namespace Test.Shared
 
         private static readonly List<(string Id, string Variable, Func<CliAgentClientBase> Create)> _Harnesses = new()
         {
-            ("codex", "POLYPROMPT_TEST_CODEX", () => new CodexAgentClient()),
-            ("claudecode", "POLYPROMPT_TEST_CLAUDE_CODE", () => new ClaudeCodeAgentClient()),
-            ("geminicli", "POLYPROMPT_TEST_GEMINI_CLI", () => new GeminiCliAgentClient()),
-            ("cursor", "POLYPROMPT_TEST_CURSOR_CLI", () => new CursorAgentClient()),
-            ("mux", "POLYPROMPT_TEST_MUX", () => new MuxAgentClient()),
-            ("pi", "POLYPROMPT_TEST_PI", () => new PiAgentClient()),
-            ("opencode", "POLYPROMPT_TEST_OPENCODE", () => new OpenCodeAgentClient()),
+            ("codex", "POLYPROMPT_TEST_CODEX", () => new CodexClient()),
+            ("claudecode", "POLYPROMPT_TEST_CLAUDE_CODE", () => new ClaudeCodeClient()),
+            ("geminicli", "POLYPROMPT_TEST_GEMINI_CLI", () => new GeminiCliClient()),
+            ("cursor", "POLYPROMPT_TEST_CURSOR_CLI", () => new CursorClient()),
+            ("mux", "POLYPROMPT_TEST_MUX", () => new MuxClient()),
+            ("pi", "POLYPROMPT_TEST_PI", () => new PiClient()),
+            ("opencode", "POLYPROMPT_TEST_OPENCODE", () => new OpenCodeClient()),
         };
 
         /// <summary>
@@ -168,11 +168,11 @@ namespace Test.Shared
             {
                 IAsyncEnumerable<ModelInformation>? listing = client switch
                 {
-                    CodexAgentClient c => c.ListModelsAsync(token),
-                    CursorAgentClient c => c.ListModelsAsync(token),
-                    MuxAgentClient c => c.ListModelsAsync(token),
-                    PiAgentClient c => c.ListModelsAsync(null, token),
-                    OpenCodeAgentClient c => c.ListModelsAsync(token),
+                    CodexClient c => c.ListModelsAsync(token),
+                    CursorClient c => c.ListModelsAsync(token),
+                    MuxClient c => c.ListModelsAsync(token),
+                    PiClient c => c.ListModelsAsync(null, token),
+                    OpenCodeClient c => c.ListModelsAsync(token),
                     _ => null,
                 };
                 if (listing == null) return;

@@ -11,8 +11,8 @@ namespace AnthropicConsole
 
         private static bool _RunForever = true;
         private static bool _Streaming = true;
-        private static AnthropicCompletionClient _Client = null!;
-        private static AnthropicModelClient _ModelClient = null!;
+        private static AnthropicClient _Client = null!;
+        private static AnthropicClient _ModelClient = null!;
 
         #endregion
 
@@ -31,13 +31,13 @@ namespace AnthropicConsole
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new AnthropicCompletionClient(endpoint, apiKey, httpClient: CreateConsoleHttpClient());
+            _Client = new AnthropicClient(apiKey, endpoint, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
             _Client.WorkspaceId = workspaceId;
-            _Client.Model = model;
-            _Client.Defaults.MaxTokens = maxTokens;
+            _Client.Defaults.Completion.Model = model;
+            _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _ModelClient = new AnthropicModelClient(endpoint, apiKey);
+            _ModelClient = new AnthropicClient(apiKey, endpoint);
             _ModelClient.WorkspaceId = workspaceId;
             _ModelClient.TimeoutMs = timeoutMs;
 
@@ -163,26 +163,26 @@ namespace AnthropicConsole
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
             Console.WriteLine("  API version   : " + _Client.AnthropicVersion);
             Console.WriteLine("  Workspace ID  : " + (string.IsNullOrEmpty(_Client.WorkspaceId) ? "(none)" : _Client.WorkspaceId));
-            Console.WriteLine("  Model         : " + _Client.Model);
-            Console.WriteLine("  Max tokens    : " + _Client.Defaults.MaxTokens);
+            Console.WriteLine("  Model         : " + _Client.Defaults.Completion.Model);
+            Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
-            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Temperature.HasValue ? _Client.Defaults.Temperature.Value.ToString("F1") : "(default)"));
-            Console.WriteLine("  Top-P         : " + (_Client.Defaults.TopP.HasValue ? _Client.Defaults.TopP.Value.ToString("F2") : "(default)"));
+            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
+            Console.WriteLine("  Top-P         : " + (_Client.Defaults.Completion.TopP.HasValue ? _Client.Defaults.Completion.TopP.Value.ToString("F2") : "(default)"));
             Console.WriteLine("  Streaming     : " + (_Streaming ? "on" : "off"));
-            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "(none)" : _Client.Defaults.SystemPrompt));
+            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "(none)" : _Client.Defaults.Completion.SystemPrompt));
             Console.WriteLine("");
         }
 
         private static void SetSystemPrompt()
         {
             Console.WriteLine("");
-            if (!string.IsNullOrEmpty(_Client.Defaults.SystemPrompt))
+            if (!string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt))
             {
-                Console.WriteLine("Current system prompt: " + _Client.Defaults.SystemPrompt);
+                Console.WriteLine("Current system prompt: " + _Client.Defaults.Completion.SystemPrompt);
             }
             string? newPrompt = Inputty.GetString("System prompt [Enter to clear]:", null, true);
-            _Client.Defaults.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
-            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "cleared" : "set") + ".");
+            _Client.Defaults.Completion.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
+            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "cleared" : "set") + ".");
             Console.WriteLine("");
         }
 

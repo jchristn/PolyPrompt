@@ -43,8 +43,8 @@ namespace Test.Shared
             using StreamingCloudTransport handler = new StreamingCloudTransport(server.Endpoint);
             using HttpClient http = new HttpClient(handler);
             http.DefaultRequestHeaders.Add("x-stream-fault", scenario);
-            using CompletionClientBase client = cloud ? new OllamaCloudCompletionClient("synthetic-cloud-token", httpClient: http) :
-                new OllamaCompletionClient(server.Endpoint, "synthetic-cloud-token", httpClient: http);
+            using ProviderClientBase client = cloud ? new OllamaCloudClient("synthetic-cloud-token", options: new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } } :
+                new OllamaClient(server.Endpoint, "synthetic-cloud-token", new ClientOptions { HttpClient = http });
             client.TimeoutMs = 3000;
             OllamaCompletionOptions options = new OllamaCompletionOptions { Model = "fixture-model" };
             using CancellationTokenSource cancel = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -129,11 +129,11 @@ namespace Test.Shared
         private static async Task RunHorizontalAsync(int index, string operation, CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<CompletionClientBase> clients = LocalClients.Completion(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.Completion(server.Endpoint);
             try
             {
-                CompletionClientBase client = clients[index];
-                client.Model = "test-model";
+                ProviderClientBase client = clients[index];
+                client.Defaults.Completion.Model = "test-model";
                 foreach (string mode in new[] { "complete", "abandon", "request-cancel", "consumer-cancel", "pre-request-cancel", "pre-consumer-cancel" })
                 {
                     using CancellationTokenSource request = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -168,7 +168,7 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (CompletionClientBase client in clients) client.Dispose();
+                foreach (ProviderClientBase client in clients) client.Dispose();
             }
         }
 

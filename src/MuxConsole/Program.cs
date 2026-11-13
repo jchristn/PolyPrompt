@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for Mux through <see cref="MuxAgentClient"/>
+/// Interactive and one-shot console for Mux through <see cref="MuxClient"/>
 /// (<c>mux print --output-format jsonl</c>). Mux-specific options select the endpoint, reasoning display, and session
 /// persistence.
 /// </summary>
@@ -15,11 +15,11 @@ public static class Program
     {
         ApplicationName = "MuxConsole",
         HarnessName = "Mux",
-        CreateClient = () => new MuxAgentClient(),
-        ListModels = (client, _, token) => ((MuxAgentClient)client).ListModelsAsync(token),
+        CreateClient = () => new MuxClient(),
+        ListModels = (client, _, token) => ((MuxClient)client).ListModelsAsync(token),
         Describe = client =>
         {
-            MuxAgentClient mux = (MuxAgentClient)client;
+            MuxClient mux = (MuxClient)client;
             return "Mux:        endpoint " + (mux.Endpoint ?? "(Mux default)") + ", show thinking " + mux.ShowThinking + ", persist sessions " + mux.PersistSessions;
         },
         Options = new List<AgentConsoleOption>
@@ -31,7 +31,7 @@ public static class Program
                 Apply = (client, value) =>
                 {
                     if (value == "true") return "--endpoint needs a value.";
-                    ((MuxAgentClient)client).Endpoint = value;
+                    ((MuxClient)client).Endpoint = value;
                     return null;
                 }
             },
@@ -39,13 +39,13 @@ public static class Program
             {
                 Name = "show-thinking",
                 Usage = "--show-thinking true|false  Stream model reasoning (default: true)",
-                Apply = (client, value) => SetBool(value, "--show-thinking", v => ((MuxAgentClient)client).ShowThinking = v)
+                Apply = (client, value) => SetBool(value, "--show-thinking", v => ((MuxClient)client).ShowThinking = v)
             },
             new AgentConsoleOption
             {
                 Name = "persist",
                 Usage = "--persist true|false    Save sessions so later turns resume them (default: false; history is replayed instead)",
-                Apply = (client, value) => SetBool(value, "--persist", v => ((MuxAgentClient)client).PersistSessions = v)
+                Apply = (client, value) => SetBool(value, "--persist", v => ((MuxClient)client).PersistSessions = v)
             }
         },
         Prerequisites =

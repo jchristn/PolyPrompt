@@ -115,13 +115,19 @@ namespace PolyPrompt.Clients
         /// Initialize a harness client.
         /// </summary>
         /// <param name="executable">Executable name or path.</param>
-        /// <param name="logging">Logging module.</param>
+        /// <param name="options">Construction settings (logging, timeout, call detail capture, redaction), or null.</param>
         /// <exception cref="ArgumentException">Thrown when the executable is empty.</exception>
         /// <exception cref="ArgumentNullException">Thrown when logging is null.</exception>
-        protected CliAgentClientBase(string executable, LoggingModule logging) : base(logging)
+        protected CliAgentClientBase(string executable, ClientOptions? options) : base(options?.Logging ?? new LoggingModule())
         {
             if (string.IsNullOrWhiteSpace(executable)) throw new ArgumentException("Executable is required.", nameof(executable));
             _Executable = executable;
+            if (options != null)
+            {
+                if (options.TimeoutMs.HasValue) TimeoutMs = options.TimeoutMs.Value;
+                if (options.CallDetailCapture.HasValue) CallDetailCapture = options.CallDetailCapture.Value;
+                if (options.RedactCredentials.HasValue) RedactCredentials = options.RedactCredentials.Value;
+            }
         }
 
         #endregion

@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="PiAgentClient"/>: the shared harness kit plus the RPC lifecycle, model listing, session
+    /// Fake-CLI cases for <see cref="PiClient"/>: the shared harness kit plus the RPC lifecycle, model listing, session
     /// resume, connectivity, input rejection, and less common RPC records.
     /// </summary>
     internal static class LocalPiAgentCases
@@ -22,7 +22,7 @@ namespace Test.Shared
                 {
                     Id = "pi",
                     ExecutableName = "pi",
-                    Create = () => new PiAgentClient(),
+                    Create = () => new PiClient(),
                     HappyScenario = "pi-happy",
                     ErrorExitScenario = "pi-error-exit",
                     StderrOnlyScenario = "pi-stderr-only",
@@ -157,7 +157,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                PiAgentClient pi = (PiAgentClient)client;
+                PiClient pi = (PiClient)client;
                 List<ModelInformation> models = new List<ModelInformation>();
                 await foreach (ModelInformation model in pi.ListModelsAsync(token: token).ConfigureAwait(false)) models.Add(model);
 

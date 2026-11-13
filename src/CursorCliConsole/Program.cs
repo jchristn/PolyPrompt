@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for the Cursor CLI through <see cref="CursorAgentClient"/>
+/// Interactive and one-shot console for the Cursor CLI through <see cref="CursorClient"/>
 /// (<c>cursor-agent -p --output-format stream-json</c>). Sessions resume by id across turns.
 /// </summary>
 public static class Program
@@ -14,8 +14,8 @@ public static class Program
     {
         ApplicationName = "CursorCliConsole",
         HarnessName = "Cursor CLI",
-        CreateClient = () => new CursorAgentClient(),
-        ListModels = (client, _, token) => ((CursorAgentClient)client).ListModelsAsync(token),
+        CreateClient = () => new CursorClient(),
+        ListModels = (client, _, token) => ((CursorClient)client).ListModelsAsync(token),
         Prerequisites =
             "Cursor CLI setup:\n" +
             "  1. Install the CLI (https://cursor.com/docs/cli/installation), for example: curl https://cursor.com/install -fsS | bash\n" +

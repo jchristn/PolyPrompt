@@ -23,7 +23,7 @@ namespace Test.Shared
                 Case(suiteId, "calldetail_none_and_switching", "CallDetailCapture.None records nothing, and a change applies to later calls only", RunNoneAndSwitchingAsync),
                 Case(suiteId, "calldetail_process_metadata", "Metadata capture of an agent harness run drops arguments, stdin, and stdout and keeps exit status", RunProcessMetadataAsync),
                 Case(suiteId, "ollama_keep_alive", "Ollama KeepAlive is sent as whole seconds on chat, tool chat, generate, and embed, and omitted when unset", RunKeepAliveAsync),
-                Case(suiteId, "ollama_load_unload", "OllamaModelClient.LoadModelAsync and UnloadModelAsync send an empty generate with keep_alive", RunLoadUnloadAsync),
+                Case(suiteId, "ollama_load_unload", "OllamaClient.LoadModelAsync and UnloadModelAsync send an empty generate with keep_alive", RunLoadUnloadAsync),
                 Case(suiteId, "ollama_show_supports_tools", "Ollama model info copies renderer and parser and sets SupportsTools only when tools are listed and rendered", RunSupportsToolsAsync),
             };
         }
@@ -49,7 +49,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAi = new OpenAiCompletionClient(server.Endpoint, "sk-very-secret") { Model = "test-model" };
+            using OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "sk-very-secret") { Defaults = { Completion = { Model = "test-model" } } };
             SharedAssert.Equal(CallDetailCapture.Metadata, openAi.CallDetailCapture, "Capture defaults to Metadata.");
             SharedAssert.True(openAi.RedactCredentials, "Redaction defaults to on.");
 
@@ -68,11 +68,11 @@ namespace Test.Shared
             SharedAssert.NotNull(Header(detail.RequestHeaders, "Content-Type"), "Ordinary headers are kept.");
             SharedAssert.Equal("Bearer sk-very-secret", Header(server.RequestHeaders[0], "Authorization"), "Redaction does not change what is sent.");
 
-            using AnthropicCompletionClient anthropic = new AnthropicCompletionClient(server.Endpoint, "ant-secret") { Model = "test-model" };
+            using AnthropicClient anthropic = new AnthropicClient("ant-secret", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } };
             SharedAssert.True((await anthropic.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Anthropic chat should succeed.");
             SharedAssert.Equal("[redacted]", Header(anthropic.CallDetails.Single().RequestHeaders, "x-api-key"), "The Anthropic x-api-key is redacted.");
 
-            using AzureOpenAiCompletionClient azure = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", "azure-secret");
+            using AzureOpenAiClient azure = new AzureOpenAiClient(server.Endpoint, "azure-secret") { Defaults = { Completion = { Model = "test-deployment" } } };
             SharedAssert.True((await azure.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Azure chat should succeed.");
             SharedAssert.Equal("[redacted]", Header(azure.CallDetails.Single().RequestHeaders, "api-key"), "The Azure api-key is redacted.");
         }
@@ -97,7 +97,7 @@ namespace Test.Shared
             http.DefaultRequestHeaders.TryAddWithoutValidation("x-ratelimit-remaining-tokens", "5000");
             http.DefaultRequestHeaders.TryAddWithoutValidation("x-request-id", "req-1");
 
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "sk", httpClient: http) { Model = "test-model" };
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "sk", new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "test-model" } } };
             SharedAssert.True((await client.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Chat should succeed.");
             Dictionary<string, string>? recorded = client.CallDetails.Single().RequestHeaders;
 
@@ -112,7 +112,7 @@ namespace Test.Shared
         private static async Task RunFullUnredactedAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "sk-raw") { Model = "test-model" };
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "sk-raw") { Defaults = { Completion = { Model = "test-model" } } };
             client.CallDetailCapture = CallDetailCapture.Full;
 
             SharedAssert.True((await client.ChatAsync("full capture prompt", token: token).ConfigureAwait(false)).Success, "Chat should succeed.");
@@ -130,7 +130,7 @@ namespace Test.Shared
         private static async Task RunNoneAndSwitchingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "sk") { Model = "test-model" };
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "sk") { Defaults = { Completion = { Model = "test-model" } } };
 
             client.CallDetailCapture = CallDetailCapture.None;
             SharedAssert.True((await client.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Chat should succeed.");
@@ -179,11 +179,11 @@ namespace Test.Shared
         private static async Task RunKeepAliveAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint) { Model = "test-model" };
+            using OllamaClient client = new OllamaClient(server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } };
 
             SharedAssert.True((await client.ChatAsync("unset", token: token).ConfigureAwait(false)).Success, "Chat should succeed.");
 
-            client.Defaults.KeepAlive = TimeSpan.FromMinutes(10);
+            client.Defaults.Completion.KeepAlive = TimeSpan.FromMinutes(10);
             SharedAssert.True((await client.ChatAsync("defaults", token: token).ConfigureAwait(false)).Success, "Chat should succeed.");
             SharedAssert.True((await client.ChatAsync("forever", new OllamaCompletionOptions { KeepAlive = Timeout.InfiniteTimeSpan }, token).ConfigureAwait(false)).Success, "Chat should succeed.");
             SharedAssert.True((await client.GenerateAsync("fraction", new OllamaCompletionOptions { KeepAlive = TimeSpan.FromMilliseconds(1500) }, token).ConfigureAwait(false)).Success, "Generate should succeed.");
@@ -210,8 +210,8 @@ namespace Test.Shared
                 }
             }
 
-            using OllamaEmbeddingClient embed = new OllamaEmbeddingClient(server.Endpoint) { Model = "test-model" };
-            embed.Defaults.KeepAlive = TimeSpan.FromSeconds(30);
+            using OllamaClient embed = new OllamaClient(server.Endpoint) { Defaults = { Embedding = { Model = "test-model" } } };
+            embed.Defaults.Embedding.KeepAlive = TimeSpan.FromSeconds(30);
             SharedAssert.True((await embed.EmbedAsync("text", token: token).ConfigureAwait(false)).Success, "Embed should succeed.");
             using JsonDocument embedBody = JsonDocument.Parse(server.RequestBodies.Last());
             SharedAssert.Equal(30L, embedBody.RootElement.GetProperty("keep_alive").GetInt64(), "Embedding keep_alive seconds.");
@@ -220,7 +220,7 @@ namespace Test.Shared
         private static async Task RunLoadUnloadAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaModelClient client = new OllamaModelClient(server.Endpoint);
+            using OllamaClient client = new OllamaClient(server.Endpoint);
 
             SharedAssert.True(await client.LoadModelAsync("test-model", TimeSpan.FromHours(1), token).ConfigureAwait(false), "Load should succeed.");
             SharedAssert.True(await client.LoadModelAsync("test-model", token: token).ConfigureAwait(false), "Load with the server default should succeed.");
@@ -251,7 +251,7 @@ namespace Test.Shared
         private static async Task RunSupportsToolsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaModelClient client = new OllamaModelClient(server.Endpoint);
+            using OllamaClient client = new OllamaClient(server.Endpoint);
 
             ModelInformation renderer = (await client.GetModelInformationAsync("probe-renderer", token).ConfigureAwait(false))!;
             SharedAssert.NotNull(renderer, "Model info should parse.");
@@ -279,7 +279,7 @@ namespace Test.Shared
             SharedAssert.True((deepseek.Metadata["capabilities"] ?? "").Contains("tools", StringComparison.Ordinal), "The raw capabilities stay in Metadata.");
             SharedAssert.False(deepseek.Metadata.ContainsKey("renderer"), "No renderer key when Ollama sends none.");
 
-            using OpenAiModelClient openAi = new OpenAiModelClient(server.Endpoint, "sk");
+            using OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "sk") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
             ModelInformation? other = await openAi.GetModelInformationAsync("test-model", token).ConfigureAwait(false);
             if (other != null) SharedAssert.True(other.SupportsTools == null, "Other providers leave SupportsTools null.");
         }

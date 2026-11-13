@@ -11,11 +11,11 @@ namespace TeiConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static TeiEmbeddingClient _EmbeddingClient = null!;
-        private static TeiSparseEmbeddingClient _SparseClient = null!;
-        private static TeiRerankClient _RerankClient = null!;
-        private static TeiClassificationClient _ClassificationClient = null!;
-        private static TeiModelClient _ModelClient = null!;
+        private static TeiClient _EmbeddingClient = null!;
+        private static TeiClient _SparseClient = null!;
+        private static TeiClient _RerankClient = null!;
+        private static TeiClient _ClassificationClient = null!;
+        private static TeiClient _ModelClient = null!;
 
         #endregion
 
@@ -33,11 +33,11 @@ namespace TeiConsole
 
             string? key = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
 
-            _EmbeddingClient = new TeiEmbeddingClient(endpoint, key);
-            _SparseClient = new TeiSparseEmbeddingClient(endpoint, key);
-            _RerankClient = new TeiRerankClient(endpoint, key);
-            _ClassificationClient = new TeiClassificationClient(endpoint, key);
-            _ModelClient = new TeiModelClient(endpoint, key);
+            _EmbeddingClient = new TeiClient(endpoint, key);
+            _SparseClient = new TeiClient(endpoint, key);
+            _RerankClient = new TeiClient(endpoint, key);
+            _ClassificationClient = new TeiClient(endpoint, key);
+            _ModelClient = new TeiClient(endpoint, key);
 
             foreach (HttpClientBase client in AllClients())
             {

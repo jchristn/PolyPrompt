@@ -12,11 +12,11 @@ namespace CohereConsole
 
         private static bool _RunForever = true;
         private static bool _Streaming = true;
-        private static CohereCompletionClient _Client = null!;
-        private static CohereEmbeddingClient _EmbeddingClient = null!;
-        private static CohereRerankClient _RerankClient = null!;
-        private static CohereClassificationClient _ClassificationClient = null!;
-        private static CohereModelClient _ModelClient = null!;
+        private static CohereClient _Client = null!;
+        private static CohereClient _EmbeddingClient = null!;
+        private static CohereClient _RerankClient = null!;
+        private static CohereClient _ClassificationClient = null!;
+        private static CohereClient _ModelClient = null!;
 
         #endregion
 
@@ -36,23 +36,23 @@ namespace CohereConsole
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new CohereCompletionClient(endpoint, apiKey, httpClient: CreateConsoleHttpClient());
-            _Client.Model = model;
-            _Client.Defaults.MaxTokens = maxTokens;
+            _Client = new CohereClient(apiKey, endpoint, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
+            _Client.Defaults.Completion.Model = model;
+            _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _EmbeddingClient = new CohereEmbeddingClient(endpoint, apiKey);
-            _EmbeddingClient.Model = embeddingModel;
+            _EmbeddingClient = new CohereClient(apiKey, endpoint);
+            _EmbeddingClient.Defaults.Embedding.Model = embeddingModel;
             _EmbeddingClient.TimeoutMs = timeoutMs;
 
-            _RerankClient = new CohereRerankClient(endpoint, apiKey);
-            _RerankClient.Model = rerankModel;
+            _RerankClient = new CohereClient(apiKey, endpoint);
+            _RerankClient.Defaults.Rerank.Model = rerankModel;
             _RerankClient.TimeoutMs = timeoutMs;
 
-            _ClassificationClient = new CohereClassificationClient(endpoint, apiKey);
+            _ClassificationClient = new CohereClient(apiKey, endpoint);
             _ClassificationClient.TimeoutMs = timeoutMs;
 
-            _ModelClient = new CohereModelClient(endpoint, apiKey);
+            _ModelClient = new CohereClient(apiKey, endpoint);
             _ModelClient.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
@@ -202,28 +202,28 @@ namespace CohereConsole
             Console.WriteLine("");
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Chat model    : " + _Client.Model);
-            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Model);
-            Console.WriteLine("  Rerank model  : " + _RerankClient.Model);
-            Console.WriteLine("  Max tokens    : " + _Client.Defaults.MaxTokens);
+            Console.WriteLine("  Chat model    : " + _Client.Defaults.Completion.Model);
+            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Defaults.Embedding.Model);
+            Console.WriteLine("  Rerank model  : " + _RerankClient.Defaults.Rerank.Model);
+            Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
-            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Temperature.HasValue ? _Client.Defaults.Temperature.Value.ToString("F1") : "(default)"));
-            Console.WriteLine("  Top-P         : " + (_Client.Defaults.TopP.HasValue ? _Client.Defaults.TopP.Value.ToString("F2") : "(default)"));
+            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
+            Console.WriteLine("  Top-P         : " + (_Client.Defaults.Completion.TopP.HasValue ? _Client.Defaults.Completion.TopP.Value.ToString("F2") : "(default)"));
             Console.WriteLine("  Streaming     : " + (_Streaming ? "on" : "off"));
-            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "(none)" : _Client.Defaults.SystemPrompt));
+            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "(none)" : _Client.Defaults.Completion.SystemPrompt));
             Console.WriteLine("");
         }
 
         private static void SetSystemPrompt()
         {
             Console.WriteLine("");
-            if (!string.IsNullOrEmpty(_Client.Defaults.SystemPrompt))
+            if (!string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt))
             {
-                Console.WriteLine("Current system prompt: " + _Client.Defaults.SystemPrompt);
+                Console.WriteLine("Current system prompt: " + _Client.Defaults.Completion.SystemPrompt);
             }
             string? newPrompt = Inputty.GetString("System prompt [Enter to clear]:", null, true);
-            _Client.Defaults.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
-            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.SystemPrompt) ? "cleared" : "set") + ".");
+            _Client.Defaults.Completion.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
+            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "cleared" : "set") + ".");
             Console.WriteLine("");
         }
 

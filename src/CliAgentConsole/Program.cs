@@ -113,13 +113,13 @@ public static class Program
     {
         return provider switch
         {
-            "codex" => new CodexAgentClient(),
-            "claudecode" or "claude" => new ClaudeCodeAgentClient(),
-            "geminicli" or "gemini" => new GeminiCliAgentClient(),
-            "cursor" or "cursorcli" => new CursorAgentClient(),
-            "mux" => new MuxAgentClient(),
-            "pi" => new PiAgentClient(),
-            "opencode" => new OpenCodeAgentClient(),
+            "codex" => new CodexClient(),
+            "claudecode" or "claude" => new ClaudeCodeClient(),
+            "geminicli" or "gemini" => new GeminiCliClient(),
+            "cursor" or "cursorcli" => new CursorClient(),
+            "mux" => new MuxClient(),
+            "pi" => new PiClient(),
+            "opencode" => new OpenCodeClient(),
             _ => null,
         };
     }
@@ -135,11 +135,11 @@ public static class Program
     {
         IAsyncEnumerable<ModelInformation>? models = client switch
         {
-            CodexAgentClient c => c.ListModelsAsync(),
-            CursorAgentClient c => c.ListModelsAsync(),
-            MuxAgentClient c => c.ListModelsAsync(),
-            PiAgentClient c => c.ListModelsAsync(),
-            OpenCodeAgentClient c => c.ListModelsAsync(),
+            CodexClient c => c.ListModelsAsync(),
+            CursorClient c => c.ListModelsAsync(),
+            MuxClient c => c.ListModelsAsync(),
+            PiClient c => c.ListModelsAsync(),
+            OpenCodeClient c => c.ListModelsAsync(),
             _ => null,
         };
 

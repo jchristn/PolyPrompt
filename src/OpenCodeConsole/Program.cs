@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for OpenCode through <see cref="OpenCodeAgentClient"/>
+/// Interactive and one-shot console for OpenCode through <see cref="OpenCodeClient"/>
 /// (<c>opencode run --format json</c>). Sessions resume by id across turns.
 /// </summary>
 public static class Program
@@ -14,8 +14,8 @@ public static class Program
     {
         ApplicationName = "OpenCodeConsole",
         HarnessName = "OpenCode",
-        CreateClient = () => new OpenCodeAgentClient(),
-        ListModels = (client, _, token) => ((OpenCodeAgentClient)client).ListModelsAsync(token),
+        CreateClient = () => new OpenCodeClient(),
+        ListModels = (client, _, token) => ((OpenCodeClient)client).ListModelsAsync(token),
         Prerequisites =
             "OpenCode setup:\n" +
             "  1. Install the CLI (https://opencode.ai/docs), for example: npm install -g opencode-ai\n" +

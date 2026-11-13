@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for Claude Code through <see cref="ClaudeCodeAgentClient"/>
+/// Interactive and one-shot console for Claude Code through <see cref="ClaudeCodeClient"/>
 /// (<c>claude -p --output-format stream-json</c>). Sessions resume by id across turns.
 /// </summary>
 public static class Program
@@ -14,7 +14,7 @@ public static class Program
     {
         ApplicationName = "ClaudeCodeConsole",
         HarnessName = "Claude Code",
-        CreateClient = () => new ClaudeCodeAgentClient(),
+        CreateClient = () => new ClaudeCodeClient(),
         Prerequisites =
             "Claude Code setup:\n" +
             "  1. Install the CLI (https://code.claude.com/docs/en/setup), for example: npm install -g @anthropic-ai/claude-code\n" +

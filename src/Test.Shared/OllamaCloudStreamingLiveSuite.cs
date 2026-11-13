@@ -28,7 +28,7 @@ namespace Test.Shared
 
         private static async Task RunAsync(string apiKey, string model, CancellationToken token)
         {
-            using OllamaCloudCompletionClient client = new OllamaCloudCompletionClient(apiKey);
+            using OllamaCloudClient client = new OllamaCloudClient(apiKey) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } };
             client.TimeoutMs = 90000;
             OllamaCompletionOptions options = new OllamaCompletionOptions { Model = model, MaxTokens = 256, ReasoningEffort = ReasoningEffort.Low };
             ChatStreamingResponse chat = await client.ChatStreamingAsync("Reply with exactly pong.", options, token).ConfigureAwait(false);

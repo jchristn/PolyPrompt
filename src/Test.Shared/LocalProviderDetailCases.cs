@@ -38,17 +38,17 @@ namespace Test.Shared
         {
             foreach (string? invalid in new string?[] { null, "", " ", "bad token", "bad\r\ntoken" })
             {
-                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudCompletionClient(invalid!)), "Completion must require a bearer token.");
-                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudEmbeddingClient(invalid!)), "Embedding must require a bearer token.");
-                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudModelClient(invalid!)), "Models must require a bearer token.");
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudClient(invalid!) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } }), "Completion must require a bearer token.");
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudClient(invalid!) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } }), "Embedding must require a bearer token.");
+                await SharedAssert.ThrowsAsync<ArgumentException>(() => Task.FromResult(new OllamaCloudClient(invalid!) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } }), "Models must require a bearer token.");
             }
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             string target = Environment.GetEnvironmentVariable("POLYPROMPT_OLLAMACLOUD_SIMULATION") ?? server.Endpoint;
             using HttpClient http = new HttpClient(new CloudTransport(target));
-            using OllamaCloudCompletionClient completion = new OllamaCloudCompletionClient("test-cloud-token", httpClient: http) { Model = "test-model" };
-            using OllamaCloudEmbeddingClient embedding = new OllamaCloudEmbeddingClient("test-cloud-token", httpClient: http) { Model = "test-embed" };
-            using OllamaCloudModelClient models = new OllamaCloudModelClient("test-cloud-token", httpClient: http);
+            using OllamaCloudClient completion = new OllamaCloudClient("test-cloud-token", options: new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "test-model" } } };
+            using OllamaCloudClient embedding = new OllamaCloudClient("test-cloud-token", options: new ClientOptions { HttpClient = http }) { Defaults = { Embedding = { Model = "test-embed" } } };
+            using OllamaCloudClient models = new OllamaCloudClient("test-cloud-token", options: new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "gemma3:4b" }, Embedding = { Model = "all-minilm" } } };
             foreach (HttpClientBase client in new HttpClientBase[] { completion, embedding, models })
             {
                 SharedAssert.Equal("https://ollama.com:443", client.Endpoint, "Endpoint must be fixed.");
@@ -111,8 +111,8 @@ namespace Test.Shared
         private static async Task RunToolNameRecoveryAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 3000 };
-            using VertexAiCompletionClient vertex = new VertexAiCompletionClient("test-project", "us-central1", new PolyPrompt.Auth.StaticTokenCredential("t"), server.Endpoint) { Model = "test-model", TimeoutMs = 3000 };
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
+            using VertexAiClient vertex = new VertexAiClient("test-project", "us-central1", new PolyPrompt.Auth.StaticTokenCredential("t"), server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
             ToolChatRequest sent = ParallelCallsWithIdOnlyResults();
             ToolChatResponse chat = await gemini.ToolChatAsync(sent, token).ConfigureAwait(false);
@@ -144,7 +144,7 @@ namespace Test.Shared
         private static async Task RunToolNameUnrecoverableAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 3000 };
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
             ToolChatRequest unknownId = ParallelCallsWithIdOnlyResults();
             unknownId.Messages[2].ToolCallId = "call-unknown";
@@ -168,7 +168,7 @@ namespace Test.Shared
         private static async Task RunToolResultWithoutNameAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient openAi = new OpenAiCompletionClient(server.Endpoint, "test-key") { Model = "test-model", TimeoutMs = 3000 };
+            using OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
             ToolChatRequest request = ParallelCallsWithIdOnlyResults();
             request.Messages[2].ToolCallId = "call-unknown";
@@ -236,13 +236,13 @@ namespace Test.Shared
             });
 
             using HttpClient http = new HttpClient(handler);
-            using OpenAiEmbeddingClient client = new OpenAiEmbeddingClient("http://polyprompt.test", "k", httpClient: http);
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient("http://polyprompt.test", "k", new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
 
             EmbeddingResponse plain = await client.EmbedAsync("a", null, token).ConfigureAwait(false);
             SharedAssert.True(plain.Success, "Float embeddings should parse. " + plain.Error);
             SharedAssert.Equal("0.5,-1.25,3", string.Join(",", plain.Embeddings[0].Embedding), "Float vectors should be kept.");
 
-            client.Defaults.EncodingFormat = "base64";
+            client.Defaults.Embedding.EncodingFormat = "base64";
             EmbeddingResponse encoded = await client.EmbedAsync(new List<string> { "a", "b" }, null, token).ConfigureAwait(false);
             SharedAssert.True(encoded.Success, "Base64 embeddings should parse. " + encoded.Error);
             SharedAssert.Equal(string.Join(",", first), string.Join(",", encoded.Embeddings[0].Embedding), "The first base64 vector should decode to its floats.");
@@ -279,7 +279,7 @@ namespace Test.Shared
             ProviderTestConfiguration vertex = ProviderTestConfiguration.CreateWithDefaults("vertex");
             SharedAssert.Equal(string.Empty, vertex.Endpoint, "Vertex AI should derive a regional endpoint.");
             SharedAssert.Equal("us-central1", vertex.Region, "Vertex AI should default the region.");
-            SharedAssert.Equal("text-embedding-005", vertex.EmbeddingModel, "Vertex AI should default the embedding model.");
+            SharedAssert.Equal("gemini-embedding-001", vertex.EmbeddingModel, "Vertex AI should default the embedding model.");
             await ThrowsAsync(vertex.Validate, "Vertex AI requires a project.").ConfigureAwait(false);
 
             ProviderTestConfiguration bedrock = ProviderTestConfiguration.CreateWithDefaults("bedrock");
@@ -383,9 +383,9 @@ namespace Test.Shared
                     SharedAssert.Equal(ProviderLiveSuite.Supports(providerType, entry.Key), entry.Value != null, providerType + " " + entry.Key + " client presence should match the live suite's capability table.");
                 }
 
-                if (provider.Completion != null) SharedAssert.Equal("some-model", provider.Completion.Model, providerType + " completion should use the configured model.");
-                if (provider.Embedding != null && providerType != "tei") SharedAssert.Equal("some-embed", provider.Embedding.Model, providerType + " embedding should use the configured embedding model.");
-                if (provider.Decision != null) SharedAssert.Equal("some-model", provider.Decision.Model, providerType + " decision should use the configured model.");
+                if (provider.Completion != null) SharedAssert.Equal("some-model", provider.Completion.Defaults.Completion!.Model, providerType + " completion should use the configured model.");
+                if (provider.Embedding != null && providerType != "tei") SharedAssert.Equal("some-embed", provider.Embedding.Defaults.Embedding!.Model, providerType + " embedding should use the configured embedding model.");
+                if (provider.Decision != null) SharedAssert.Equal("some-model", provider.Decision.Defaults.Decision!.Model, providerType + " decision should use the configured model.");
                 SharedAssert.True(provider.All.All(c => c.TimeoutMs == 120000), providerType + " live clients should use the live timeout.");
             }
 

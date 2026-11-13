@@ -189,7 +189,7 @@ namespace Test.Shared
         private static async Task RunChatAndCallDetailsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
             client.MaxCallDetails = 2;
 
             ChatResponse first = await client.ChatAsync("first", token: token).ConfigureAwait(false);
@@ -226,9 +226,9 @@ namespace Test.Shared
             CountingHandler handler = new CountingHandler(new HttpClientHandler());
             HttpClient shared = new HttpClient(handler);
 
-            using (OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, apiKey: null, logging: null, httpClient: shared))
+            using (OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, null, new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } })
             {
-                client.Model = "test-model";
+                client.Defaults.Completion.Model = "test-model";
                 client.TimeoutMs = 1000;
 
                 ChatResponse response = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -241,9 +241,9 @@ namespace Test.Shared
             // Disposing the PolyPrompt client must NOT dispose an injected HttpClient: reuse it in a
             // second client and confirm it still works (a disposed HttpClient would throw here).
             int countAfterFirst = handler.Count;
-            using (OpenAiCompletionClient reuse = new OpenAiCompletionClient(server.Endpoint, apiKey: null, logging: null, httpClient: shared))
+            using (OpenAiCompatibleClient reuse = new OpenAiCompatibleClient(server.Endpoint, null, new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } })
             {
-                reuse.Model = "test-model";
+                reuse.Defaults.Completion.Model = "test-model";
                 reuse.TimeoutMs = 1000;
 
                 ChatResponse second = await reuse.ChatAsync("again", token: token).ConfigureAwait(false);
@@ -279,24 +279,21 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
-            client.Defaults.MaxTokens = -1;
-            SharedAssert.Equal(1, client.Defaults.MaxTokens, "Client MaxTokens should clamp to minimum.");
+            client.Defaults.Completion.MaxTokens = -1;
+            SharedAssert.Equal(1, client.Defaults.Completion.MaxTokens, "Client MaxTokens should clamp to minimum.");
 
-            client.Defaults.Temperature = 99;
-            SharedAssert.Equal(2.0, client.Defaults.Temperature, "Client Temperature should clamp to maximum.");
+            client.Defaults.Completion.Temperature = 99;
+            SharedAssert.Equal(2.0, client.Defaults.Completion.Temperature, "Client Temperature should clamp to maximum.");
 
-            client.Defaults.TopP = -99;
-            SharedAssert.Equal(0.0, client.Defaults.TopP, "Client TopP should clamp to minimum.");
+            client.Defaults.Completion.TopP = -99;
+            SharedAssert.Equal(0.0, client.Defaults.Completion.TopP, "Client TopP should clamp to minimum.");
 
-            await SharedAssert.ThrowsAsync<ArgumentNullException>(
-                () =>
-                {
-                    client.Model = "";
-                    return Task.CompletedTask;
-                },
-                "Client Model should reject empty values.").ConfigureAwait(false);
+            // 4.0 has no Model shorthand; an empty Defaults.Completion.Model means "no model", and the call throws.
+            client.Defaults.Completion.Model = "";
+            await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.ChatAsync("hi"), "A call with an empty model should throw.").ConfigureAwait(false);
+            client.Defaults.Completion.Model = "test-model";
 
             await SharedAssert.ThrowsAsync<ArgumentOutOfRangeException>(
                 () =>
@@ -431,7 +428,7 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            OpenAiCompletionOptions openAiChat = new OpenAiCompletionOptions();
+            OpenAiCompatibleCompletionOptions openAiChat = new OpenAiCompatibleCompletionOptions();
             openAiChat.FrequencyPenalty = -99;
             openAiChat.PresencePenalty = 99;
             SharedAssert.Equal(-2.0, openAiChat.FrequencyPenalty, "OpenAI frequency penalty should clamp.");
@@ -480,8 +477,8 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAiClient = CreateClient(server);
-            OpenAiCompletionOptions openAiOptions = new OpenAiCompletionOptions();
+            using OpenAiCompatibleClient openAiClient = CreateClient(server);
+            OpenAiCompatibleCompletionOptions openAiOptions = new OpenAiCompatibleCompletionOptions();
             openAiOptions.MaxTokens = 123;
             openAiOptions.Temperature = 0.25;
             openAiOptions.TopP = 0.75;
@@ -489,8 +486,8 @@ namespace Test.Shared
             ChatResponse openAiResponse = await openAiClient.ChatAsync("hello openai", openAiOptions, token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible chat should succeed.");
 
-            using OllamaCompletionClient ollamaClient = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollamaClient.Model = "test-model";
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
+            ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
             OllamaCompletionOptions ollamaOptions = new OllamaCompletionOptions();
             ollamaOptions.ContextLength = 2048;
@@ -499,8 +496,8 @@ namespace Test.Shared
             ChatResponse ollamaResponse = await ollamaClient.ChatAsync("hello ollama", ollamaOptions, token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama chat should succeed.");
 
-            using GeminiCompletionClient geminiClient = new GeminiCompletionClient(server.Endpoint, "test-key");
-            geminiClient.Model = "test-model";
+            using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint);
+            geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
             GeminiCompletionOptions geminiOptions = new GeminiCompletionOptions();
             geminiOptions.MaxTokens = 456;
@@ -523,8 +520,8 @@ namespace Test.Shared
         private static async Task RunOpenAiVersionedEndpointBaseAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint + "/v1", "test-key");
-            client.Model = "test-model";
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint + "/v1", "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -596,7 +593,7 @@ namespace Test.Shared
             SharedAssert.Equal(1, assistant.ToolCalls.Count, "Assistant message should include tool calls.");
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             await SharedAssert.ThrowsAsync<ArgumentException>(
                 () => client.ToolChatAsync(new ToolChatRequest(), token),
@@ -626,14 +623,14 @@ namespace Test.Shared
             SharedAssert.Equal("hello", textAssistant.Content, "Streaming text response should convert to assistant text message.");
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             await SharedAssert.ThrowsAsync<ArgumentException>(
                 () => client.ToolChatStreamingAsync(new ToolChatRequest(), token),
                 "ToolChatStreamingAsync should reject empty message lists.").ConfigureAwait(false);
 
-            using OpenAiCompletionClient missingClient = new OpenAiCompletionClient(server.Endpoint + "/missing", "test-key");
-            missingClient.Model = "test-model";
+            using OpenAiCompatibleClient missingClient = new OpenAiCompatibleClient(server.Endpoint + "/missing", "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            missingClient.Defaults.Completion.Model = "test-model";
             missingClient.TimeoutMs = 500;
 
             ToolChatStreamingResponse failed = await missingClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
@@ -645,7 +642,7 @@ namespace Test.Shared
         private static async Task RunOpenAiChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
             List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -670,8 +667,8 @@ namespace Test.Shared
         private static async Task RunOllamaChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
@@ -696,8 +693,8 @@ namespace Test.Shared
         private static async Task RunGeminiChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
@@ -718,7 +715,7 @@ namespace Test.Shared
         private static async Task RunOpenAiGenerationStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
             List<GenerationStreamingChunk> chunks = await ConsumeGenerationStreamAsync(stream, token).ConfigureAwait(false);
@@ -736,8 +733,8 @@ namespace Test.Shared
         private static async Task RunOllamaGenerationStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
@@ -756,8 +753,8 @@ namespace Test.Shared
         private static async Task RunGeminiGenerationStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             GenerationStreamingResponse stream = await client.GenerateStreamingAsync("generate stream", token: token).ConfigureAwait(false);
@@ -777,7 +774,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAiClient = CreateClient(server);
+            using OpenAiCompatibleClient openAiClient = CreateClient(server);
             ToolChatRequest openAiRequired = CreateWeatherToolRequest();
             openAiRequired.ToolChoice = "required";
             ToolChatResponse openAiRequiredResponse = await openAiClient.ToolChatAsync(openAiRequired, token).ConfigureAwait(false);
@@ -788,16 +785,16 @@ namespace Test.Shared
             ToolChatResponse openAiNoneResponse = await openAiClient.ToolChatAsync(openAiNone, token).ConfigureAwait(false);
             SharedAssert.True(openAiNoneResponse.Success, "OpenAI-compatible none tool-choice request should succeed.");
 
-            using OllamaCompletionClient ollamaClient = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollamaClient.Model = "test-model";
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
+            ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
             ToolChatRequest ollamaNone = CreateWeatherToolRequest();
             ollamaNone.ToolChoice = "none";
             ToolChatResponse ollamaNoneResponse = await ollamaClient.ToolChatAsync(ollamaNone, token).ConfigureAwait(false);
             SharedAssert.True(ollamaNoneResponse.Success, "Ollama none tool-choice request should succeed.");
 
-            using GeminiCompletionClient geminiClient = new GeminiCompletionClient(server.Endpoint, "test-key");
-            geminiClient.Model = "test-model";
+            using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint);
+            geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
             ToolChatRequest geminiRequired = CreateWeatherToolRequest();
             geminiRequired.ToolChoice = "required";
@@ -822,22 +819,22 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAiClient = CreateClient(server);
+            using OpenAiCompatibleClient openAiClient = CreateClient(server);
             ToolChatRequest openAiRequest = CreateWeatherToolRequest();
             (openAiRequest.Options ??= new CompletionOptions()).Model = "override-model";
             ToolChatResponse openAiResponse = await openAiClient.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat model override should succeed.");
 
-            using OllamaCompletionClient ollamaClient = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollamaClient.Model = "test-model";
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
+            ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
             ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
             (ollamaRequest.Options ??= new CompletionOptions()).Model = "override-model";
             ToolChatResponse ollamaResponse = await ollamaClient.ToolChatAsync(ollamaRequest, token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama tool chat model override should succeed.");
 
-            using GeminiCompletionClient geminiClient = new GeminiCompletionClient(server.Endpoint, "test-key");
-            geminiClient.Model = "test-model";
+            using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint);
+            geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
             ToolChatRequest geminiRequest = CreateWeatherToolRequest();
             (geminiRequest.Options ??= new CompletionOptions()).Model = "override-model";
@@ -855,8 +852,8 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAiClient = new OpenAiCompletionClient(server.Endpoint + "/missing", "test-key");
-            openAiClient.Model = "test-model";
+            using OpenAiCompatibleClient openAiClient = new OpenAiCompatibleClient(server.Endpoint + "/missing", "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            openAiClient.Defaults.Completion.Model = "test-model";
             openAiClient.TimeoutMs = 1000;
             ChatStreamingResponse openAiChat = await openAiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse openAiGeneration = await openAiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
@@ -869,8 +866,8 @@ namespace Test.Shared
             SharedAssert.Equal(404, openAiGeneration.StatusCode, "OpenAI-compatible streaming generation should preserve HTTP status.");
             SharedAssert.Equal(404, openAiTool.StatusCode, "OpenAI-compatible streaming tool chat should preserve HTTP status.");
 
-            using OllamaCompletionClient ollamaClient = new OllamaCompletionClient(server.Endpoint + "/missing", "test-key");
-            ollamaClient.Model = "test-model";
+            using OllamaClient ollamaClient = new OllamaClient(server.Endpoint + "/missing", "test-key");
+            ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
             ChatStreamingResponse ollamaChat = await ollamaClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse ollamaGeneration = await ollamaClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
@@ -883,8 +880,8 @@ namespace Test.Shared
             SharedAssert.Equal(404, ollamaGeneration.StatusCode, "Ollama streaming generation should preserve HTTP status.");
             SharedAssert.Equal(404, ollamaTool.StatusCode, "Ollama streaming tool chat should preserve HTTP status.");
 
-            using GeminiCompletionClient geminiClient = new GeminiCompletionClient(server.Endpoint + "/missing", "test-key");
-            geminiClient.Model = "test-model";
+            using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint + "/missing");
+            geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
             ChatStreamingResponse geminiChat = await geminiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse geminiGeneration = await geminiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
@@ -901,7 +898,7 @@ namespace Test.Shared
         private static async Task RunOpenAiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
@@ -945,7 +942,7 @@ namespace Test.Shared
         private static async Task RunOpenAiToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
@@ -1019,8 +1016,8 @@ namespace Test.Shared
         private static async Task RunOllamaToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest request = CreateWeatherToolRequest();
@@ -1062,8 +1059,8 @@ namespace Test.Shared
         private static async Task RunOllamaToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest request = CreateWeatherToolRequest();
@@ -1136,8 +1133,8 @@ namespace Test.Shared
         private static async Task RunGeminiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest request = CreateWeatherToolRequest();
@@ -1193,8 +1190,8 @@ namespace Test.Shared
         private static async Task RunGeminiToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest request = CreateWeatherToolRequest();
@@ -1296,7 +1293,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortOpenAiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ReasoningEffortLevel[] levels =
             {
@@ -1326,7 +1323,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortOpenAiToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
@@ -1342,8 +1339,8 @@ namespace Test.Shared
         private static async Task RunReasoningEffortInstanceDefaultAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
-            client.Defaults.ReasoningEffort = ReasoningEffort.High;
+            using OpenAiCompatibleClient client = CreateClient(server);
+            client.Defaults.Completion.ReasoningEffort = ReasoningEffort.High;
 
             ToolChatRequest request = CreateWeatherToolRequest();   // no per-request effort
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
@@ -1356,8 +1353,8 @@ namespace Test.Shared
         private static async Task RunReasoningEffortRequestOverridesInstanceAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
-            client.Defaults.ReasoningEffort = ReasoningEffort.Low;
+            using OpenAiCompatibleClient client = CreateClient(server);
+            client.Defaults.Completion.ReasoningEffort = ReasoningEffort.Low;
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
@@ -1371,8 +1368,8 @@ namespace Test.Shared
         private static async Task RunReasoningEffortGeminiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest high = CreateWeatherToolRequest();
@@ -1396,8 +1393,8 @@ namespace Test.Shared
         private static async Task RunReasoningEffortOllamaToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatRequest medium = CreateWeatherToolRequest();
@@ -1472,22 +1469,22 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key");
-            gemini.Model = "test-model";
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
+            gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
             ToolChatRequest geminiRequest = CreateWeatherToolRequest();
             (geminiRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
             ToolChatResponse geminiResponse = await gemini.ToolChatAsync(geminiRequest, token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Success, "Gemini tool chat with an overridden budget should succeed.");
 
-            using OpenAiCompletionClient openAi = CreateClient(server);
+            using OpenAiCompatibleClient openAi = CreateClient(server);
             ToolChatRequest openAiRequest = CreateWeatherToolRequest();
             (openAiRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
             ToolChatResponse openAiResponse = await openAi.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat with a Gemini-only override should succeed.");
 
-            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollama.Model = "test-model";
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
             ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
             (ollamaRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Minimal) { OllamaThink = "true" };
@@ -1535,18 +1532,18 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAi = CreateClient(server);
+            using OpenAiCompatibleClient openAi = CreateClient(server);
             ToolChatResponse openAiResponse = await openAi.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat without reasoning effort should succeed.");
 
-            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollama.Model = "test-model";
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
             ToolChatResponse ollamaResponse = await ollama.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama tool chat without reasoning effort should succeed.");
 
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key");
-            gemini.Model = "test-model";
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
+            gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
             ToolChatResponse geminiResponse = await gemini.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Success, "Gemini tool chat without reasoning effort should succeed.");
@@ -1591,7 +1588,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI reasoning chat should succeed.");
@@ -1602,7 +1599,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
             List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -1617,7 +1614,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -1633,8 +1630,8 @@ namespace Test.Shared
         private static async Task RunReasoningOllamaToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
@@ -1646,8 +1643,8 @@ namespace Test.Shared
         private static async Task RunReasoningOllamaChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
@@ -1661,8 +1658,8 @@ namespace Test.Shared
         private static async Task RunReasoningGeminiChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
@@ -1674,8 +1671,8 @@ namespace Test.Shared
         private static async Task RunReasoningGeminiChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
@@ -1691,18 +1688,18 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OpenAiCompletionClient openAi = CreateClient(server);
+            using OpenAiCompatibleClient openAi = CreateClient(server);
             ChatResponse openAiResponse = await openAi.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Reasoning == null, "OpenAI chat without reasoning should leave Reasoning null.");
 
-            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollama.Model = "test-model";
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
             ChatResponse ollamaResponse = await ollama.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Reasoning == null, "Ollama chat without reasoning should leave Reasoning null.");
 
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key");
-            gemini.Model = "test-model";
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
+            gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
             ChatResponse geminiResponse = await gemini.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Reasoning == null, "Gemini chat without reasoning should leave Reasoning null.");
@@ -1711,7 +1708,7 @@ namespace Test.Shared
         private static async Task RunReasoningEmptyIsNullAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatResponse response = await client.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "empty-reasoning response should succeed.");
@@ -1722,7 +1719,7 @@ namespace Test.Shared
         private static async Task RunReasoningNotResentAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -1750,7 +1747,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortAndCaptureTogetherAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatRequest request = CreateReasoningToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
@@ -1770,7 +1767,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI non-streaming reasoning tool chat should succeed.");
@@ -1781,7 +1778,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiChatFallbackAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatResponse response = await client.ChatAsync("reasonfallback please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI fallback reasoning chat should succeed.");
@@ -1791,7 +1788,7 @@ namespace Test.Shared
         private static async Task RunReasoningOpenAiMalformedAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatResponse response = await client.ChatAsync("reasonmalformed please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "a malformed reasoning field should not fail the response.");
@@ -1801,8 +1798,8 @@ namespace Test.Shared
         private static async Task RunReasoningOllamaChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
@@ -1814,8 +1811,8 @@ namespace Test.Shared
         private static async Task RunReasoningOllamaToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
@@ -1830,8 +1827,8 @@ namespace Test.Shared
         private static async Task RunReasoningGeminiToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
@@ -1843,8 +1840,8 @@ namespace Test.Shared
         private static async Task RunReasoningGeminiToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
@@ -1860,15 +1857,15 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
-            using OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "test-key");
-            ollama.Model = "test-model";
+            using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
+            ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
             ChatResponse ollamaResponse = await ollama.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
             SharedAssert.Equal("pong", ollamaResponse.Text, "Ollama empty-thinking response should still return text.");
             SharedAssert.True(ollamaResponse.Reasoning == null, "Ollama empty thinking should normalize to null.");
 
-            using GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "test-key");
-            gemini.Model = "test-model";
+            using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
+            gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
             ChatResponse geminiResponse = await gemini.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
             SharedAssert.Equal("pong", geminiResponse.Text, "Gemini empty-thought response should still return text.");
@@ -1878,7 +1875,7 @@ namespace Test.Shared
         private static async Task RunReasoningOnlyChunksCountMetricsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
             await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -1892,8 +1889,8 @@ namespace Test.Shared
         private static async Task RunGeminiMultipartTextAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatResponse response = await client.ChatAsync("multipart please", token: token).ConfigureAwait(false);
@@ -1905,9 +1902,9 @@ namespace Test.Shared
         private static async Task RunOpenAiEmbeddingGenerationModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
-            using OpenAiEmbeddingClient embeddingClient = new OpenAiEmbeddingClient(server.Endpoint, "test-key");
-            using OpenAiModelClient modelClient = new OpenAiModelClient(server.Endpoint, "test-key");
+            using OpenAiCompatibleClient client = CreateClient(server);
+            using OpenAiCompatibleClient embeddingClient = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            using OpenAiCompatibleClient modelClient = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
 
             OpenAiEmbeddingOptions embeddingOptions = new OpenAiEmbeddingOptions();
             embeddingOptions.Model = "embedding-model";
@@ -1923,7 +1920,7 @@ namespace Test.Shared
             SharedAssert.Equal(2, embeddings.Embeddings.Count, "OpenAI-compatible embedding response should parse both vectors.");
             SharedAssert.Equal(3, embeddings.Embeddings[0].Embedding.Length, "OpenAI-compatible embedding vector length should parse.");
 
-            OpenAiCompletionOptions generationOptions = new OpenAiCompletionOptions();
+            OpenAiCompatibleCompletionOptions generationOptions = new OpenAiCompatibleCompletionOptions();
             generationOptions.Model = "generation-model";
             generationOptions.MaxTokens = 17;
             generationOptions.Temperature = 0.4;
@@ -1955,11 +1952,11 @@ namespace Test.Shared
         private static async Task RunOllamaEmbeddingGenerationModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using OllamaClient client = new OllamaClient(server.Endpoint, "test-key");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
-            using OllamaEmbeddingClient embeddingClient = new OllamaEmbeddingClient(server.Endpoint, "test-key");
-            using OllamaModelClient modelClient = new OllamaModelClient(server.Endpoint, "test-key");
+            using OllamaClient embeddingClient = new OllamaClient(server.Endpoint, "test-key");
+            using OllamaClient modelClient = new OllamaClient(server.Endpoint, "test-key");
 
             OllamaEmbeddingOptions embeddingOptions = new OllamaEmbeddingOptions();
             embeddingOptions.Model = "embedding-model";
@@ -2024,11 +2021,11 @@ namespace Test.Shared
         private static async Task RunGeminiEmbeddingGenerationModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using GeminiCompletionClient client = new GeminiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            using GeminiClient client = new GeminiClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
-            using GeminiEmbeddingClient embeddingClient = new GeminiEmbeddingClient(server.Endpoint, "test-key");
-            using GeminiModelClient modelClient = new GeminiModelClient(server.Endpoint, "test-key");
+            using GeminiClient embeddingClient = new GeminiClient("test-key", server.Endpoint);
+            using GeminiClient modelClient = new GeminiClient("test-key", server.Endpoint);
 
             GeminiEmbeddingOptions embeddingOptions = new GeminiEmbeddingOptions();
             embeddingOptions.Model = "embedding-model";
@@ -2072,8 +2069,8 @@ namespace Test.Shared
         private static async Task RunHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint + "/missing", "test-key");
-            client.Model = "test-model";
+            using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint + "/missing", "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 500;
 
             ChatResponse response = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -2087,7 +2084,7 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
 
             client.TimeoutMs = 1;
             SharedAssert.Equal(1, client.TimeoutMs, "TimeoutMs should preserve 1ms values.");
@@ -2117,7 +2114,7 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
             using CancellationTokenSource preCancelled = new CancellationTokenSource();
             preCancelled.Cancel();
 
@@ -2129,7 +2126,7 @@ namespace Test.Shared
         private static async Task RunStreamingBodyTimeoutAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
             client.TimeoutMs = 100;
 
             ChatStreamingResponse streaming = await client.ChatStreamingAsync("hang stream", token: token).ConfigureAwait(false);
@@ -2161,7 +2158,7 @@ namespace Test.Shared
         private static async Task RunToolChatStreamingBodyTimeoutAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using OpenAiCompletionClient client = CreateClient(server);
+            using OpenAiCompatibleClient client = CreateClient(server);
             client.TimeoutMs = 100;
 
             ToolChatRequest request = CreateWeatherToolRequest();
@@ -2225,7 +2222,7 @@ namespace Test.Shared
         private static async Task RunAnthropicChatRequestTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             AnthropicCompletionOptions options = new AnthropicCompletionOptions();
             options.MaxTokens = 222;
@@ -2278,7 +2275,7 @@ namespace Test.Shared
         private static async Task RunAnthropicChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("normal stream", token: token).ConfigureAwait(false);
             List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -2305,7 +2302,7 @@ namespace Test.Shared
         private static async Task RunAnthropicGenerationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             AnthropicCompletionOptions options = new AnthropicCompletionOptions();
             options.Model = "generation-model";
@@ -2336,7 +2333,7 @@ namespace Test.Shared
         private static async Task RunAnthropicToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
@@ -2400,7 +2397,7 @@ namespace Test.Shared
         private static async Task RunAnthropicToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
@@ -2470,7 +2467,7 @@ namespace Test.Shared
         private static async Task RunAnthropicToolChoiceTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest required = CreateWeatherToolRequest();
             required.ToolChoice = "required";
@@ -2501,7 +2498,7 @@ namespace Test.Shared
         private static async Task RunAnthropicRequestModelOverrideAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).Model = "override-model";
@@ -2515,7 +2512,7 @@ namespace Test.Shared
         private static async Task RunAnthropicModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicModelClient client = new AnthropicModelClient(server.Endpoint, "test-key");
+            using AnthropicClient client = new AnthropicClient("test-key", server.Endpoint);
             client.TimeoutMs = 1000;
 
             List<ModelInformation> models = await GetModelsAsync(client, token).ConfigureAwait(false);
@@ -2548,7 +2545,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortAnthropicToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ReasoningEffortLevel[] levels =
             {
@@ -2589,7 +2586,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortAnthropicToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
@@ -2606,7 +2603,7 @@ namespace Test.Shared
         private static async Task RunReasoningEffortAnthropicOverrideAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Low) { AnthropicEffort = " XHIGH " };
@@ -2628,7 +2625,7 @@ namespace Test.Shared
         private static async Task RunReasoningAnthropicChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ChatResponse response = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic reasoning chat should succeed.");
@@ -2639,7 +2636,7 @@ namespace Test.Shared
         private static async Task RunReasoningAnthropicChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("reasoncapture stream", token: token).ConfigureAwait(false);
             List<ChatStreamingChunk> chunks = await ConsumeChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -2654,7 +2651,7 @@ namespace Test.Shared
         private static async Task RunReasoningAnthropicToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic non-streaming reasoning tool chat should succeed.");
@@ -2665,7 +2662,7 @@ namespace Test.Shared
         private static async Task RunReasoningAnthropicToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
@@ -2687,7 +2684,7 @@ namespace Test.Shared
         private static async Task RunAnthropicReasoningEmptyIsNullAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ChatResponse response = await client.ChatAsync("reasonempty please", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic empty-thinking response should succeed.");
@@ -2701,8 +2698,8 @@ namespace Test.Shared
         private static async Task RunAnthropicHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = new AnthropicCompletionClient(server.Endpoint + "/missing", "test-key");
-            client.Model = "test-model";
+            using AnthropicClient client = new AnthropicClient("test-key", server.Endpoint + "/missing");
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
             ChatResponse chat = await client.ChatAsync("fail", token: token).ConfigureAwait(false);
@@ -2725,7 +2722,7 @@ namespace Test.Shared
         private static async Task RunAnthropicRefusalStopReasonAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
 
             ToolChatRequest request = new ToolChatRequest();
             request.Messages.Add(ChatMessage.User("refuse please"));
@@ -2744,7 +2741,7 @@ namespace Test.Shared
         private static async Task RunAnthropicStreamingBodyTimeoutAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AnthropicCompletionClient client = CreateAnthropicClient(server);
+            using AnthropicClient client = CreateAnthropicClient(server);
             client.TimeoutMs = 100;
 
             ChatStreamingResponse streaming = await client.ChatStreamingAsync("hang stream", token: token).ConfigureAwait(false);
@@ -2798,7 +2795,7 @@ namespace Test.Shared
         private static async Task RunVoyageAiEmbeddingTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiEmbeddingClient client = CreateVoyageAiClient(server);
+            using VoyageAiClient client = CreateVoyageAiClient(server);
 
             VoyageAiEmbeddingOptions options = new VoyageAiEmbeddingOptions();
             options.Model = "voyage-3-large";
@@ -2879,14 +2876,14 @@ namespace Test.Shared
         private static async Task RunVoyageAiValidateConnectivityAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiEmbeddingClient client = CreateVoyageAiClient(server);
+            using VoyageAiClient client = CreateVoyageAiClient(server);
 
             bool ok = await client.ValidateConnectivityAsync(token).ConfigureAwait(false);
             SharedAssert.True(ok, "VoyageAI connectivity validation should succeed against the local server.");
             SharedAssert.Equal("/v1/embeddings", server.RequestPaths[0], "VoyageAI connectivity validation should probe the embeddings endpoint.");
 
-            using VoyageAiEmbeddingClient badClient = new VoyageAiEmbeddingClient(server.Endpoint + "/missing", "test-key");
-            badClient.Model = "voyage-test";
+            using VoyageAiClient badClient = new VoyageAiClient("test-key", server.Endpoint + "/missing");
+            badClient.Defaults.Embedding.Model = "voyage-test";
             badClient.TimeoutMs = 1000;
             bool badResult = await badClient.ValidateConnectivityAsync(token).ConfigureAwait(false);
             SharedAssert.False(badResult, "VoyageAI connectivity validation should fail against an unreachable path.");
@@ -2895,8 +2892,8 @@ namespace Test.Shared
         private static async Task RunVoyageAiHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiEmbeddingClient client = new VoyageAiEmbeddingClient(server.Endpoint + "/missing", "test-key");
-            client.Model = "voyage-test";
+            using VoyageAiClient client = new VoyageAiClient("test-key", server.Endpoint + "/missing");
+            client.Defaults.Embedding.Model = "voyage-test";
             client.TimeoutMs = 1000;
 
             EmbeddingResponse response = await client.EmbedAsync("fail", token: token).ConfigureAwait(false);
@@ -2910,7 +2907,7 @@ namespace Test.Shared
             token.ThrowIfCancellationRequested();
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiEmbeddingClient client = CreateVoyageAiClient(server);
+            using VoyageAiClient client = CreateVoyageAiClient(server);
 
             using CancellationTokenSource embedCancelled = new CancellationTokenSource();
             embedCancelled.Cancel();
@@ -2931,18 +2928,18 @@ namespace Test.Shared
                 "VoyageAI ValidateConnectivityAsync should propagate cancellation.").ConfigureAwait(false);
         }
 
-        private static VoyageAiEmbeddingClient CreateVoyageAiClient(LocalOpenAiTestServer server)
+        private static VoyageAiClient CreateVoyageAiClient(LocalOpenAiTestServer server)
         {
-            VoyageAiEmbeddingClient client = new VoyageAiEmbeddingClient(server.Endpoint, "test-key");
-            client.Model = "voyage-test";
+            VoyageAiClient client = new VoyageAiClient("test-key", server.Endpoint);
+            client.Defaults.Embedding.Model = "voyage-test";
             client.TimeoutMs = 1000;
             return client;
         }
 
-        private static AnthropicCompletionClient CreateAnthropicClient(LocalOpenAiTestServer server)
+        private static AnthropicClient CreateAnthropicClient(LocalOpenAiTestServer server)
         {
-            AnthropicCompletionClient client = new AnthropicCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            AnthropicClient client = new AnthropicClient("test-key", server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
             return client;
         }
@@ -2992,9 +2989,9 @@ namespace Test.Shared
 
         // ================= Azure OpenAI =================
 
-        private static AzureOpenAiCompletionClient CreateAzureClient(LocalOpenAiTestServer server)
+        private static AzureOpenAiClient CreateAzureClient(LocalOpenAiTestServer server)
         {
-            AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", "test-key", apiVersion: "2024-10-21");
+            AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-deployment" } } };
             client.TimeoutMs = 1000;
             return client;
         }
@@ -3002,23 +2999,24 @@ namespace Test.Shared
         private static async Task RunAzureChatTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = CreateAzureClient(server);
+            using AzureOpenAiClient client = CreateAzureClient(server);
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(chat.Success, "Azure chat should succeed.");
             SharedAssert.Equal("pong", chat.Text, "Azure chat should return the local response.");
 
             string url = client.CallDetails[0].Url ?? string.Empty;
-            SharedAssert.True(url.Contains("/openai/deployments/test-deployment/chat/completions", StringComparison.Ordinal), "Azure chat should route by deployment.");
-            SharedAssert.True(url.Contains("api-version=2024-10-21", StringComparison.Ordinal), "Azure chat should include the api-version query.");
+            SharedAssert.True(url.EndsWith("/openai/v1/responses", StringComparison.Ordinal), "Azure chat should use the v1 Responses route: " + url);
+            SharedAssert.False(url.Contains("api-version", StringComparison.Ordinal), "The v1 API needs no api-version.");
             SharedAssert.NotNull(FindHeader(client.CallDetails[0], "api-key"), "Azure chat should send the api-key header.");
-            SharedAssert.True(server.RequestPaths[0].Contains("/openai/deployments/test-deployment/chat/completions", StringComparison.Ordinal), "Azure chat should hit the deployment path.");
+            using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(server.RequestBodies[0]);
+            SharedAssert.Equal("test-deployment", body.RootElement.GetProperty("model").GetString(), "The deployment name is sent as model.");
         }
 
         private static async Task RunAzureEmbeddingsTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiEmbeddingClient client = new AzureOpenAiEmbeddingClient(server.Endpoint, "test-embedding-deployment", "test-key", apiVersion: "2024-10-21");
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "test-key") { Defaults = { Embedding = { Model = "test-embedding-deployment" } } };
             client.TimeoutMs = 1000;
 
             EmbeddingResponse embed = await client.EmbedAsync(new List<string> { "a", "b" }, token: token).ConfigureAwait(false);
@@ -3026,19 +3024,19 @@ namespace Test.Shared
             SharedAssert.Equal(2, embed.Embeddings.Count, "Azure embeddings should return both vectors.");
 
             string url = client.CallDetails[0].Url ?? string.Empty;
-            SharedAssert.True(url.Contains("/openai/deployments/test-embedding-deployment/embeddings", StringComparison.Ordinal), "Azure embeddings should route by the embedding deployment.");
-            SharedAssert.True(url.Contains("api-version=2024-10-21", StringComparison.Ordinal), "Azure embeddings should include the api-version query.");
+            SharedAssert.True(url.EndsWith("/openai/v1/embeddings", StringComparison.Ordinal), "Azure embeddings should use the v1 route: " + url);
             SharedAssert.NotNull(FindHeader(client.CallDetails[0], "api-key"), "Azure embeddings should send the api-key header.");
+            SharedAssert.True(server.RequestBodies[0].Contains("\"model\":\"test-embedding-deployment\"", StringComparison.Ordinal), "The embedding deployment is sent as model.");
 
             EmbeddingResponse other = await client.EmbedAsync("c", new EmbeddingOptions { Model = "other-deployment" }, token).ConfigureAwait(false);
             SharedAssert.True(other.Success, "Azure embeddings with a per-call deployment should succeed.");
-            SharedAssert.True((client.CallDetails[1].Url ?? string.Empty).Contains("/openai/deployments/other-deployment/embeddings", StringComparison.Ordinal), "A per-call model should select another Azure deployment.");
+            SharedAssert.True(server.RequestBodies[1].Contains("\"model\":\"other-deployment\"", StringComparison.Ordinal), "A per-call model should select another Azure deployment.");
         }
 
         private static async Task RunAzureToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = CreateAzureClient(server);
+            using AzureOpenAiClient client = CreateAzureClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Azure streaming tool chat should start.");
@@ -3054,36 +3052,37 @@ namespace Test.Shared
         private static async Task RunAzureApiVersionAndAuthHeaderAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", "secret-key", apiVersion: "2099-01-01");
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, "secret-key") { Defaults = { Completion = { Model = "test-deployment" } } };
             WireCapture.Full(client);
             client.TimeoutMs = 1000;
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
-            SharedAssert.True(chat.Success, "Azure chat should succeed with a custom api-version.");
+            SharedAssert.True(chat.Success, "Azure chat should succeed.");
 
             string url = client.CallDetails[0].Url ?? string.Empty;
-            SharedAssert.True(url.Contains("api-version=2099-01-01", StringComparison.Ordinal), "Azure should send the configured api-version.");
+            SharedAssert.False(url.Contains("api-version", StringComparison.Ordinal), "The v1 API sends no api-version.");
             SharedAssert.Equal("secret-key", FindHeader(client.CallDetails[0], "api-key"), "Azure should send the api-key header value.");
         }
 
         private static async Task RunAzureReasoningEffortPassthroughAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = CreateAzureClient(server);
+            using AzureOpenAiClient client = CreateAzureClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Azure reasoning tool chat should succeed.");
 
-            SharedAssert.True(server.RequestBodies[0].Contains("\"reasoning_effort\"", StringComparison.Ordinal), "Azure should pass reasoning_effort through to the wire.");
-            SharedAssert.True(server.RequestBodies[0].Contains("high", StringComparison.Ordinal), "Azure should send the resolved reasoning effort value.");
+            using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(server.RequestBodies[0]);
+            SharedAssert.Equal("high", body.RootElement.GetProperty("reasoning").GetProperty("effort").GetString(), "Azure should send reasoning.effort on the wire.");
+            SharedAssert.Equal("high", response.AppliedReasoningEffort, "The applied effort is reported.");
         }
 
         private static async Task RunAzureAadBearerAuthAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", new StaticTokenCredential("aad-token"), apiVersion: "2024-10-21");
+            using AzureOpenAiClient client = new AzureOpenAiClient(server.Endpoint, new StaticTokenCredential("aad-token")) { Defaults = { Completion = { Model = "test-deployment" } } };
             WireCapture.Full(client);
             client.TimeoutMs = 1000;
 
@@ -3099,22 +3098,18 @@ namespace Test.Shared
         private static async Task RunAzureMissingCredentialsErrorAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using AzureOpenAiCompletionClient client = new AzureOpenAiCompletionClient(server.Endpoint, "test-deployment", apiKey: string.Empty, apiVersion: "2024-10-21");
-            client.TimeoutMs = 1000;
-
-            ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
-            SharedAssert.False(chat.Success, "Azure chat without credentials should fail.");
-            SharedAssert.Equal(401, chat.StatusCode ?? 0, "Azure chat without credentials should surface HTTP 401.");
-            SharedAssert.NotEmpty(chat.Error, "Azure chat without credentials should surface an error message.");
+            // 4.0 validates the key at construction: a blank key fails fast instead of reaching Azure.
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => { new AzureOpenAiClient(server.Endpoint, string.Empty).Dispose(); return Task.CompletedTask; }, "A blank Azure key should throw.").ConfigureAwait(false);
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => { new AzureOpenAiClient(server.Endpoint, "https://my-resource.openai.azure.com").Dispose(); return Task.CompletedTask; }, "A URL-shaped Azure key should throw.").ConfigureAwait(false);
+            SharedAssert.Equal(0, server.RequestPaths.Count, "No request should be sent.");
         }
 
         // ================= Google Vertex AI =================
 
-        private static VertexAiCompletionClient CreateVertexClient(LocalOpenAiTestServer server, ICredentialProvider? credential = null)
+        private static VertexAiClient CreateVertexClient(LocalOpenAiTestServer server, ICredentialProvider? credential = null)
         {
-            VertexAiCompletionClient client = new VertexAiCompletionClient(
-                "test-project", "us-central1", credential ?? new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
-            client.Model = "test-model";
+            VertexAiClient client = new VertexAiClient("test-project", "us-central1", credential ?? new StaticTokenCredential("vertex-token"), server.Endpoint);
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
             return client;
         }
@@ -3122,7 +3117,7 @@ namespace Test.Shared
         private static async Task RunVertexGenerateContentTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiCompletionClient client = CreateVertexClient(server);
+            using VertexAiClient client = CreateVertexClient(server);
             WireCapture.Full(client);
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -3138,10 +3133,10 @@ namespace Test.Shared
         private static async Task RunVertexPredictEmbeddingsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiEmbeddingClient client = new VertexAiEmbeddingClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), endpoint: server.Endpoint);
+            using VertexAiClient client = new VertexAiClient("test-project", "us-central1", new StaticTokenCredential("vertex-token"), server.Endpoint);
             WireCapture.Full(client);
             client.TimeoutMs = 1000;
-            SharedAssert.Equal("text-embedding-005", client.Model, "Vertex embedding client should default to text-embedding-005.");
+            SharedAssert.Equal("gemini-embedding-001", client.Defaults.Embedding.Model, "Vertex embedding client should default to gemini-embedding-001 (text-embedding-005 is no longer listed).");
 
             EmbeddingResponse embed = await client.EmbedAsync(new List<string> { "a", "b" }, token: token).ConfigureAwait(false);
             SharedAssert.True(embed.Success, "Vertex embeddings should succeed.");
@@ -3149,14 +3144,14 @@ namespace Test.Shared
 
             SharedAssert.True(server.RequestPaths[0].EndsWith(":predict", StringComparison.Ordinal), "Vertex embeddings should hit the :predict endpoint.");
             SharedAssert.True(server.RequestBodies[0].Contains("\"instances\"", StringComparison.Ordinal), "Vertex embeddings should send an instances body.");
-            SharedAssert.True(server.RequestPaths[0].Contains("/publishers/google/models/text-embedding-005:predict", StringComparison.Ordinal), "Vertex embeddings should route to the embedding model.");
+            SharedAssert.True(server.RequestPaths[0].Contains("/publishers/google/models/gemini-embedding-001:predict", StringComparison.Ordinal), "Vertex embeddings should route to the embedding model.");
             SharedAssert.True((FindHeader(client.CallDetails[0], "Authorization") ?? string.Empty).StartsWith("Bearer vertex-token", StringComparison.Ordinal), "Vertex embeddings should attach the bearer token.");
         }
 
         private static async Task RunVertexToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiCompletionClient client = CreateVertexClient(server);
+            using VertexAiClient client = CreateVertexClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Vertex streaming tool chat should start.");
@@ -3173,7 +3168,7 @@ namespace Test.Shared
         private static async Task RunVertexOAuthBearerAttachedAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiCompletionClient client = CreateVertexClient(server);
+            using VertexAiClient client = CreateVertexClient(server);
             WireCapture.Full(client);
 
             await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -3190,7 +3185,7 @@ namespace Test.Shared
         private static async Task RunVertexReasoningThinkingBudgetAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VertexAiCompletionClient client = CreateVertexClient(server);
+            using VertexAiClient client = CreateVertexClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Medium;
@@ -3202,12 +3197,9 @@ namespace Test.Shared
 
         // ================= AWS Bedrock =================
 
-        private static BedrockCompletionClient CreateBedrockClient(LocalOpenAiTestServer server, string endpointSuffix = "")
+        private static BedrockClient CreateBedrockClient(LocalOpenAiTestServer server, string endpointSuffix = "")
         {
-            BedrockCompletionClient client = new BedrockCompletionClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint + endpointSuffix);
+            BedrockClient client = new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint + endpointSuffix) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } };
             client.TimeoutMs = 1000;
             return client;
         }
@@ -3215,7 +3207,7 @@ namespace Test.Shared
         private static async Task RunBedrockConverseTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(chat.Success, "Bedrock chat should succeed.");
@@ -3229,7 +3221,7 @@ namespace Test.Shared
         private static async Task RunBedrockSigV4SignatureShapeAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
             WireCapture.Full(client);
 
             await client.ChatAsync("hello", token: token).ConfigureAwait(false);
@@ -3248,7 +3240,7 @@ namespace Test.Shared
         private static async Task RunBedrockToolUseAssemblyAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
 
             ToolChatResponse response = await client.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Bedrock tool chat should succeed.");
@@ -3270,7 +3262,7 @@ namespace Test.Shared
         private static async Task RunBedrockConverseStreamEventFramesAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Bedrock streaming chat should start.");
@@ -3291,7 +3283,7 @@ namespace Test.Shared
         private static async Task RunBedrockToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Bedrock streaming tool chat should start.");
@@ -3310,12 +3302,9 @@ namespace Test.Shared
         private static async Task RunBedrockTitanEmbeddingsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockEmbeddingClient client = new BedrockEmbeddingClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint);
+            using BedrockClient client = new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } };
             client.TimeoutMs = 1000;
-            SharedAssert.Equal("amazon.titan-embed-text-v2:0", client.Model, "Bedrock embedding client should default to Titan v2.");
+            SharedAssert.Equal("amazon.titan-embed-text-v2:0", client.Defaults.Embedding.Model, "Bedrock embedding client should default to Titan v2.");
 
             EmbeddingOptions options = new EmbeddingOptions { Model = "amazon.titan-embed-text-v2:0" };
             EmbeddingResponse embed = await client.EmbedAsync("hello", options, token).ConfigureAwait(false);
@@ -3334,10 +3323,7 @@ namespace Test.Shared
         private static async Task RunBedrockCohereEmbeddingsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockEmbeddingClient client = new BedrockEmbeddingClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint);
+            using BedrockClient client = new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } };
             client.TimeoutMs = 1000;
 
             BedrockEmbeddingOptions options = new BedrockEmbeddingOptions { Model = "cohere.embed-english-v3", InputType = "search_document" };
@@ -3351,7 +3337,7 @@ namespace Test.Shared
         private static async Task RunBedrockReasoningConverseAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server);
+            using BedrockClient client = CreateBedrockClient(server);
 
             ToolChatRequest request = new ToolChatRequest();
             request.Messages.Add(ChatMessage.User("reasoncapture please decide the weather"));
@@ -3367,7 +3353,7 @@ namespace Test.Shared
         private static async Task RunBedrockHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient client = CreateBedrockClient(server, endpointSuffix: "/wrong");
+            using BedrockClient client = CreateBedrockClient(server, endpointSuffix: "/wrong");
 
             ChatResponse chat = await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             SharedAssert.False(chat.Success, "Bedrock chat against a bad path should fail.");
@@ -3492,7 +3478,7 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             CountingTokenCredential credential = new CountingTokenCredential();
-            using VertexAiCompletionClient client = CreateVertexClient(server, credential);
+            using VertexAiClient client = CreateVertexClient(server, credential);
 
             await client.ChatAsync("hello", token: token).ConfigureAwait(false);
             await client.ChatAsync("again", token: token).ConfigureAwait(false);
@@ -3552,10 +3538,10 @@ namespace Test.Shared
             }
         }
 
-        private static OpenAiCompletionClient CreateClient(LocalOpenAiTestServer server)
+        private static OpenAiCompatibleClient CreateClient(LocalOpenAiTestServer server)
         {
-            OpenAiCompletionClient client = new OpenAiCompletionClient(server.Endpoint, "test-key");
-            client.Model = "test-model";
+            OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
+            client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
             return client;
         }
@@ -3599,7 +3585,7 @@ namespace Test.Shared
             };
         }
 
-        private static async Task<List<ModelInformation>> GetModelsAsync(ModelClientBase client, CancellationToken token)
+        private static async Task<List<ModelInformation>> GetModelsAsync(ProviderClientBase client, CancellationToken token)
         {
             List<ModelInformation> models = new List<ModelInformation>();
 

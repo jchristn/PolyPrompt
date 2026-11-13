@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="CodexAgentClient"/>: the shared harness kit plus model listing, session resume, and
+    /// Fake-CLI cases for <see cref="CodexClient"/>: the shared harness kit plus model listing, session resume, and
     /// the permission mapping.
     /// </summary>
     internal static class LocalCodexAgentCases
@@ -20,7 +20,7 @@ namespace Test.Shared
                 {
                     Id = "codex",
                     ExecutableName = "codex",
-                    Create = () => new CodexAgentClient(),
+                    Create = () => new CodexClient(),
                     HappyScenario = "codex-happy",
                     ErrorExitScenario = "codex-error-exit",
                     StderrOnlyScenario = "codex-stderr-only",
@@ -105,7 +105,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                CodexAgentClient codex = (CodexAgentClient)client;
+                CodexClient codex = (CodexClient)client;
                 List<ModelInformation> models = new List<ModelInformation>();
                 await foreach (ModelInformation model in codex.ListModelsAsync(token).ConfigureAwait(false)) models.Add(model);
 

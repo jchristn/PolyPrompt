@@ -17,7 +17,7 @@ namespace Test.Shared
         private static readonly Dictionary<string, HashSet<string>> _Capabilities = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal)
         {
             { "ollama", new HashSet<string> { "completion", "embedding", "models" } },
-            { "xai", new HashSet<string> { "completion", "embedding", "models" } },
+            { "xai", new HashSet<string> { "completion", "models" } },
             { "openai", new HashSet<string> { "completion", "embedding", "models" } },
             { "azure", new HashSet<string> { "completion", "embedding", "models" } },
             { "gemini", new HashSet<string> { "completion", "embedding", "models" } },
@@ -127,7 +127,7 @@ namespace Test.Shared
                 skip = true;
                 reason = configuration.ProviderType + " has no " + capability + " client.";
             }
-            else if (capability == "embedding" && (configuration.ProviderType == "azure" || configuration.ProviderType == "xai") && string.IsNullOrEmpty(configuration.EmbeddingModel))
+            else if (capability == "embedding" && configuration.ProviderType == "azure" && string.IsNullOrEmpty(configuration.EmbeddingModel))
             {
                 skip = true;
                 reason = "No embedding model/deployment is configured.";
@@ -150,7 +150,7 @@ namespace Test.Shared
 
             if (provider.Completion != null && configuration.ProviderType != "azure")
             {
-                string model = provider.Completion.Model!;
+                string model = provider.Completion.Defaults.Completion!.Model!;
                 SharedAssert.True(availableModels.Exists(name => ModelNameMatches(name, model)), "Inference model '" + model + "' should be listed.");
             }
 
@@ -185,30 +185,30 @@ namespace Test.Shared
 
             if (provider.Completion != null)
             {
-                CompletionClientBase client = provider.Completion;
-                string originalModel = client.Model!;
+                ProviderClientBase client = provider.Completion;
+                string originalModel = client.Defaults.Completion.Model!;
                 SharedAssert.NotEmpty(originalModel, "Completion Model should have a default value.");
-                client.Model = "test-model";
-                SharedAssert.Equal("test-model", client.Model, "Completion Model setter should work.");
-                SharedAssert.Equal("test-model", client.Defaults.Model, "Completion Model should be stored in Defaults.Model.");
-                client.Model = originalModel;
+                client.Defaults.Completion.Model = "test-model";
+                SharedAssert.Equal("test-model", client.Defaults.Completion.Model, "Completion Model setter should work.");
+                SharedAssert.Equal("test-model", client.Defaults.Completion.Model, "Completion Model should be stored in Defaults.Model.");
+                client.Defaults.Completion.Model = originalModel;
 
-                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Model = string.Empty; return Task.CompletedTask; }, "Model should reject empty string.").ConfigureAwait(false);
-                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Model = "   "; return Task.CompletedTask; }, "Model should reject whitespace.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Defaults.Completion.Model = string.Empty; return Task.CompletedTask; }, "Model should reject empty string.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Defaults.Completion.Model = "   "; return Task.CompletedTask; }, "Model should reject whitespace.").ConfigureAwait(false);
 
-                client.Defaults.MaxTokens = -1;
-                SharedAssert.Equal(1, client.Defaults.MaxTokens, "MaxTokens should clamp to minimum 1.");
-                client.Defaults.MaxTokens = 20_000_000;
-                SharedAssert.Equal(10_000_000, client.Defaults.MaxTokens, "MaxTokens should clamp to maximum 10,000,000.");
-                client.Defaults.Temperature = 5.0;
-                SharedAssert.Equal(2.0, client.Defaults.Temperature, "Temperature should clamp to 2.0.");
-                client.Defaults.Temperature = null;
-                SharedAssert.True(client.Defaults.Temperature == null, "Temperature should be nullable.");
-                client.Defaults.TopP = 1.5;
-                SharedAssert.Equal(1.0, client.Defaults.TopP, "TopP should clamp to 1.0.");
-                client.Defaults.TopP = null;
+                client.Defaults.Completion.MaxTokens = -1;
+                SharedAssert.Equal(1, client.Defaults.Completion.MaxTokens, "MaxTokens should clamp to minimum 1.");
+                client.Defaults.Completion.MaxTokens = 20_000_000;
+                SharedAssert.Equal(10_000_000, client.Defaults.Completion.MaxTokens, "MaxTokens should clamp to maximum 10,000,000.");
+                client.Defaults.Completion.Temperature = 5.0;
+                SharedAssert.Equal(2.0, client.Defaults.Completion.Temperature, "Temperature should clamp to 2.0.");
+                client.Defaults.Completion.Temperature = null;
+                SharedAssert.True(client.Defaults.Completion.Temperature == null, "Temperature should be nullable.");
+                client.Defaults.Completion.TopP = 1.5;
+                SharedAssert.Equal(1.0, client.Defaults.Completion.TopP, "TopP should clamp to 1.0.");
+                client.Defaults.Completion.TopP = null;
 
-                if (client.Defaults is OllamaCompletionOptions ollama)
+                if (client.Defaults.Completion is OllamaCompletionOptions ollama)
                 {
                     ollama.ContextLength = -1;
                     SharedAssert.Equal(1, ollama.ContextLength, "Ollama ContextLength should clamp to 1.");
@@ -221,8 +221,8 @@ namespace Test.Shared
         private static async Task RunChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
-            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+            ProviderClientBase client = provider.Completion!;
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             ChatResponse response = await client.ChatAsync("Say hello in exactly three words.", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Chat should succeed. " + response.Error);
@@ -232,11 +232,11 @@ namespace Test.Shared
             SharedAssert.True(response.OverallRuntimeMs > 0, "Chat runtime should be populated.");
             SharedAssert.True(response.Error == null, "Chat should not return an error.");
 
-            client.Defaults.SystemPrompt = "You are a pirate. Always respond with 'Arrr'.";
+            client.Defaults.Completion.SystemPrompt = "You are a pirate. Always respond with 'Arrr'.";
             ChatResponse systemPromptResponse = await client.ChatAsync("Hello", token: token).ConfigureAwait(false);
             SharedAssert.True(systemPromptResponse.Success, "Chat with a default system prompt should succeed. " + systemPromptResponse.Error);
             SharedAssert.NotEmpty(systemPromptResponse.Text, "Chat with a default system prompt should return text.");
-            client.Defaults.SystemPrompt = null;
+            client.Defaults.Completion.SystemPrompt = null;
 
             CompletionOptions chatOptions = CreateCompletionOptions(configuration.ProviderType);
             ChatResponse optionsResponse = await client.ChatAsync("Say exactly: test options work", chatOptions, token).ConfigureAwait(false);
@@ -261,8 +261,8 @@ namespace Test.Shared
         private static async Task RunChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
-            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+            ProviderClientBase client = provider.Completion!;
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             ChatStreamingResponse stream = await client.ChatStreamingAsync("Count from 1 to 5, one number per line.", token: token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Streaming chat should start successfully. " + stream.Error);
@@ -298,7 +298,7 @@ namespace Test.Shared
         private static async Task RunToolChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
+            ProviderClientBase client = provider.Completion!;
             ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
@@ -328,7 +328,7 @@ namespace Test.Shared
         private static async Task RunToolChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
+            ProviderClientBase client = provider.Completion!;
             ToolChatRequest request = CreateWeatherToolRequest(configuration);
 
             ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
@@ -368,7 +368,7 @@ namespace Test.Shared
         private static async Task RunToolResultShapesAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
+            ProviderClientBase client = provider.Completion!;
 
             foreach (string result in new[] { "[{\"city\":\"Seattle\",\"temperature\":72}]", "It is 72 degrees and clear in Seattle." })
             {
@@ -392,8 +392,8 @@ namespace Test.Shared
         private static async Task RunGenerationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
-            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+            ProviderClientBase client = provider.Completion!;
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             GenerationResponse response = await client.GenerateAsync("Once upon a time, there was a", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Generation should succeed. " + response.Error);
@@ -409,8 +409,8 @@ namespace Test.Shared
         private static async Task RunGenerationStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            CompletionClientBase client = provider.Completion!;
-            client.Defaults.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
+            ProviderClientBase client = provider.Completion!;
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 128);
 
             GenerationStreamingResponse stream = await client.GenerateStreamingAsync("Write a haiku about the sea.", token: token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Streaming generation should start successfully. " + stream.Error);
@@ -433,7 +433,7 @@ namespace Test.Shared
         private static async Task RunEmbeddingSingleTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            EmbeddingClientBase client = provider.Embedding!;
+            ProviderClientBase client = provider.Embedding!;
 
             if (configuration.ProviderType == "tei" && !await TeiServesAsync(provider, "embedding", token).ConfigureAwait(false))
             {
@@ -463,7 +463,7 @@ namespace Test.Shared
         private static async Task RunEmbeddingBatchTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            EmbeddingClientBase client = provider.Embedding!;
+            ProviderClientBase client = provider.Embedding!;
 
             if (configuration.ProviderType == "tei" && !await TeiServesAsync(provider, "embedding", token).ConfigureAwait(false))
             {
@@ -489,7 +489,7 @@ namespace Test.Shared
         private static async Task RunSparseEmbeddingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            SparseEmbeddingClientBase client = provider.SparseEmbedding!;
+            ProviderClientBase client = provider.SparseEmbedding!;
 
             SparseEmbeddingResponse response = await client.EmbedSparseAsync(new List<string> { "sparse lexical retrieval", "second input" }, null, token).ConfigureAwait(false);
             if (!response.Success)
@@ -507,7 +507,7 @@ namespace Test.Shared
         private static async Task RunRerankTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            RerankClientBase client = provider.Rerank!;
+            ProviderClientBase client = provider.Rerank!;
 
             List<string> documents = new List<string>
             {
@@ -547,7 +547,7 @@ namespace Test.Shared
         private static async Task RunClassifyTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            ClassificationClientBase client = provider.Classification!;
+            ProviderClientBase client = provider.Classification!;
             List<string> inputs = new List<string> { "I absolutely love this product, it is wonderful!", "This is the worst purchase I have ever made." };
 
             // TEI /predict works for classifier models and for rerankers (single-label cross-encoders), and is rejected
@@ -582,7 +582,7 @@ namespace Test.Shared
         private static async Task RunDecisionTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            DecisionClientBase client = provider.Decision!;
+            ProviderClientBase client = provider.Decision!;
 
             DecisionRequest request = CreateTicketDecision("I was charged twice for my order last week and I need my money back today or I am cancelling my account.");
             DecisionResponse response = await client.DecideAsync(request, null, token).ConfigureAwait(false);
@@ -609,7 +609,7 @@ namespace Test.Shared
         private static async Task RunDecisionBatchTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            DecisionClientBase client = provider.Decision!;
+            ProviderClientBase client = provider.Decision!;
 
             List<DecisionRequest> requests = new List<DecisionRequest>
             {
@@ -683,11 +683,11 @@ namespace Test.Shared
         private static async Task RunModelExistsTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            ModelClientBase models = provider.Models!;
+            ProviderClientBase models = provider.Models!;
 
             string existing = configuration.ProviderType == "tei" || configuration.ProviderType == "azure"
                 ? (await GetModelsAsync(models, token).ConfigureAwait(false))[0].Name
-                : provider.Completion?.Model ?? provider.Embedding!.Model!;
+                : provider.Completion?.Defaults.Completion?.Model ?? provider.Embedding!.Defaults.Embedding!.Model!;
 
             SharedAssert.True(await models.ModelExistsAsync(existing, token).ConfigureAwait(false), "Model '" + existing + "' should exist.");
             SharedAssert.False(await models.ModelExistsAsync(BogusModel, token).ConfigureAwait(false), "A nonexistent model should return false.");
@@ -697,11 +697,11 @@ namespace Test.Shared
         private static async Task RunGetModelInformationTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            ModelClientBase models = provider.Models!;
+            ProviderClientBase models = provider.Models!;
 
             string existing = configuration.ProviderType == "tei" || configuration.ProviderType == "azure"
                 ? (await GetModelsAsync(models, token).ConfigureAwait(false))[0].Name
-                : provider.Completion?.Model ?? provider.Embedding!.Model!;
+                : provider.Completion?.Defaults.Completion?.Model ?? provider.Embedding!.Defaults.Embedding!.Model!;
 
             ModelInformation? info = await models.GetModelInformationAsync(existing, token).ConfigureAwait(false);
             SharedAssert.NotNull(info, "Model information for '" + existing + "' should be found.");
@@ -714,11 +714,11 @@ namespace Test.Shared
         private static async Task RunPullModelTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            OllamaModelClient models = (OllamaModelClient)provider.Models!;
+            OllamaClient models = (OllamaClient)provider.Models!;
 
             List<string> statusMessages = new List<string>();
             bool pullResult = await models.PullModelAsync(
-                provider.Completion!.Model!,
+                provider.Completion!.Defaults.Completion!.Model!,
                 progress =>
                 {
                     statusMessages.Add(progress.Status);
@@ -733,7 +733,7 @@ namespace Test.Shared
         private static async Task RunDeleteModelTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
-            OllamaModelClient models = (OllamaModelClient)provider.Models!;
+            OllamaClient models = (OllamaClient)provider.Models!;
 
             SharedAssert.False(await models.DeleteModelAsync(BogusModel, token).ConfigureAwait(false), "Deleting a nonexistent Ollama model should return false.");
             SharedAssert.True(models.CallDetails.Any(d => d.Method == "DELETE"), "The delete request should be recorded.");
@@ -873,7 +873,7 @@ namespace Test.Shared
             return configuration.ProviderType != "anthropic" && configuration.ProviderType != "bedrock";
         }
 
-        private static async Task<List<ModelInformation>> GetModelsAsync(ModelClientBase client, CancellationToken token)
+        private static async Task<List<ModelInformation>> GetModelsAsync(ProviderClientBase client, CancellationToken token)
         {
             List<ModelInformation> models = new List<ModelInformation>();
             await foreach (ModelInformation model in client.ListModelsAsync(token).ConfigureAwait(false))
@@ -883,7 +883,7 @@ namespace Test.Shared
             return models;
         }
 
-        private static async Task<List<string>> GetModelNamesAsync(ModelClientBase client, CancellationToken token)
+        private static async Task<List<string>> GetModelNamesAsync(ProviderClientBase client, CancellationToken token)
         {
             return (await GetModelsAsync(client, token).ConfigureAwait(false)).Select(model => model.Name).ToList();
         }
@@ -897,7 +897,7 @@ namespace Test.Shared
                     return new OllamaCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40, RepeatPenalty = 1.1, Seed = 42 };
                 case "openai":
                 case "azure":
-                    return new OpenAiCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, FrequencyPenalty = 0.0, PresencePenalty = 0.0, Seed = 42 };
+                    return new OpenAiCompatibleCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, FrequencyPenalty = 0.0, PresencePenalty = 0.0, Seed = 42 };
                 case "gemini":
                 case "vertex":
                     return new GeminiCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40 };

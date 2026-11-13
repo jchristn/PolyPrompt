@@ -99,11 +99,11 @@ namespace Test.Shared
             SharedAssert.True(nullable.TopN == null, "RerankOptions.TopN should accept null.");
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<RerankClientBase> clients = CreateRerankClients(server);
+            List<ProviderClientBase> clients = CreateRerankClients(server);
 
             try
             {
-                foreach (RerankClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
 
@@ -134,20 +134,20 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (RerankClientBase client in clients) client.Dispose();
+                foreach (ProviderClientBase client in clients) client.Dispose();
             }
         }
 
         private static async Task RunClassifySparseArgumentValidationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereClassificationClient cohere = CreateCohereClassificationClient(server);
-            using TeiClassificationClient teiClassifier = CreateTeiClassificationClient(server);
-            using CohereEmbeddingClient cohereEmbed = CreateCohereEmbeddingClient(server);
-            using TeiEmbeddingClient teiEmbed = CreateTeiClient(server);
-            using TeiSparseEmbeddingClient tei = CreateTeiSparseClient(server);
+            using CohereClient cohere = CreateCohereClassificationClient(server);
+            using TeiClient teiClassifier = CreateTeiClassificationClient(server);
+            using CohereClient cohereEmbed = CreateCohereEmbeddingClient(server);
+            using TeiClient teiEmbed = CreateTeiClient(server);
+            using TeiClient tei = CreateTeiSparseClient(server);
 
-            foreach (ClassificationClientBase client in new List<ClassificationClientBase> { cohere, teiClassifier })
+            foreach (ProviderClientBase client in new List<ProviderClientBase> { cohere, teiClassifier })
             {
                 string name = client.GetType().Name;
                 await SharedAssert.ThrowsExactAsync<ArgumentNullException>(
@@ -164,7 +164,7 @@ namespace Test.Shared
                     name + " ClassifyAsync single should reject a null input.").ConfigureAwait(false);
             }
 
-            foreach (EmbeddingClientBase client in new List<EmbeddingClientBase> { cohereEmbed, teiEmbed })
+            foreach (ProviderClientBase client in new List<ProviderClientBase> { cohereEmbed, teiEmbed })
             {
                 string name = client.GetType().Name;
                 await SharedAssert.ThrowsExactAsync<ArgumentException>(
@@ -201,11 +201,11 @@ namespace Test.Shared
         private static async Task RunRerankResultOrderingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<RerankClientBase> clients = CreateRerankClients(server);
+            List<ProviderClientBase> clients = CreateRerankClients(server);
 
             try
             {
-                foreach (RerankClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
 
@@ -233,18 +233,18 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (RerankClientBase client in clients) client.Dispose();
+                foreach (ProviderClientBase client in clients) client.Dispose();
             }
         }
 
         private static async Task RunRerankTopNTrimmingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<RerankClientBase> clients = CreateRerankClients(server);
+            List<ProviderClientBase> clients = CreateRerankClients(server);
 
             try
             {
-                foreach (RerankClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     int before = server.RequestBodies.Count;
@@ -256,11 +256,11 @@ namespace Test.Shared
                     SharedAssert.Equal(3, top2.Results[1].Index, name + " TopN rerank should keep the second-highest result.");
 
                     LocalJson body = LocalJson.Parse(server.RequestBodies[before]);
-                    if (client is TeiRerankClient)
+                    if (client is TeiClient)
                     {
                         SharedAssert.False(body.Has("top_n") || body.Has("top_k"), "TEI has no native top-N field; it should not be sent.");
                     }
-                    else if (client is VoyageAiRerankClient)
+                    else if (client is VoyageAiClient)
                     {
                         SharedAssert.Equal(2, body.Int("top_k"), "VoyageAI should send TopN as top_k.");
                     }
@@ -276,17 +276,17 @@ namespace Test.Shared
             }
             finally
             {
-                foreach (RerankClientBase client in clients) client.Dispose();
+                foreach (ProviderClientBase client in clients) client.Dispose();
             }
         }
 
         private static async Task RunRerankOutOfRangeAndEmptyAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereRerankClient cohere = CreateCohereRerankClient(server);
-            using TeiRerankClient tei = CreateTeiRerankClient(server);
+            using CohereClient cohere = CreateCohereRerankClient(server);
+            using TeiClient tei = CreateTeiRerankClient(server);
 
-            foreach (RerankClientBase client in new List<RerankClientBase> { cohere, tei })
+            foreach (ProviderClientBase client in new List<ProviderClientBase> { cohere, tei })
             {
                 string name = client.GetType().Name;
 
@@ -308,7 +308,7 @@ namespace Test.Shared
         private static async Task RunCohereChatTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
             WireCapture.Full(client);
 
             CohereCompletionOptions options = new CohereCompletionOptions();
@@ -366,7 +366,7 @@ namespace Test.Shared
         private static async Task RunCohereChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ChatStreamingResponse streaming = await client.ChatStreamingAsync("ping", token: token).ConfigureAwait(false);
             SharedAssert.True(streaming.Success, "Cohere streaming chat should start.");
@@ -391,8 +391,8 @@ namespace Test.Shared
         private static async Task RunCohereGenerationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
-            client.Defaults.SystemPrompt = "This system prompt applies to chat only.";
+            using CohereClient client = CreateCohereClient(server);
+            client.Defaults.Completion.SystemPrompt = "This system prompt applies to chat only.";
 
             CohereCompletionOptions options = new CohereCompletionOptions();
             options.Model = "command-r7b-12-2024";
@@ -431,7 +431,7 @@ namespace Test.Shared
         private static async Task RunCohereToolChatAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
@@ -479,7 +479,7 @@ namespace Test.Shared
         private static async Task RunCohereToolChatStreamingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ToolChatStreamingResponse streaming = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(streaming.Success, "Cohere streaming tool chat should start.");
@@ -505,7 +505,7 @@ namespace Test.Shared
         private static async Task RunCohereToolChoiceTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             async Task<LocalJson> SendAsync(string? toolChoice)
             {
@@ -567,7 +567,7 @@ namespace Test.Shared
                 "An undefined level should throw from the Cohere projection.").ConfigureAwait(false);
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ToolChatRequest high = CreateWeatherToolRequest();
             (high.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
@@ -583,7 +583,7 @@ namespace Test.Shared
             SharedAssert.Equal("disabled", minimalBody.Str("thinking.type"), "Minimal effort should disable Cohere thinking.");
             SharedAssert.False(minimalBody.Has("thinking.token_budget"), "Disabled Cohere thinking should not send a token budget.");
 
-            client.Defaults.ReasoningEffort = ReasoningEffort.Low;
+            client.Defaults.Completion.ReasoningEffort = ReasoningEffort.Low;
             await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             LocalJson streamingBody = LocalJson.Parse(server.RequestBodies[2]);
             SharedAssert.Equal(1024, streamingBody.Int("thinking.token_budget"), "The client default reasoning effort should apply to streaming tool chat.");
@@ -592,7 +592,7 @@ namespace Test.Shared
         private static async Task RunCohereReasoningCaptureAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ChatResponse chat = await client.ChatAsync("reasoncapture please", token: token).ConfigureAwait(false);
             SharedAssert.True(chat.Success, "Cohere chat with thinking should succeed.");
@@ -613,7 +613,7 @@ namespace Test.Shared
         private static async Task RunCohereUsageBilledFallbackAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ChatResponse response = await client.ChatAsync("billedonly", token: token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Cohere chat with billed-only usage should succeed.");
@@ -625,7 +625,7 @@ namespace Test.Shared
         private static async Task RunCohereEmbeddingTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereEmbeddingClient client = CreateCohereEmbeddingClient(server);
+            using CohereClient client = CreateCohereEmbeddingClient(server);
 
             EmbeddingResponse batch = await client.EmbedAsync(new List<string> { "first", "second" }, null, token).ConfigureAwait(false);
             SharedAssert.True(batch.Success, "Cohere batch embedding should succeed. " + batch.Error);
@@ -662,11 +662,11 @@ namespace Test.Shared
             SharedAssert.Equal(512, optionBody.Int("output_dimension"), "Cohere embeddings should send output_dimension.");
             SharedAssert.Equal("START", optionBody.Str("truncate"), "Cohere embeddings should send the normalized truncate value.");
 
-            client.Model = "embed-multilingual-v3.0";
+            client.Defaults.Embedding.Model = "embed-multilingual-v3.0";
             await client.EmbedAsync("again", null, token).ConfigureAwait(false);
             SharedAssert.Equal("embed-multilingual-v3.0", LocalJson.Parse(server.RequestBodies[2]).Str("model"), "The Cohere embedding client's Model should be used when no override is given.");
 
-            client.Defaults.InputType = "classification";
+            client.Defaults.Embedding.InputType = "classification";
             await client.EmbedAsync("defaults", null, token).ConfigureAwait(false);
             SharedAssert.Equal("classification", LocalJson.Parse(server.RequestBodies[3]).Str("input_type"), "Cohere embedding Defaults should apply when the call sets nothing.");
             await client.EmbedAsync("override", new CohereEmbeddingOptions { InputType = "clustering" }, token).ConfigureAwait(false);
@@ -732,27 +732,21 @@ namespace Test.Shared
                 () => { new ClassificationExample("text", null!); return Task.CompletedTask; },
                 "A null example label should throw.").ConfigureAwait(false);
 
-            using CohereCompletionClient client = new CohereCompletionClient("http://127.0.0.1:1", "key");
-            using CohereEmbeddingClient embedClient = new CohereEmbeddingClient("http://127.0.0.1:1", "key");
-            using CohereRerankClient rerankClient = new CohereRerankClient("http://127.0.0.1:1", "key");
-            using CohereClassificationClient classifyClient = new CohereClassificationClient("http://127.0.0.1:1", "key");
-            using CohereModelClient modelClient = new CohereModelClient("http://127.0.0.1:1", "key");
-            SharedAssert.Equal("command-a-03-2025", client.Model, "Cohere should default the chat model.");
-            SharedAssert.Equal("embed-v4.0", embedClient.Model, "Cohere should default the embedding model.");
-            SharedAssert.Equal("rerank-v3.5", rerankClient.Model, "Cohere should default the rerank model.");
-            SharedAssert.True(classifyClient.Model == null, "Cohere should default the classification model to null.");
-            SharedAssert.Equal("https://api.cohere.com", new CohereCompletionClient().Endpoint, "Cohere should default its endpoint.");
+            using CohereClient client = new CohereClient("key", "http://127.0.0.1:1");
+            using CohereClient embedClient = new CohereClient("key", "http://127.0.0.1:1");
+            using CohereClient rerankClient = new CohereClient("key", "http://127.0.0.1:1");
+            using CohereClient classifyClient = new CohereClient("key", "http://127.0.0.1:1");
+            using CohereClient modelClient = new CohereClient("key", "http://127.0.0.1:1");
+            SharedAssert.Equal("command-a-plus-05-2026", client.Defaults.Completion.Model, "Cohere should default the chat model.");
+            SharedAssert.Equal("embed-v4.0", embedClient.Defaults.Embedding.Model, "Cohere should default the embedding model.");
+            SharedAssert.Equal("rerank-v5.0-fast", rerankClient.Defaults.Rerank.Model, "Cohere should default the rerank model.");
+            SharedAssert.True(classifyClient.Defaults.Classification.Model == null, "Cohere should default the classification model to null.");
+            SharedAssert.Equal("https://api.cohere.com", new CohereClient("test-key").Endpoint, "Cohere should default its endpoint.");
 
-            await SharedAssert.ThrowsExactAsync<ArgumentNullException>(
-                () => { embedClient.Model = " "; return Task.CompletedTask; },
-                "A blank Cohere embedding model should throw.").ConfigureAwait(false);
-            await SharedAssert.ThrowsExactAsync<ArgumentNullException>(
-                () => { rerankClient.Model = null!; return Task.CompletedTask; },
-                "A null Cohere rerank model should throw.").ConfigureAwait(false);
 
-            classifyClient.Model = "my-classifier";
-            classifyClient.Defaults.Model = null;
-            SharedAssert.True(classifyClient.Model == null, "Clearing Defaults.Model should clear the Cohere classification model.");
+            classifyClient.Defaults.Classification.Model = "my-classifier";
+            classifyClient.Defaults.Classification.Model = null;
+            SharedAssert.True(classifyClient.Defaults.Classification.Model == null, "Clearing Defaults.Model should clear the Cohere classification model.");
             modelClient.PageSize = 0;
             SharedAssert.Equal(1, modelClient.PageSize, "Cohere models page size should clamp to 1.");
             modelClient.PageSize = 5000;
@@ -762,14 +756,14 @@ namespace Test.Shared
         private static async Task RunCohereRerankTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereRerankClient client = CreateCohereRerankClient(server);
+            using CohereClient client = CreateCohereRerankClient(server);
 
             CohereRerankOptions options = new CohereRerankOptions { TopN = 3, MaxTokensPerDoc = 256 };
             RerankResponse response = await client.RerankAsync("which passage matters?", _Documents, options, token).ConfigureAwait(false);
 
             SharedAssert.True(response.Success, "Cohere rerank should succeed. " + response.Error);
             SharedAssert.Equal(200, response.StatusCode, "Cohere rerank should report the status code.");
-            SharedAssert.Equal("rerank-v3.5", response.Model, "Cohere rerank should default to the rerank model.");
+            SharedAssert.Equal("rerank-v5.0-fast", response.Model, "Cohere rerank should default to the rerank model.");
             SharedAssert.Equal("co-rerank", response.ResponseId, "Cohere rerank should expose the response id.");
             SharedAssert.Equal(1, response.SearchUnits, "Cohere rerank should expose billed search units.");
             SharedAssert.Equal(42, response.TotalTokens, "Cohere rerank should expose input tokens.");
@@ -777,7 +771,7 @@ namespace Test.Shared
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
             SharedAssert.Equal("/v2/rerank", server.RequestPaths[0], "Cohere rerank should POST to /v2/rerank.");
-            SharedAssert.Equal("rerank-v3.5", body.Str("model"), "Cohere rerank should send the rerank model.");
+            SharedAssert.Equal("rerank-v5.0-fast", body.Str("model"), "Cohere rerank should send the rerank model.");
             SharedAssert.Equal("which passage matters?", body.Str("query"), "Cohere rerank should send the query.");
             SharedAssert.Equal(4, body.Count("documents"), "Cohere rerank should send every document.");
             SharedAssert.Equal("String", body.Kind("documents.0"), "Cohere rerank documents should be plain strings.");
@@ -793,7 +787,7 @@ namespace Test.Shared
         private static async Task RunCohereClassifyAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereClassificationClient client = CreateCohereClassificationClient(server);
+            using CohereClient client = CreateCohereClassificationClient(server);
 
             CohereClassificationOptions options = new CohereClassificationOptions();
             options.Examples.Add(new ClassificationExample("I love it", "positive"));
@@ -825,7 +819,7 @@ namespace Test.Shared
             SharedAssert.Equal("END", body.Str("truncate"), "Cohere classification should send truncate.");
             SharedAssert.False(body.Has("model"), "Cohere classification should omit the model when none is configured.");
 
-            client.Model = "my-finetuned-classifier";
+            client.Defaults.Classification.Model = "my-finetuned-classifier";
             ClassificationResponse single = await client.ClassifyAsync("great value", null, token).ConfigureAwait(false);
             SharedAssert.True(single.Success, "Cohere single classification should succeed.");
             SharedAssert.Equal("my-finetuned-classifier", single.Model, "Cohere classification should report the configured model.");
@@ -840,8 +834,8 @@ namespace Test.Shared
             SharedAssert.Equal(0.5, fallback.Classifications[0].Score, "Cohere classification should fall back to the confidence field.");
             SharedAssert.Equal(0, fallback.Classifications[0].Labels.Count, "Cohere classification fallback should expose no label list.");
 
-            client.Defaults.Examples.Add(new ClassificationExample("Superb", "positive"));
-            client.Defaults.Examples.Add(new ClassificationExample("Awful", "negative"));
+            client.Defaults.Classification.Examples.Add(new ClassificationExample("Superb", "positive"));
+            client.Defaults.Classification.Examples.Add(new ClassificationExample("Awful", "negative"));
             await client.ClassifyAsync("defaults apply", null, token).ConfigureAwait(false);
             SharedAssert.Equal(2, LocalJson.Parse(server.RequestBodies[3]).Count("examples"), "Cohere default examples should be sent when the call has none.");
             await client.ClassifyAsync("call wins", options, token).ConfigureAwait(false);
@@ -851,7 +845,7 @@ namespace Test.Shared
         private static async Task RunCohereModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereModelClient client = CreateCohereModelClient(server);
+            using CohereClient client = CreateCohereModelClient(server);
             client.PageSize = 2;
 
             List<ModelInformation> models = new List<ModelInformation>();
@@ -891,7 +885,7 @@ namespace Test.Shared
         private static async Task RunCohereHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient bad = new CohereCompletionClient(server.Endpoint + "/missing", LocalExtendedRoutes.CohereTestKey);
+            using CohereClient bad = new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint + "/missing");
             bad.TimeoutMs = 1000;
 
             ChatResponse chat = await bad.ChatAsync("hi", token: token).ConfigureAwait(false);
@@ -913,10 +907,10 @@ namespace Test.Shared
             AssertHttpFailure(genStream.Success, genStream.StatusCode, genStream.Error, 404, "Cohere streaming generation");
 
             string badEndpoint = server.Endpoint + "/missing";
-            using CohereEmbeddingClient badEmbedClient = Configure(new CohereEmbeddingClient(badEndpoint, LocalExtendedRoutes.CohereTestKey));
-            using CohereRerankClient badRerankClient = Configure(new CohereRerankClient(badEndpoint, LocalExtendedRoutes.CohereTestKey));
-            using CohereClassificationClient badClassifyClient = Configure(new CohereClassificationClient(badEndpoint, LocalExtendedRoutes.CohereTestKey));
-            using CohereModelClient badModelClient = Configure(new CohereModelClient(badEndpoint, LocalExtendedRoutes.CohereTestKey));
+            using CohereClient badEmbedClient = Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, badEndpoint));
+            using CohereClient badRerankClient = Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, badEndpoint));
+            using CohereClient badClassifyClient = Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, badEndpoint));
+            using CohereClient badModelClient = Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, badEndpoint));
 
             EmbeddingResponse embed = await badEmbedClient.EmbedAsync("hi", token: token).ConfigureAwait(false);
             AssertHttpFailure(embed.Success, embed.StatusCode, embed.Error, 404, "Cohere embeddings");
@@ -935,10 +929,10 @@ namespace Test.Shared
 
             SharedAssert.True(await badModelClient.GetModelInformationAsync("command-a-03-2025", token).ConfigureAwait(false) == null, "Cohere model lookup should return null on HTTP errors.");
 
-            using CohereCompletionClient client = CreateCohereClient(server);
-            using CohereRerankClient rerankClient = CreateCohereRerankClient(server);
-            using CohereEmbeddingClient embedClient = CreateCohereEmbeddingClient(server);
-            using CohereClassificationClient classifyClient = CreateCohereClassificationClient(server);
+            using CohereClient client = CreateCohereClient(server);
+            using CohereClient rerankClient = CreateCohereRerankClient(server);
+            using CohereClient embedClient = CreateCohereEmbeddingClient(server);
+            using CohereClient classifyClient = CreateCohereClassificationClient(server);
 
             RerankResponse limited = await rerankClient.RerankAsync("rerankfail", _Documents, null, token).ConfigureAwait(false);
             AssertHttpFailure(limited.Success, limited.StatusCode, limited.Error, 429, "Cohere rate-limited rerank");
@@ -958,7 +952,7 @@ namespace Test.Shared
         private static async Task RunCohereStreamingErrorFinishAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ChatStreamingResponse streaming = await client.ChatStreamingAsync("streamerror", token: token).ConfigureAwait(false);
             string text = string.Empty;
@@ -975,7 +969,7 @@ namespace Test.Shared
         private static async Task RunCohereToolArgumentsInvalidJsonAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
 
             ToolChatRequest request = CreateWeatherToolRequest();
             request.Messages.Add(ChatMessage.User("badjsonargs"));
@@ -989,7 +983,7 @@ namespace Test.Shared
         private static async Task RunCohereStreamingBodyTimeoutAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
+            using CohereClient client = CreateCohereClient(server);
             client.TimeoutMs = 300;
 
             ChatStreamingResponse streaming = await client.ChatStreamingAsync("slowstream", token: token).ConfigureAwait(false);
@@ -1016,11 +1010,11 @@ namespace Test.Shared
         private static async Task RunCohereCancellationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using CohereCompletionClient client = CreateCohereClient(server);
-            using CohereEmbeddingClient embedClient = CreateCohereEmbeddingClient(server);
-            using CohereRerankClient rerankClient = CreateCohereRerankClient(server);
-            using CohereClassificationClient classifyClient = CreateCohereClassificationClient(server);
-            using CohereModelClient modelClient = CreateCohereModelClient(server);
+            using CohereClient client = CreateCohereClient(server);
+            using CohereClient embedClient = CreateCohereEmbeddingClient(server);
+            using CohereClient rerankClient = CreateCohereRerankClient(server);
+            using CohereClient classifyClient = CreateCohereClassificationClient(server);
+            using CohereClient modelClient = CreateCohereModelClient(server);
             using CancellationTokenSource cancelled = new CancellationTokenSource();
             cancelled.Cancel();
             CancellationToken c = cancelled.Token;
@@ -1054,7 +1048,7 @@ namespace Test.Shared
         private static async Task RunTeiEmbeddingTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiEmbeddingClient client = CreateTeiClient(server);
+            using TeiClient client = CreateTeiClient(server);
             WireCapture.Full(client);
 
             TeiEmbeddingOptions options = new TeiEmbeddingOptions();
@@ -1091,7 +1085,7 @@ namespace Test.Shared
 
             SharedAssert.False(client.CallDetails[0].RequestHeaders.ContainsKey("Authorization"), "TEI without an API key should not send Authorization.");
 
-            using TeiEmbeddingClient secured = new TeiEmbeddingClient(server.Endpoint, "tei-secret");
+            using TeiClient secured = new TeiClient(server.Endpoint, "tei-secret");
             WireCapture.Full(secured);
             await secured.EmbedAsync("x", token: token).ConfigureAwait(false);
             SharedAssert.True(secured.CallDetails[0].RequestHeaders.TryGetValue("Authorization", out string? auth) && auth == "Bearer tei-secret",
@@ -1122,19 +1116,19 @@ namespace Test.Shared
             SharedAssert.Equal("Right", sparse.TruncationDirection, "TEI sparse truncation direction should normalize.");
             SharedAssert.Equal("doc", sparse.PromptName, "TEI sparse prompt name should be trimmed.");
 
-            using TeiEmbeddingClient client = new TeiEmbeddingClient();
+            using TeiClient client = new TeiClient("http://localhost:8080");
             SharedAssert.Equal("http://localhost:8080", client.Endpoint, "TEI should default to the local server endpoint.");
-            SharedAssert.True(client.Model == null, "TEI clients should have no default model, because the server decides.");
+            SharedAssert.True(client.Defaults.Embedding.Model == null, "TEI clients should have no default model, because the server decides.");
 
-            using TeiEmbeddingClient named = new TeiEmbeddingClient();
-            named.Model = "BAAI/bge-small-en-v1.5";
-            SharedAssert.Equal("BAAI/bge-small-en-v1.5", named.Model, "A TEI client model can be set for reporting.");
+            using TeiClient named = new TeiClient("http://localhost:8080");
+            named.Defaults.Embedding.Model = "BAAI/bge-small-en-v1.5";
+            SharedAssert.Equal("BAAI/bge-small-en-v1.5", named.Defaults.Embedding.Model, "A TEI client model can be set for reporting.");
         }
 
         private static async Task RunTeiRerankTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiRerankClient client = CreateTeiRerankClient(server);
+            using TeiClient client = CreateTeiRerankClient(server);
 
             TeiRerankOptions options = new TeiRerankOptions { RawScores = true, Truncate = false, TruncationDirection = "right", Model = "ignored" };
             RerankResponse response = await client.RerankAsync("which passage matters?", _Documents, options, token).ConfigureAwait(false);
@@ -1154,7 +1148,7 @@ namespace Test.Shared
         private static async Task RunTeiClassifyAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiClassificationClient client = CreateTeiClassificationClient(server);
+            using TeiClient client = CreateTeiClassificationClient(server);
 
             ClassificationResponse response = await client.ClassifyAsync(
                 new List<string> { "this is great", "this is bad" },
@@ -1187,7 +1181,7 @@ namespace Test.Shared
         private static async Task RunTeiEmbedSparseAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiSparseEmbeddingClient client = CreateTeiSparseClient(server);
+            using TeiClient client = CreateTeiSparseClient(server);
 
             SparseEmbeddingResponse response = await client.EmbedSparseAsync(
                 new List<string> { "first", "second" },
@@ -1214,7 +1208,7 @@ namespace Test.Shared
         private static async Task RunTeiInfoAndModelsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiModelClient client = CreateTeiModelClient(server);
+            using TeiClient client = CreateTeiModelClient(server);
 
             List<ModelInformation> models = new List<ModelInformation>();
             await foreach (ModelInformation model in client.ListModelsAsync(token).ConfigureAwait(false))
@@ -1242,7 +1236,7 @@ namespace Test.Shared
                 () => client.GetModelInformationAsync(string.Empty, token),
                 "TEI model lookup should reject an empty model name.").ConfigureAwait(false);
 
-            using TeiModelClient bad = new TeiModelClient(server.Endpoint + "/missing");
+            using TeiClient bad = new TeiClient(server.Endpoint + "/missing");
             bad.TimeoutMs = 1000;
             int badCount = 0;
             await foreach (ModelInformation model in bad.ListModelsAsync(token).ConfigureAwait(false)) badCount++;
@@ -1271,11 +1265,11 @@ namespace Test.Shared
                 foreach (HttpClientBase c in teiClients) c.Dispose();
             }
 
-            using TeiEmbeddingClient bad = new TeiEmbeddingClient(server.Endpoint + "/missing");
+            using TeiClient bad = new TeiClient(server.Endpoint + "/missing");
             bad.TimeoutMs = 1000;
             SharedAssert.False(await bad.ValidateConnectivityAsync(token).ConfigureAwait(false), "TEI connectivity validation should fail on a non-2xx /health.");
 
-            using TeiEmbeddingClient unreachable = new TeiEmbeddingClient("http://127.0.0.1:1");
+            using TeiClient unreachable = new TeiClient("http://127.0.0.1:1");
             unreachable.TimeoutMs = 1000;
             SharedAssert.False(await unreachable.ValidateConnectivityAsync(token).ConfigureAwait(false), "TEI connectivity validation should fail when the server is unreachable.");
         }
@@ -1283,10 +1277,10 @@ namespace Test.Shared
         private static async Task RunTeiHttpErrorHandlingAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiEmbeddingClient client = CreateTeiClient(server);
-            using TeiRerankClient rerankClient = CreateTeiRerankClient(server);
-            using TeiClassificationClient classifyClient = CreateTeiClassificationClient(server);
-            using TeiSparseEmbeddingClient sparseClient = CreateTeiSparseClient(server);
+            using TeiClient client = CreateTeiClient(server);
+            using TeiClient rerankClient = CreateTeiRerankClient(server);
+            using TeiClient classifyClient = CreateTeiClassificationClient(server);
+            using TeiClient sparseClient = CreateTeiSparseClient(server);
 
             EmbeddingResponse batchTooLarge = await client.EmbedAsync("teifail413", token: token).ConfigureAwait(false);
             AssertHttpFailure(batchTooLarge.Success, batchTooLarge.StatusCode, batchTooLarge.Error, 413, "TEI oversized batch");
@@ -1306,7 +1300,7 @@ namespace Test.Shared
             SparseEmbeddingResponse sparse = await sparseClient.EmbedSparseAsync("teifail424", null, token).ConfigureAwait(false);
             AssertHttpFailure(sparse.Success, sparse.StatusCode, sparse.Error, 424, "TEI sparse embedding against a dense model");
 
-            using TeiEmbeddingClient bad = new TeiEmbeddingClient(server.Endpoint + "/missing");
+            using TeiClient bad = new TeiClient(server.Endpoint + "/missing");
             bad.TimeoutMs = 1000;
             EmbeddingResponse missing = await bad.EmbedAsync("x", token: token).ConfigureAwait(false);
             AssertHttpFailure(missing.Success, missing.StatusCode, missing.Error, 404, "TEI embedding on a bad path");
@@ -1315,11 +1309,11 @@ namespace Test.Shared
         private static async Task RunTeiCancellationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using TeiEmbeddingClient client = CreateTeiClient(server);
-            using TeiRerankClient rerankClient = CreateTeiRerankClient(server);
-            using TeiClassificationClient classifyClient = CreateTeiClassificationClient(server);
-            using TeiSparseEmbeddingClient sparseClient = CreateTeiSparseClient(server);
-            using TeiModelClient modelClient = CreateTeiModelClient(server);
+            using TeiClient client = CreateTeiClient(server);
+            using TeiClient rerankClient = CreateTeiRerankClient(server);
+            using TeiClient classifyClient = CreateTeiClassificationClient(server);
+            using TeiClient sparseClient = CreateTeiSparseClient(server);
+            using TeiClient modelClient = CreateTeiModelClient(server);
             using CancellationTokenSource cancelled = new CancellationTokenSource();
             cancelled.Cancel();
             CancellationToken c = cancelled.Token;
@@ -1342,12 +1336,9 @@ namespace Test.Shared
         private static async Task RunVoyageAiRerankTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiRerankClient client = CreateVoyageAiRerankClient(server);
+            using VoyageAiClient client = CreateVoyageAiRerankClient(server);
 
-            SharedAssert.Equal("rerank-2.5", client.Model, "VoyageAI should default the rerank model.");
-            await SharedAssert.ThrowsExactAsync<ArgumentNullException>(
-                () => { client.Model = ""; return Task.CompletedTask; },
-                "A blank VoyageAI rerank model should throw.").ConfigureAwait(false);
+            SharedAssert.Equal("rerank-3", client.Defaults.Rerank.Model, "VoyageAI should default the rerank model.");
 
             VoyageAiRerankOptions options = new VoyageAiRerankOptions { TopN = 2, Truncation = false, ReturnDocuments = true };
             RerankResponse response = await client.RerankAsync("which passage matters?", _Documents, options, token).ConfigureAwait(false);
@@ -1357,11 +1348,11 @@ namespace Test.Shared
             SharedAssert.Equal(1, response.Results[0].Index, "VoyageAI rerank should rank the relevant document first.");
             SharedAssert.Equal(_Documents[1], response.Results[0].Document, "VoyageAI rerank should attach document text on request.");
             SharedAssert.Equal(17, response.TotalTokens, "VoyageAI rerank should expose total tokens.");
-            SharedAssert.Equal("rerank-2.5", response.Model, "VoyageAI rerank should report the model.");
+            SharedAssert.Equal("rerank-3", response.Model, "VoyageAI rerank should report the model.");
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
             SharedAssert.Equal("/v1/rerank", server.RequestPaths[0], "VoyageAI rerank should POST to /v1/rerank.");
-            SharedAssert.Equal("rerank-2.5", body.Str("model"), "VoyageAI rerank should send the rerank model, not the embedding model.");
+            SharedAssert.Equal("rerank-3", body.Str("model"), "VoyageAI rerank should send the rerank model, not the embedding model.");
             SharedAssert.Equal("which passage matters?", body.Str("query"), "VoyageAI rerank should send the query.");
             SharedAssert.Equal(4, body.Count("documents"), "VoyageAI rerank should send the documents.");
             SharedAssert.Equal(2, body.Int("top_k"), "VoyageAI rerank should send top_k.");
@@ -1369,7 +1360,7 @@ namespace Test.Shared
             SharedAssert.False(body.Has("return_documents"), "VoyageAI documents are attached client-side, so return_documents should not be sent.");
             SharedAssert.True(client.CallDetails[0].RequestHeaders.ContainsKey("Authorization"), "VoyageAI rerank should carry a bearer header.");
 
-            client.Model = "rerank-2.5-lite";
+            client.Defaults.Rerank.Model = "rerank-2.5-lite";
             await client.RerankAsync("q", _Documents, null, token).ConfigureAwait(false);
             LocalJson second = LocalJson.Parse(server.RequestBodies[1]);
             SharedAssert.Equal("rerank-2.5-lite", second.Str("model"), "VoyageAI RerankModel should be used when no override is given.");
@@ -1379,7 +1370,7 @@ namespace Test.Shared
         private static async Task RunVoyageAiRerankErrorsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using VoyageAiRerankClient client = CreateVoyageAiRerankClient(server);
+            using VoyageAiClient client = CreateVoyageAiRerankClient(server);
 
             RerankResponse failed = await client.RerankAsync("rerankfail", _Documents, null, token).ConfigureAwait(false);
             AssertHttpFailure(failed.Success, failed.StatusCode, failed.Error, 400, "VoyageAI rejected rerank");
@@ -1394,13 +1385,10 @@ namespace Test.Shared
         private static async Task RunBedrockRerankTranslationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockRerankClient client = CreateBedrockRerankClient(server);
+            using BedrockClient client = CreateBedrockRerankClient(server);
             WireCapture.Full(client);
 
-            SharedAssert.Equal("cohere.rerank-v3-5:0", client.Model, "Bedrock should default to the Cohere rerank model.");
-            await SharedAssert.ThrowsExactAsync<ArgumentNullException>(
-                () => { client.Model = " "; return Task.CompletedTask; },
-                "A blank Bedrock rerank model should throw.").ConfigureAwait(false);
+            SharedAssert.Equal("cohere.rerank-v3-5:0", client.Defaults.Rerank.Model, "Bedrock should default to the Cohere rerank model.");
 
             BedrockRerankOptions options = new BedrockRerankOptions { TopN = 2, MaxTokensPerDoc = 300 };
             RerankResponse response = await client.RerankAsync("which passage matters?", _Documents, options, token).ConfigureAwait(false);
@@ -1431,7 +1419,7 @@ namespace Test.Shared
         private static async Task RunBedrockRerankErrorsAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            using BedrockRerankClient client = CreateBedrockRerankClient(server);
+            using BedrockClient client = CreateBedrockRerankClient(server);
 
             RerankResponse failed = await client.RerankAsync("rerankfail", _Documents, null, token).ConfigureAwait(false);
             AssertHttpFailure(failed.Success, failed.StatusCode, failed.Error, 400, "Bedrock rejected rerank");
@@ -1456,7 +1444,7 @@ namespace Test.Shared
             SharedAssert.Equal("cohere", cohere.ProviderType, "Cohere provider type should normalize.");
             SharedAssert.Equal(ProviderTestConfiguration.DefaultCohereEndpoint, cohere.Endpoint, "Cohere should use its default endpoint.");
             SharedAssert.Equal("embed-v4.0", cohere.EmbeddingModel, "Cohere should default the embedding model.");
-            SharedAssert.Equal("rerank-v3.5", cohere.RerankModel, "Cohere should default the rerank model.");
+            SharedAssert.Equal("rerank-v5.0-fast", cohere.RerankModel, "Cohere should default the rerank model.");
 
             ProviderTestConfiguration tei = ProviderTestConfiguration.CreateWithDefaults("TEI");
             SharedAssert.Equal("tei", tei.ProviderType, "TEI provider type should normalize.");
@@ -1464,7 +1452,7 @@ namespace Test.Shared
             SharedAssert.True(tei.ApiKey == null, "TEI should not require an API key.");
             SharedAssert.Equal(string.Empty, tei.RerankModel, "TEI serves a single model, so no rerank model is configured.");
 
-            SharedAssert.Equal("rerank-2.5", ProviderTestConfiguration.CreateWithDefaults("voyageai").RerankModel, "VoyageAI should default the rerank model.");
+            SharedAssert.Equal("rerank-3", ProviderTestConfiguration.CreateWithDefaults("voyageai").RerankModel, "VoyageAI should default the rerank model.");
             SharedAssert.Equal(string.Empty, ProviderTestConfiguration.CreateWithDefaults("openai").RerankModel, "OpenAI has no rerank model.");
 
             Dictionary<string, string?> original = LocalBehaviorSuite.CaptureProviderEnvironment();
@@ -1515,9 +1503,9 @@ namespace Test.Shared
             SharedAssert.NotEmpty(error, label + " should surface an error message.");
         }
 
-        private static List<RerankClientBase> CreateRerankClients(LocalOpenAiTestServer server)
+        private static List<ProviderClientBase> CreateRerankClients(LocalOpenAiTestServer server)
         {
-            return new List<RerankClientBase>
+            return new List<ProviderClientBase>
             {
                 CreateCohereRerankClient(server),
                 CreateTeiRerankClient(server),
@@ -1532,88 +1520,82 @@ namespace Test.Shared
             return client;
         }
 
-        private static CohereEmbeddingClient CreateCohereEmbeddingClient(LocalOpenAiTestServer server)
+        private static CohereClient CreateCohereEmbeddingClient(LocalOpenAiTestServer server)
         {
-            return Configure(new CohereEmbeddingClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey));
+            return Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint));
         }
 
-        private static CohereRerankClient CreateCohereRerankClient(LocalOpenAiTestServer server)
+        private static CohereClient CreateCohereRerankClient(LocalOpenAiTestServer server)
         {
-            return Configure(new CohereRerankClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey));
+            return Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint));
         }
 
-        private static CohereClassificationClient CreateCohereClassificationClient(LocalOpenAiTestServer server)
+        private static CohereClient CreateCohereClassificationClient(LocalOpenAiTestServer server)
         {
-            return Configure(new CohereClassificationClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey));
+            return Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint));
         }
 
-        private static CohereModelClient CreateCohereModelClient(LocalOpenAiTestServer server)
+        private static CohereClient CreateCohereModelClient(LocalOpenAiTestServer server)
         {
-            return Configure(new CohereModelClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey));
+            return Configure(new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint));
         }
 
-        private static TeiRerankClient CreateTeiRerankClient(LocalOpenAiTestServer server)
+        private static TeiClient CreateTeiRerankClient(LocalOpenAiTestServer server)
         {
-            return Configure(new TeiRerankClient(server.Endpoint));
+            return Configure(new TeiClient(server.Endpoint));
         }
 
-        private static TeiClassificationClient CreateTeiClassificationClient(LocalOpenAiTestServer server)
+        private static TeiClient CreateTeiClassificationClient(LocalOpenAiTestServer server)
         {
-            return Configure(new TeiClassificationClient(server.Endpoint));
+            return Configure(new TeiClient(server.Endpoint));
         }
 
-        private static TeiSparseEmbeddingClient CreateTeiSparseClient(LocalOpenAiTestServer server)
+        private static TeiClient CreateTeiSparseClient(LocalOpenAiTestServer server)
         {
-            return Configure(new TeiSparseEmbeddingClient(server.Endpoint));
+            return Configure(new TeiClient(server.Endpoint));
         }
 
-        private static TeiModelClient CreateTeiModelClient(LocalOpenAiTestServer server)
+        private static TeiClient CreateTeiModelClient(LocalOpenAiTestServer server)
         {
-            return Configure(new TeiModelClient(server.Endpoint));
+            return Configure(new TeiClient(server.Endpoint));
         }
 
-        private static VoyageAiRerankClient CreateVoyageAiRerankClient(LocalOpenAiTestServer server)
+        private static VoyageAiClient CreateVoyageAiRerankClient(LocalOpenAiTestServer server)
         {
-            return Configure(new VoyageAiRerankClient(server.Endpoint, "test-key"));
+            return Configure(new VoyageAiClient("test-key", server.Endpoint));
         }
 
-        private static BedrockRerankClient CreateBedrockRerankClient(LocalOpenAiTestServer server)
+        private static BedrockClient CreateBedrockRerankClient(LocalOpenAiTestServer server)
         {
-            return Configure(new BedrockRerankClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint));
+            return Configure(new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } });
         }
 
-        private static CohereCompletionClient CreateCohereClient(LocalOpenAiTestServer server)
+        private static CohereClient CreateCohereClient(LocalOpenAiTestServer server)
         {
-            CohereCompletionClient client = new CohereCompletionClient(server.Endpoint, LocalExtendedRoutes.CohereTestKey);
-            client.Model = "cohere-test-model";
+            CohereClient client = new CohereClient(LocalExtendedRoutes.CohereTestKey, server.Endpoint);
+            client.Defaults.Completion.Model = "cohere-test-model";
             client.TimeoutMs = 2000;
             return client;
         }
 
-        private static TeiEmbeddingClient CreateTeiClient(LocalOpenAiTestServer server)
+        private static TeiClient CreateTeiClient(LocalOpenAiTestServer server)
         {
-            TeiEmbeddingClient client = new TeiEmbeddingClient(server.Endpoint);
+            TeiClient client = new TeiClient(server.Endpoint);
             client.TimeoutMs = 2000;
             return client;
         }
 
-        private static VoyageAiEmbeddingClient CreateVoyageAiClient(LocalOpenAiTestServer server)
+        private static VoyageAiClient CreateVoyageAiClient(LocalOpenAiTestServer server)
         {
-            VoyageAiEmbeddingClient client = new VoyageAiEmbeddingClient(server.Endpoint, "test-key");
-            client.Model = "voyage-test";
+            VoyageAiClient client = new VoyageAiClient("test-key", server.Endpoint);
+            client.Defaults.Embedding.Model = "voyage-test";
             client.TimeoutMs = 2000;
             return client;
         }
 
-        private static BedrockCompletionClient CreateBedrockClient(LocalOpenAiTestServer server)
+        private static BedrockClient CreateBedrockClient(LocalOpenAiTestServer server)
         {
-            BedrockCompletionClient client = new BedrockCompletionClient(
-                new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"),
-                "us-east-1",
-                endpoint: server.Endpoint);
+            BedrockClient client = new BedrockClient("us-east-1", new StaticAwsCredential("AKIDTESTEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY", "us-east-1"), server.Endpoint) { Defaults = { Completion = { Model = "anthropic.claude-3-5-sonnet-20240620-v1:0" } } };
             client.TimeoutMs = 2000;
             return client;
         }

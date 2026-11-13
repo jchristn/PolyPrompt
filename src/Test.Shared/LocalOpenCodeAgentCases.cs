@@ -6,7 +6,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="OpenCodeAgentClient"/>: the shared harness kit plus model listing, the permission
+    /// Fake-CLI cases for <see cref="OpenCodeClient"/>: the shared harness kit plus model listing, the permission
     /// configuration, session resume, per-step usage accounting, and recorded-output replay.
     /// </summary>
     internal static class LocalOpenCodeAgentCases
@@ -23,7 +23,7 @@ namespace Test.Shared
                 {
                     Id = "opencode",
                     ExecutableName = "opencode",
-                    Create = () => new OpenCodeAgentClient(),
+                    Create = () => new OpenCodeClient(),
                     HappyScenario = "opencode-happy",
                     ErrorExitScenario = "opencode-error-exit",
                     StderrOnlyScenario = "opencode-stderr-only",
@@ -117,7 +117,7 @@ namespace Test.Shared
             using (fake)
             using (client)
             {
-                OpenCodeAgentClient opencode = (OpenCodeAgentClient)client;
+                OpenCodeClient opencode = (OpenCodeClient)client;
                 List<ModelInformation> models = new List<ModelInformation>();
                 await foreach (ModelInformation model in opencode.ListModelsAsync(token).ConfigureAwait(false)) models.Add(model);
 
@@ -144,7 +144,7 @@ namespace Test.Shared
             }
         }
 
-        private static async Task<CliAgentException?> ListFailureAsync(OpenCodeAgentClient client, CancellationToken token)
+        private static async Task<CliAgentException?> ListFailureAsync(OpenCodeClient client, CancellationToken token)
         {
             try
             {
@@ -191,7 +191,7 @@ namespace Test.Shared
             SharedAssert.True(unrestricted.Success, "Run succeeds: " + unrestricted.Error);
             SharedAssert.True(fake.Arguments.Contains("--auto"), "Unrestricted passes --auto.");
             SharedAssert.False(fake.Arguments.Contains("--agent"), "Unrestricted does not pin the agent.");
-            SharedAssert.False(client.Last!.Environment!.ContainsKey(OpenCodeAgentClient.ConfigContentVariable), "Unrestricted sets no inline configuration.");
+            SharedAssert.False(client.Last!.Environment!.ContainsKey(OpenCodeClient.ConfigContentVariable), "Unrestricted sets no inline configuration.");
 
             // OpenCode resolves its project from PWD, so PWD follows the run's working directory.
             string work = Path.Combine(fake.Directory, "pwd dir");
@@ -202,7 +202,7 @@ namespace Test.Shared
             SharedAssert.Equal(Path.GetFullPath(Directory.GetCurrentDirectory()), client.Last!.Environment!["PWD"], "PWD is the current directory when none is set.");
 
             // The caller's own inline configuration is kept; only the permission rules are replaced.
-            client.Environment[OpenCodeAgentClient.ConfigContentVariable] =
+            client.Environment[OpenCodeClient.ConfigContentVariable] =
                 "{\"model\":\"opencode/big-pickle\",\"permission\":{\"*\":\"allow\"},\"agent\":{\"build\":{\"temperature\":0.1,\"permission\":{\"bash\":\"allow\"}},\"review\":{\"mode\":\"subagent\"}}}";
             await client.RunAsync(new CliAgentRequest("hi"), token).ConfigureAwait(false);
             JsonElement merged = CapturedConfig(client, "merged");
@@ -214,19 +214,19 @@ namespace Test.Shared
             SharedAssert.False(merged.GetProperty("agent").GetProperty("build").GetProperty("permission").TryGetProperty("bash", out _), "The caller's build-agent bash allow is replaced.");
 
             // A request value wins over the client's; invalid JSON is replaced; a null request value removes the client's.
-            await client.RunAsync(new CliAgentRequest("hi") { Environment = new Dictionary<string, string?> { { OpenCodeAgentClient.ConfigContentVariable, "{not json" } } }, token).ConfigureAwait(false);
+            await client.RunAsync(new CliAgentRequest("hi") { Environment = new Dictionary<string, string?> { { OpenCodeClient.ConfigContentVariable, "{not json" } } }, token).ConfigureAwait(false);
             JsonElement replaced = CapturedConfig(client, "invalid");
             SharedAssert.False(replaced.TryGetProperty("model", out _), "Invalid request configuration is replaced, not merged with the client's.");
             AssertReadOnlyRules(replaced.GetProperty("permission"), "invalid");
 
-            await client.RunAsync(new CliAgentRequest("hi") { Environment = new Dictionary<string, string?> { { OpenCodeAgentClient.ConfigContentVariable, null } } }, token).ConfigureAwait(false);
+            await client.RunAsync(new CliAgentRequest("hi") { Environment = new Dictionary<string, string?> { { OpenCodeClient.ConfigContentVariable, null } } }, token).ConfigureAwait(false);
             SharedAssert.False(CapturedConfig(client, "removed").TryGetProperty("model", out _), "A null request value drops the client's configuration.");
         }
 
         private static JsonElement CapturedConfig(CapturingOpenCodeClient client, string label)
         {
             SharedAssert.NotNull(client.Last?.Environment, label + ": inline configuration is set.");
-            string? content = client.Last!.Environment![OpenCodeAgentClient.ConfigContentVariable];
+            string? content = client.Last!.Environment![OpenCodeClient.ConfigContentVariable];
             SharedAssert.NotNull(content, label + ": OPENCODE_CONFIG_CONTENT has a value.");
             using JsonDocument document = JsonDocument.Parse(content!);
             return document.RootElement.Clone();
@@ -371,7 +371,7 @@ namespace Test.Shared
         /// <summary>
         /// Records the invocation the client builds, so the inline permission configuration can be inspected.
         /// </summary>
-        private sealed class CapturingOpenCodeClient : OpenCodeAgentClient
+        private sealed class CapturingOpenCodeClient : OpenCodeClient
         {
             public CliInvocation? Last { get; private set; }
 

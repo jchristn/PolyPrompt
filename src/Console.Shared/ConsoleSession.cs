@@ -4,7 +4,7 @@ using PolyPrompt.Clients;
 using PolyPrompt.Models;
 
 /// <summary>Provider-independent conversation, rendering, and automatic tool-result loop.</summary>
-public sealed class ConsoleSession(CompletionClientBase client, IConsoleToolRuntime tools, TextWriter output) : IDisposable
+public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntime tools, TextWriter output) : IDisposable
 {
     private readonly List<ChatMessage> _Messages = new();
     public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
@@ -103,7 +103,7 @@ public sealed class ConsoleSession(CompletionClientBase client, IConsoleToolRunt
 
     private List<ChatMessage> BuildMessages()
     {
-        string system = (client.Defaults.SystemPrompt ?? "") + "\nWorking directory: " + WorkingDirectory
+        string system = (client.Defaults.Completion.SystemPrompt ?? "") + "\nWorking directory: " + WorkingDirectory
             + "\nUse the provided tools to inspect files or perform requested actions; do not invent tool results. Tool paths may be relative to the working directory.";
         return new[] { ChatMessage.System(system) }.Concat(_Messages).ToList();
     }

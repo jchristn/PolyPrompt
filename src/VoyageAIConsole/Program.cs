@@ -11,8 +11,8 @@ namespace VoyageAIConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static VoyageAiEmbeddingClient _EmbeddingClient = null!;
-        private static VoyageAiRerankClient _RerankClient = null!;
+        private static VoyageAiClient _EmbeddingClient = null!;
+        private static VoyageAiClient _RerankClient = null!;
 
         #endregion
 
@@ -29,11 +29,11 @@ namespace VoyageAIConsole
             string model = Inputty.GetString("Model [voyage-3.5]:", "voyage-3.5", false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _EmbeddingClient = new VoyageAiEmbeddingClient(endpoint, apiKey);
-            _EmbeddingClient.Model = model;
+            _EmbeddingClient = new VoyageAiClient(apiKey, endpoint);
+            _EmbeddingClient.Defaults.Embedding.Model = model;
             _EmbeddingClient.TimeoutMs = timeoutMs;
 
-            _RerankClient = new VoyageAiRerankClient(endpoint, apiKey);
+            _RerankClient = new VoyageAiClient(apiKey, endpoint);
             _RerankClient.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
@@ -137,8 +137,8 @@ namespace VoyageAIConsole
             Console.WriteLine("");
             Console.WriteLine("  Endpoint   : " + _EmbeddingClient.Endpoint);
             Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_EmbeddingClient.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Model      : " + _EmbeddingClient.Model);
-            Console.WriteLine("  Rerank     : " + _RerankClient.Model);
+            Console.WriteLine("  Model      : " + _EmbeddingClient.Defaults.Embedding.Model);
+            Console.WriteLine("  Rerank     : " + _RerankClient.Defaults.Rerank.Model);
             Console.WriteLine("  Timeout ms : " + _EmbeddingClient.TimeoutMs);
             Console.WriteLine("");
         }

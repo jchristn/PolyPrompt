@@ -64,13 +64,13 @@ public sealed class AgentHarnessConsoleTests
     {
         Dictionary<string, Type> expected = new()
         {
-            ["ClaudeCodeConsole"] = typeof(ClaudeCodeAgentClient),
-            ["CodexConsole"] = typeof(CodexAgentClient),
-            ["GeminiCliConsole"] = typeof(GeminiCliAgentClient),
-            ["CursorCliConsole"] = typeof(CursorAgentClient),
-            ["MuxConsole"] = typeof(MuxAgentClient),
-            ["PiConsole"] = typeof(PiAgentClient),
-            ["OpenCodeConsole"] = typeof(OpenCodeAgentClient),
+            ["ClaudeCodeConsole"] = typeof(ClaudeCodeClient),
+            ["CodexConsole"] = typeof(CodexClient),
+            ["GeminiCliConsole"] = typeof(GeminiCliClient),
+            ["CursorCliConsole"] = typeof(CursorClient),
+            ["MuxConsole"] = typeof(MuxClient),
+            ["PiConsole"] = typeof(PiClient),
+            ["OpenCodeConsole"] = typeof(OpenCodeClient),
         };
         foreach (Harness harness in Harnesses())
         {

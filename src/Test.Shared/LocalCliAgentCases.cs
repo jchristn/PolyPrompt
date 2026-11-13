@@ -297,7 +297,7 @@ namespace Test.Shared
         private static async Task RunTelemetryAsync(CancellationToken token)
         {
             using FakeCli fake = FakeCli.Create("codex", "codex-happy");
-            using CodexAgentClient client = fake.Attach(new CodexAgentClient());
+            using CodexClient client = fake.Attach(new CodexClient());
             using TelemetryCapture capture = new TelemetryCapture("cli_telemetry");
 
             CliAgentResult result = await client.RunAsync(new CliAgentRequest("hi") { Model = "gpt-6.1-sol" }, token).ConfigureAwait(false);

@@ -303,6 +303,12 @@ namespace PolyPrompt.Telemetry
         public const string BatchSizeAttribute = "polyprompt.batch.size";
 
         /// <summary>
+        /// The reasoning effort wire value sent to the provider, after mapping (for example <c>xhigh</c>, <c>false</c>, or
+        /// a thinking budget such as <c>8192</c>). Span attribute only; set when a reasoning field was sent.
+        /// </summary>
+        public const string ReasoningEffort = "polyprompt.reasoning.effort";
+
+        /// <summary>
         /// Number of tool definitions offered to the model. Span attribute only.
         /// </summary>
         public const string ToolDefinitionCount = "polyprompt.tool.definitions";

@@ -12,7 +12,7 @@ namespace Test.Shared
     internal static class LocalXAiCases
     {
         private static JsonElement J(string json) { using JsonDocument d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
-        private static XAiCompletionClient Client(LocalOpenAiTestServer server) => new(LocalXAiRoutes.Key, server.Endpoint);
+        private static XAiClient Client(LocalOpenAiTestServer server) => new(LocalXAiRoutes.Key, server.Endpoint);
         private static ToolChatRequest Request(string prompt = "hello") => new()
         {
             Messages = new() { ChatMessage.User(prompt) },
@@ -26,8 +26,8 @@ namespace Test.Shared
                 ("tools_state_replay", ToolsAsync), ("tools_stream_state_replay", ToolsStreamAsync),
                 ("options_merge_and_structured_output", OptionsAsync), ("multimodal_raw_input", RawAsync),
                 ("native_event_stream", NativeAsync), ("hosted_tools", HostedAsync),
-                ("stored_response_resources", ResourcesAsync), ("embeddings", EmbeddingsAsync),
-                ("embedding_base64_and_tokens", EmbeddingTokensAsync), ("catalogs", CatalogsAsync),
+                ("stored_response_resources", ResourcesAsync), ("embed_not_supported", EmbeddingsAsync),
+                ("catalogs", CatalogsAsync),
                 ("http_and_malformed_errors", ErrorsAsync), ("stream_errors", StreamErrorsAsync),
                 ("incomplete_responses", IncompleteAsync), ("validation", ValidationAsync),
                 ("sse_framing_and_final_fallback", FramingAsync), ("cancellation", CancellationAsync),
@@ -39,17 +39,17 @@ namespace Test.Shared
         {
             foreach (string? invalid in new string?[] { null, "", " ", "bad token", "bad\r\ntoken" })
             {
-                bool threw = false; try { using XAiCompletionClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
+                bool threw = false; try { using XAiClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
                 SharedAssert.True(threw, "Completion must require a valid bearer token.");
-                threw = false; try { using XAiEmbeddingClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
+                threw = false; try { using XAiClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
                 SharedAssert.True(threw, "Embedding must require a valid bearer token.");
-                threw = false; try { using XAiModelClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
+                threw = false; try { using XAiClient c = new(invalid!); } catch (ArgumentException) { threw = true; }
                 SharedAssert.True(threw, "Models must require a valid bearer token.");
             }
-            using XAiCompletionClient client = new("test");
+            using XAiClient client = new("test");
             SharedAssert.Equal("https://api.x.ai", client.Endpoint, "Default endpoint.");
-            SharedAssert.Equal("grok-4.7", client.Model, "Default model.");
-            SharedAssert.Equal<bool?>(false, client.Defaults.Store, "Storage is explicit.");
+            SharedAssert.Equal("grok-4.7", client.Defaults.Completion.Model, "Default model.");
+            SharedAssert.Equal<bool?>(false, client.Defaults.Completion.Store, "Storage is explicit.");
             return Task.CompletedTask;
         }
         private static async Task ChatAsync(CancellationToken token)
@@ -75,7 +75,7 @@ namespace Test.Shared
         private static async Task GenerationAsync(CancellationToken token)
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
-            c.Defaults.SystemPrompt = "must-not-send"; c.Defaults.ReasoningEffort = ReasoningEffort.High;
+            c.Defaults.Completion.SystemPrompt = "must-not-send"; c.Defaults.Completion.ReasoningEffort = ReasoningEffort.High;
             var r = await c.GenerateAsync("hello", token: token);
             SharedAssert.True(r.Success, r.Error ?? "Generation failed."); SharedAssert.Equal("pong", r.Text, "Generation.");
             SharedAssert.Equal("Thinking clearly.", r.Reasoning, "Generation reason.");
@@ -124,11 +124,11 @@ namespace Test.Shared
         private static async Task OptionsAsync(CancellationToken token)
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
-            c.Defaults.Store = true; c.Defaults.ParallelToolCalls = true; c.Defaults.TopK = 20; c.Defaults.ReasoningEffort = ReasoningEffort.High;
+            c.Defaults.Completion.Store = true; c.Defaults.Completion.ParallelToolCalls = true; c.Defaults.Completion.TopK = 20; c.Defaults.Completion.ReasoningEffort = ReasoningEffort.High;
             var options = new XAiCompletionOptions
             {
                 Model = "override-model", MaxTokens = 123, Store = false, ParallelToolCalls = false, TopK = 3, MinP = .1,
-                ReasoningEffortOverride = "xhigh", ReasoningSummary = "detailed", Logprobs = true, TopLogprobs = 2, MaxTurns = 4,
+                ReasoningEffortValue = "xhigh", ReasoningSummary = "detailed", Logprobs = true, TopLogprobs = 2, MaxTurns = 4,
                 ServiceTier = "fast", User = "user", SafetyIdentifier = "hash", PromptCacheKey = "cache",
                 TextFormat = new() { ["type"] = "json_schema", ["name"] = "answer", ["schema"] = new Dictionary<string, object> { ["type"] = "object" } },
                 AdditionalParameters = new() { ["future_option"] = J("true") }
@@ -165,7 +165,7 @@ namespace Test.Shared
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
             string[] types = { "web_search", "x_search", "code_interpreter", "file_search", "mcp", "image_generation", "shell", "tool_search" };
-            var r = await c.ChatAsync("hello", new XAiCompletionOptions { HostedTools = types.Select(t => XAiHostedTool.Create(t, t switch
+            var r = await c.ChatAsync("hello", new XAiCompletionOptions { HostedTools = types.Select(t => ResponsesApiHostedTool.Create(t, t switch
             {
                 "file_search" => new Dictionary<string, object> { ["vector_store_ids"] = new[] { "collection-test" } },
                 "mcp" => new Dictionary<string, object> { ["server_label"] = "fixture", ["server_url"] = "https://example.com/mcp" },
@@ -188,22 +188,18 @@ namespace Test.Shared
         }
         private static async Task EmbeddingsAsync(CancellationToken token)
         {
-            using var server = LocalOpenAiTestServer.Start(); using XAiEmbeddingClient c = new(LocalXAiRoutes.Key, server.Endpoint) { Model = "test-embedding" };
-            var r = await c.EmbedAsync(new List<string> { "first", "second" }, new XAiEmbeddingOptions { Dimensions = 3, Preview = true, User = "u" }, token);
-            SharedAssert.True(r.Success, r.Error ?? "Embeddings failed."); SharedAssert.Equal(2, r.Embeddings.Count, "Batch."); SharedAssert.Equal(0, r.Embeddings[0].Index, "Sorted indices.");
-            SharedAssert.Equal<int?>(7, r.Usage?.PromptTokens, "Embedding usage.");
-            SharedAssert.True((await c.EmbedAsync("single", token: token)).Success, "Single embedding.");
-        }
-        private static async Task EmbeddingTokensAsync(CancellationToken token)
-        {
-            using var server = LocalOpenAiTestServer.Start(); using XAiEmbeddingClient c = new(LocalXAiRoutes.Key, server.Endpoint) { Model = "test-embedding" };
-            var r = await c.EmbedTokensAsync(new[] { 1, 2 }, new() { EncodingFormat = "base64" }, token);
-            SharedAssert.True(r.Success, r.Error ?? "Token embedding failed."); SharedAssert.Equal(3f, r.Embeddings[0].Embedding[2], "Little-endian base64 floats.");
-            SharedAssert.True((await c.EmbedTokenBatchAsync(new[] { new[] { 1 }, new[] { 2 } }, token: token)).Success, "Token batch.");
+            // xAI no longer offers embeddings (docs.x.ai lists no embedding models), so 4.0 removed the operation.
+            using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
+            SharedAssert.False(c.Supports(Capability.Embed), "xAI does not support embeddings.");
+            CapabilityNotSupportedException? ex = null;
+            try { await c.EmbedAsync("x", token: token); } catch (CapabilityNotSupportedException caught) { ex = caught; }
+            SharedAssert.NotNull(ex, "EmbedAsync throws CapabilityNotSupportedException.");
+            SharedAssert.Equal(Capability.Embed, ex!.Capability, "Capability reported.");
+            SharedAssert.Equal(0, server.RequestBodies.Count, "No request is sent.");
         }
         private static async Task CatalogsAsync(CancellationToken token)
         {
-            using var server = LocalOpenAiTestServer.Start(); using XAiModelClient c = new(LocalXAiRoutes.Key, server.Endpoint);
+            using var server = LocalOpenAiTestServer.Start(); using XAiClient c = new(LocalXAiRoutes.Key, server.Endpoint);
             var catalogs = new[] { c.ListModelsAsync(token), c.ListLanguageModelsAsync(token), c.ListEmbeddingModelsAsync(token), c.ListImageGenerationModelsAsync(token), c.ListVideoGenerationModelsAsync(token) };
             foreach (var catalog in catalogs) { int n = 0; await foreach (var model in catalog) { n++; SharedAssert.True(model.Metadata.ContainsKey("capabilities"), "Detailed metadata preserved."); } SharedAssert.Equal(1, n, "Catalog count."); }
             SharedAssert.True(await c.ModelExistsAsync("test-model", token), "Model existence.");
@@ -236,25 +232,23 @@ namespace Test.Shared
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.CreateResponseAsync(J("{}"), token: token), "Invalid raw input.");
-            await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync("hello", new XAiCompletionOptions { ReasoningEffortOverride = "none" }, token), "Reasoning cannot be disabled.");
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync("hello", new XAiCompletionOptions { ReasoningEffortValue = "none" }, token), "Reasoning cannot be disabled.");
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync("hello", new XAiCompletionOptions { AdditionalParameters = new() { ["model"] = J("\"override\"") } }, token), "Reserved fields cannot be overridden.");
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ListResponseInputItemsAsync("id", 101, token: token), "Paging range.");
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ToolChatAsync(new() { Messages = new() { ChatMessage.ToolResult(null, "tool", "result") } }, token), "Result call ID required.");
-            using XAiEmbeddingClient embedding = new(LocalXAiRoutes.Key, server.Endpoint) { Model = "test" };
-            await SharedAssert.ThrowsAsync<ArgumentException>(() => embedding.EmbedAsync(Enumerable.Repeat("x", 129).ToList(), token: token), "Batch limit.");
             SharedAssert.Equal(0, server.RequestBodies.Count, "Invalid arguments send nothing.");
         }
         private static async Task FramingAsync(CancellationToken token)
         {
             string final = "{\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\",\"model\":\"m\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"fallback\"}]}]}}";
             using var handler = new LocalFakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(": comment\r\nevent: response.completed\r\ndata: " + final[..final.IndexOf(",\"response\"", StringComparison.Ordinal)] + ",\r\ndata: " + final[(final.IndexOf(",\"response\"", StringComparison.Ordinal) + 1)..] + "\r\n\r\n", Encoding.UTF8, "text/event-stream") }));
-            using var http = new HttpClient(handler); using XAiCompletionClient c = new("test", httpClient: http);
+            using var http = new HttpClient(handler); using XAiClient c = new("test", options: new ClientOptions { HttpClient = http });
             var r = await c.ChatStreamingAsync("hello", token: token); StringBuilder text = new(); await foreach (var chunk in r.Chunks.WithCancellation(token)) text.Append(chunk.Text);
             SharedAssert.True(r.Success, r.Error ?? "SSE framing."); SharedAssert.Equal("fallback", text.ToString(), "Final-only payload fills missing deltas.");
         }
         private static async Task CancellationAsync(CancellationToken token)
         {
-            using var c = new XAiCompletionClient("test", "http://127.0.0.1:1"); using var canceled = new CancellationTokenSource(); canceled.Cancel();
+            using var c = new XAiClient("test", "http://127.0.0.1:1"); using var canceled = new CancellationTokenSource(); canceled.Cancel();
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => c.ChatAsync("hello", token: canceled.Token), "Caller cancellation propagates.");
         }
         private static async Task ParallelAsync(CancellationToken token)
@@ -270,7 +264,7 @@ namespace Test.Shared
         private static async Task HostedOutputAsync(CancellationToken token)
         {
             const string json = """{"id":"hosted","model":"test","status":"completed","output":[{"type":"web_search_call","id":"search","status":"completed","action":{"type":"search","query":"test"},"encrypted_content":"hosted-opaque"},{"type":"message","content":[{"type":"output_text","text":"cited answer","annotations":[{"type":"url_citation","url":"https://example.com"}]}]}]}""";
-            using var handler = LocalFakeHandler.Always(HttpStatusCode.OK, json); using var http = new HttpClient(handler); using XAiCompletionClient c = new("test", httpClient: http);
+            using var handler = LocalFakeHandler.Always(HttpStatusCode.OK, json); using var http = new HttpClient(handler); using XAiClient c = new("test", options: new ClientOptions { HttpClient = http });
             var r = await c.CreateResponseAsync(J("\"hello\""), token: token);
             SharedAssert.True(r.Success, r.Error ?? "Hosted output."); SharedAssert.Equal(0, r.ToolCalls.Count, "Hosted calls are not executed locally.");
             SharedAssert.True(r.ToAssistantMessage().ProviderState!.Value.GetRawText().Contains("hosted-opaque"), "Hosted encrypted outputs replay intact.");
@@ -286,7 +280,7 @@ namespace Test.Shared
             foreach (string payload in payloads)
             {
                 using var handler = new LocalFakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload, Encoding.UTF8, "text/event-stream") }));
-                using var http = new HttpClient(handler); using XAiCompletionClient c = new("test", httpClient: http);
+                using var http = new HttpClient(handler); using XAiClient c = new("test", options: new ClientOptions { HttpClient = http });
                 var r = await c.ToolChatStreamingAsync(Request(), token); await foreach (var _ in r.Chunks.WithCancellation(token)) { }
                 SharedAssert.False(r.Success, "Malformed/failed streams cannot succeed."); SharedAssert.Equal(0, r.ToolCalls.Count, "No executable calls escape a failed stream.");
             }
@@ -294,12 +288,12 @@ namespace Test.Shared
 
         private static Task SerializationAsync(CancellationToken token)
         {
-            var config = JsonSerializer.Deserialize("[{\"type\":\"web_search\",\"parameters\":{\"allowed_domains\":[\"example.com\"]}}]", PolyPromptJsonContext.Default.ListXAiHostedTool);
+            var config = JsonSerializer.Deserialize("[{\"type\":\"web_search\",\"parameters\":{\"allowed_domains\":[\"example.com\"]}}]", PolyPromptJsonContext.Default.ListResponsesApiHostedTool);
             SharedAssert.Equal("web_search", config![0].Type, "Console hosted-tool JSON names round trip.");
             SharedAssert.True(config[0].Parameters.ContainsKey("allowed_domains"), "Hosted parameters round trip without reflection.");
-            var response = new XAiResponse { ProviderState = J("[{\"type\":\"reasoning\",\"encrypted_content\":\"opaque\"}]") };
-            string json = JsonSerializer.Serialize(response, PolyPromptJsonContext.Default.XAiResponse);
-            SharedAssert.True(JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.XAiResponse)!.ToAssistantMessage().ProviderState!.Value.GetRawText().Contains("opaque"), "Native-safe state persistence.");
+            var response = new ResponsesApiResponse { ProviderState = J("[{\"type\":\"reasoning\",\"encrypted_content\":\"opaque\"}]") };
+            string json = JsonSerializer.Serialize(response, PolyPromptJsonContext.Default.ResponsesApiResponse);
+            SharedAssert.True(JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ResponsesApiResponse)!.ToAssistantMessage().ProviderState!.Value.GetRawText().Contains("opaque"), "Native-safe state persistence.");
             return Task.CompletedTask;
         }
     }

@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for Pi through <see cref="PiAgentClient"/> (<c>pi --mode rpc</c>). Model listing
+/// Interactive and one-shot console for Pi through <see cref="PiClient"/> (<c>pi --mode rpc</c>). Model listing
 /// accepts Pi's fuzzy search: <c>--models sonnet</c> or <c>/models sonnet</c>.
 /// </summary>
 public static class Program
@@ -14,8 +14,8 @@ public static class Program
     {
         ApplicationName = "PiConsole",
         HarnessName = "Pi",
-        CreateClient = () => new PiAgentClient(),
-        ListModels = (client, filter, token) => ((PiAgentClient)client).ListModelsAsync(filter, token),
+        CreateClient = () => new PiClient(),
+        ListModels = (client, filter, token) => ((PiClient)client).ListModelsAsync(filter, token),
         Prerequisites =
             "Pi setup:\n" +
             "  1. Install the CLI (https://pi.dev)\n" +

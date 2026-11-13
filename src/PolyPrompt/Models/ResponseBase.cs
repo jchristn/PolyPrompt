@@ -39,5 +39,25 @@ namespace PolyPrompt.Models
         /// fully consumed.
         /// </summary>
         public long OverallRuntimeMs { get; set; }
+
+        /// <summary>
+        /// The provider's complete response JSON, for fields PolyPrompt does not model. For streaming calls, the final
+        /// response object when the provider sends one (Responses API <c>response.completed</c>), otherwise null.
+        /// Returned to the caller only: it is never written to call details, logs, or telemetry.
+        /// </summary>
+        public System.Text.Json.JsonElement? RawResponse { get; set; }
+
+        /// <summary>
+        /// Citations the provider returned, normalized (see <see cref="Citation"/>). Empty, never null, when there are
+        /// none. Streaming responses fill this once, after the stream completes.
+        /// </summary>
+        public List<Citation> Citations { get; set; } = new List<Citation>();
+
+        /// <summary>
+        /// The reasoning effort wire value actually sent, after mapping <see cref="CompletionOptions.ReasoningEffort"/>
+        /// to the provider (for example <c>xhigh</c>, <c>false</c>, or a thinking budget such as <c>8192</c>). Null when
+        /// no reasoning field was sent.
+        /// </summary>
+        public string? AppliedReasoningEffort { get; set; }
     }
 }

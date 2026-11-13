@@ -2,6 +2,7 @@ namespace Test.Shared
 {
     using PolyPrompt.Auth;
     using PolyPrompt.Clients;
+    using PolyPrompt.Models;
 
     /// <summary>
     /// The capability clients a configured live provider offers. A capability the provider does not have is null, so live
@@ -11,21 +12,23 @@ namespace Test.Shared
     {
         #region Public-Members
 
+        private ProviderClientBase? _Client;
+
         public ProviderTestConfiguration Configuration { get; }
 
-        public CompletionClientBase? Completion { get; private set; }
+        public ProviderClientBase? Completion { get; private set; }
 
-        public EmbeddingClientBase? Embedding { get; private set; }
+        public ProviderClientBase? Embedding { get; private set; }
 
-        public SparseEmbeddingClientBase? SparseEmbedding { get; private set; }
+        public ProviderClientBase? SparseEmbedding { get; private set; }
 
-        public RerankClientBase? Rerank { get; private set; }
+        public ProviderClientBase? Rerank { get; private set; }
 
-        public ClassificationClientBase? Classification { get; private set; }
+        public ProviderClientBase? Classification { get; private set; }
 
-        public DecisionClientBase? Decision { get; private set; }
+        public ProviderClientBase? Decision { get; private set; }
 
-        public ModelClientBase? Models { get; private set; }
+        public ProviderClientBase? Models { get; private set; }
 
         /// <summary>
         /// Every non-null client.
@@ -37,6 +40,7 @@ namespace Test.Shared
                 return new List<HttpClientBase?> { Completion, Embedding, SparseEmbedding, Rerank, Classification, Decision, Models }
                     .Where(client => client != null)
                     .Select(client => client!)
+                    .Distinct()
                     .ToList();
             }
         }
@@ -63,91 +67,67 @@ namespace Test.Shared
             string? regionalEndpoint = string.IsNullOrEmpty(endpoint) ? null : endpoint;
             string? key = configuration.ApiKey;
 
+            ProviderClientBase client;
             switch (configuration.ProviderType)
             {
                 case "xai":
-                    provider.Completion = new XAiCompletionClient(key!, endpoint);
-                    if (!string.IsNullOrWhiteSpace(configuration.EmbeddingModel)) provider.Embedding = new XAiEmbeddingClient(key!, endpoint);
-                    provider.Models = new XAiModelClient(key!, endpoint);
+                    client = new XAiClient(key!, endpoint);
                     break;
-
                 case "ollama":
-                    provider.Completion = new OllamaCompletionClient(endpoint, key);
-                    provider.Embedding = new OllamaEmbeddingClient(endpoint, key);
-                    provider.Models = new OllamaModelClient(endpoint, key);
+                    client = new OllamaClient(endpoint, key);
                     break;
-
                 case "openai":
-                    provider.Completion = new OpenAiCompletionClient(endpoint, key);
-                    provider.Embedding = new OpenAiEmbeddingClient(endpoint, key);
-                    provider.Models = new OpenAiModelClient(endpoint, key);
+                    client = new OpenAiClient(key!, endpoint);
                     break;
-
+                case "openai-compatible":
+                    client = new OpenAiCompatibleClient(endpoint, key);
+                    break;
                 case "azure":
-                    provider.Completion = new AzureOpenAiCompletionClient(endpoint, configuration.InferenceModel!, key!, configuration.ApiVersion);
-                    if (!string.IsNullOrEmpty(configuration.EmbeddingModel))
-                        provider.Embedding = new AzureOpenAiEmbeddingClient(endpoint, configuration.EmbeddingModel, key!, configuration.ApiVersion);
-                    provider.Models = new AzureOpenAiModelClient(endpoint, key!, configuration.ApiVersion);
+                    client = new AzureOpenAiClient(endpoint, key!) { Defaults = { Completion = { Model = configuration.InferenceModel! }, Embedding = { Model = configuration.EmbeddingModel } } };
                     break;
-
                 case "gemini":
-                    provider.Completion = new GeminiCompletionClient(endpoint, key);
-                    provider.Embedding = new GeminiEmbeddingClient(endpoint, key);
-                    provider.Models = new GeminiModelClient(endpoint, key);
+                    client = new GeminiClient(key!, endpoint);
                     break;
-
                 case "vertex":
-                    ICredentialProvider credential = CreateVertexCredential(configuration);
-                    provider.Completion = new VertexAiCompletionClient(configuration.Project!, configuration.Region!, credential, regionalEndpoint);
-                    provider.Embedding = new VertexAiEmbeddingClient(configuration.Project!, configuration.Region!, credential, regionalEndpoint);
+                    client = new VertexAiClient(configuration.Project!, configuration.Region!, CreateVertexCredential(configuration), regionalEndpoint);
                     break;
-
                 case "anthropic":
-                    provider.Completion = new AnthropicCompletionClient(endpoint, key) { WorkspaceId = configuration.AnthropicWorkspaceId };
-                    provider.Models = new AnthropicModelClient(endpoint, key) { WorkspaceId = configuration.AnthropicWorkspaceId };
+                    client = new AnthropicClient(key!, endpoint) { WorkspaceId = configuration.AnthropicWorkspaceId };
                     break;
-
                 case "bedrock":
                     IAwsCredentialProvider aws = string.IsNullOrWhiteSpace(configuration.AwsAccessKeyId)
                         ? new EnvironmentAwsCredential(configuration.Region)
                         : new StaticAwsCredential(configuration.AwsAccessKeyId!, configuration.AwsSecretAccessKey!, configuration.Region!, configuration.AwsSessionToken);
-                    provider.Completion = new BedrockCompletionClient(aws, configuration.Region!, regionalEndpoint);
-                    provider.Embedding = new BedrockEmbeddingClient(aws, configuration.Region!, regionalEndpoint);
-                    provider.Rerank = new BedrockRerankClient(aws, configuration.Region!, regionalEndpoint);
-                    provider.Models = new BedrockModelClient(aws, configuration.Region!, regionalEndpoint);
+                    client = new BedrockClient(configuration.Region!, aws, regionalEndpoint);
                     break;
-
                 case "voyageai":
-                    provider.Embedding = new VoyageAiEmbeddingClient(endpoint, key);
-                    provider.Rerank = new VoyageAiRerankClient(endpoint, key);
+                    client = new VoyageAiClient(key!, endpoint);
                     break;
-
                 case "cohere":
-                    provider.Completion = new CohereCompletionClient(endpoint, key);
-                    provider.Embedding = new CohereEmbeddingClient(endpoint, key);
-                    provider.Rerank = new CohereRerankClient(endpoint, key);
-                    provider.Classification = new CohereClassificationClient(endpoint, key);
-                    provider.Models = new CohereModelClient(endpoint, key);
+                    client = new CohereClient(key!, endpoint);
                     break;
-
                 case "tei":
-                    provider.Embedding = new TeiEmbeddingClient(endpoint, key);
-                    provider.SparseEmbedding = new TeiSparseEmbeddingClient(endpoint, key);
-                    provider.Rerank = new TeiRerankClient(endpoint, key);
-                    provider.Classification = new TeiClassificationClient(endpoint, key);
-                    provider.Models = new TeiModelClient(endpoint, key);
+                    client = new TeiClient(endpoint, key);
                     break;
-
                 case "typesafe":
-                    provider.Decision = new TypeSafeDecisionClient(endpoint, key);
+                    client = new TypeSafeClient(key!, endpoint);
                     break;
-
                 default:
                     throw new ArgumentException("Unknown provider: " + configuration.ProviderType);
             }
 
+            // One client per provider; each capability property points at it when the provider supports the capability.
+            provider._Client = client;
+            if (client.Supports(Capability.Chat)) provider.Completion = client;
+            if (client.Supports(Capability.Embed) && (configuration.ProviderType != "azure" || !string.IsNullOrEmpty(configuration.EmbeddingModel))) provider.Embedding = client;
+            if (client.Supports(Capability.SparseEmbed)) provider.SparseEmbedding = client;
+            if (client.Supports(Capability.Rerank)) provider.Rerank = client;
+            if (client.Supports(Capability.Classify)) provider.Classification = client;
+            if (client.Supports(Capability.Decide)) provider.Decision = client;
+            if (client.Supports(Capability.Models)) provider.Models = client;
+
             provider.ApplyModels();
-            foreach (HttpClientBase client in provider.All) client.TimeoutMs = 120000;
+            foreach (HttpClientBase live in provider.All) live.TimeoutMs = 120000;
             return provider;
         }
 
@@ -167,11 +147,11 @@ namespace Test.Shared
         private void ApplyModels()
         {
             string? inference = Configuration.InferenceModel;
-            if (Completion != null && !string.IsNullOrEmpty(inference)) Completion.Model = inference;
-            if (Decision != null && !string.IsNullOrEmpty(inference)) Decision.Model = inference;
+            if (Completion != null && !string.IsNullOrEmpty(inference)) Completion.Defaults.Completion!.Model = inference;
+            if (Decision != null && !string.IsNullOrEmpty(inference)) Decision.Defaults.Decision!.Model = inference;
             if (Embedding != null && !string.IsNullOrEmpty(Configuration.EmbeddingModel) && Configuration.ProviderType != "tei")
-                Embedding.Model = Configuration.EmbeddingModel;
-            if (Rerank != null && !string.IsNullOrEmpty(Configuration.RerankModel)) Rerank.Model = Configuration.RerankModel;
+                Embedding.Defaults.Embedding!.Model = Configuration.EmbeddingModel;
+            if (Rerank != null && !string.IsNullOrEmpty(Configuration.RerankModel)) Rerank.Defaults.Rerank!.Model = Configuration.RerankModel;
         }
 
         private static ICredentialProvider CreateVertexCredential(ProviderTestConfiguration configuration)

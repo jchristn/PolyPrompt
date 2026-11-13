@@ -316,8 +316,8 @@ namespace Test.Shared
         {
             switch (NormalizeProviderType(providerType))
             {
-                case "cohere": return "rerank-v3.5";
-                case "voyageai": return "rerank-2.5";
+                case "cohere": return "rerank-v5.0-fast";
+                case "voyageai": return "rerank-3";
                 case "bedrock": return "cohere.rerank-v3-5:0";
                 default: return string.Empty;
             }
@@ -364,7 +364,7 @@ namespace Test.Shared
                 case "ollama": return "all-minilm";
                 case "openai": return "text-embedding-3-small";
                 case "gemini": return "gemini-embedding-001";
-                case "vertex": return "text-embedding-005";
+                case "vertex": return "gemini-embedding-001";
                 case "bedrock": return "amazon.titan-embed-text-v2:0";
                 case "voyageai": return "voyage-3.5";
                 case "cohere": return "embed-v4.0";

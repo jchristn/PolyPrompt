@@ -82,7 +82,7 @@ public sealed class ConsoleTests
     public async Task MalformedToolArgumentsBecomeResultsAndReasoningOnlyOutputStaysSeparate()
     {
         using ModelServer server = new("malformed");
-        using OllamaCompletionClient client = new(server.Endpoint);
+        using OllamaClient client = new(server.Endpoint);
         using StringWriter output = new();
         using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
         await session.SendAsync("Try an invalid tool call", false);
@@ -96,7 +96,7 @@ public sealed class ConsoleTests
     {
         File.WriteAllText(Path.Combine(_Directory, "visible-to-model.txt"), "fixture");
         using ModelServer server = new();
-        using OllamaCompletionClient client = new(server.Endpoint, "test-token");
+        using OllamaClient client = new(server.Endpoint, "test-token");
         using StringWriter output = new();
         using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
         await session.SendAsync("List this directory", streaming);
@@ -118,7 +118,7 @@ public sealed class ConsoleTests
     public async Task ToolFailuresReturnToModelWithoutRunningUnknownTools()
     {
         using ModelServer server = new("unknown");
-        using OllamaCompletionClient client = new(server.Endpoint);
+        using OllamaClient client = new(server.Endpoint);
         using StringWriter output = new();
         using ConsoleSession session = new(client, new ProcessToolRuntime(), output);
         await session.SendAsync("Try unknown tool", false);
@@ -129,7 +129,7 @@ public sealed class ConsoleTests
     public async Task ToolsOffOmitsDefinitionsAndNeverExecutes()
     {
         using ModelServer server = new("plain");
-        using OllamaCompletionClient client = new(server.Endpoint);
+        using OllamaClient client = new(server.Endpoint);
         using ConsoleSession session = new(client, new ThrowingTools(), TextWriter.Null);
         await session.SendAsync("Hello", false, false);
         Assert.That(server.Bodies[0], Does.Not.Contain("\"tools\""));
@@ -139,7 +139,7 @@ public sealed class ConsoleTests
     public async Task ToolRoundLimitStopsLoopAndRestoresHistory()
     {
         using ModelServer server = new("loop");
-        using OllamaCompletionClient client = new(server.Endpoint);
+        using OllamaClient client = new(server.Endpoint);
         using ConsoleSession session = new(client, new ProcessToolRuntime(), TextWriter.Null) { MaxRounds = 2, WorkingDirectory = _Directory };
         await Assert.ThrowsAsync<InvalidOperationException>(() => session.SendAsync("Loop", false));
         Assert.That(server.Bodies.Count, Is.EqualTo(2));
@@ -162,7 +162,7 @@ public sealed class ConsoleTests
     {
         using ModelServer server = new();
         using HttpClient http = new(new GenerationThinkingHandler());
-        using OllamaCompletionClient client = new(server.Endpoint, httpClient: http);
+        using OllamaClient client = new(server.Endpoint, options: new ClientOptions { HttpClient = http });
         using StringWriter output = new();
         await GenerationHarness.RunAsync(client, streaming, output);
         Assert.That(output.ToString(), Does.Contain("--- Thinking ---").And.Contain("generation thought").And.Contain("--- Answer ---").And.Contain("generated answer"));
@@ -178,13 +178,13 @@ public sealed class ConsoleTests
     {
         using ModelServer server = new("generation-" + provider);
         using HttpClient http = new(new GenerationThinkingHandler());
-        using CompletionClientBase client = provider switch
+        using ProviderClientBase client = provider switch
         {
-            "anthropic" => new AnthropicCompletionClient(server.Endpoint, "test-key", httpClient: http),
-            "gemini" => new GeminiCompletionClient(server.Endpoint, "test-key", httpClient: http),
-            _ => new CohereCompletionClient(server.Endpoint, "test-key", httpClient: http)
+            "anthropic" => new AnthropicClient("test-key", server.Endpoint, new ClientOptions { HttpClient = http }),
+            "gemini" => new GeminiClient("test-key", server.Endpoint, new ClientOptions { HttpClient = http }),
+            _ => new CohereClient("test-key", server.Endpoint, new ClientOptions { HttpClient = http })
         };
-        client.Model = "test-model";
+        client.Defaults.Completion.Model = "test-model";
         using StringWriter output = new();
         await GenerationHarness.RunAsync(client, streaming, output);
         Assert.That(output.ToString(), Does.Contain("generation thought").And.Contain("generated answer").And.Contain("--- Thinking ---").And.Contain("--- Answer ---").And.Not.Contain("Error:"));
@@ -198,8 +198,8 @@ public sealed class ConsoleTests
     public async Task InvalidStreamingTurnsDoNotExecuteTools(string fault)
     {
         using ModelServer server = new ModelServer(fault);
-        using OllamaCompletionClient client = new OllamaCompletionClient(server.Endpoint);
-        client.Model = "test-model";
+        using OllamaClient client = new OllamaClient(server.Endpoint);
+        client.Defaults.Completion.Model = "test-model";
         using StringWriter output = new StringWriter();
         using ConsoleSession session = new ConsoleSession(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await session.SendAsync("inspect directory", true).ConfigureAwait(false)).ConfigureAwait(false);
@@ -214,7 +214,7 @@ public sealed class ConsoleTests
         string? endpoint = Environment.GetEnvironmentVariable("POLYPROMPT_CONSOLE_SIMULATION");
         if (string.IsNullOrEmpty(endpoint)) { Assert.Ignore("Set POLYPROMPT_CONSOLE_SIMULATION to run the saved Postman simulation."); return; }
         File.WriteAllText(Path.Combine(_Directory, ".console-smoke.txt"), "real-file-evidence");
-        using OllamaCompletionClient client = new(endpoint);
+        using OllamaClient client = new(endpoint);
         using StringWriter output = new();
         using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
         await session.SendAsync("console-smoke: inspect directory and read the fixture", streaming);
@@ -229,7 +229,7 @@ public sealed class ConsoleTests
         string? endpoint = Environment.GetEnvironmentVariable("POLYPROMPT_XAI_SIMULATION");
         if (string.IsNullOrEmpty(endpoint)) { Assert.Ignore("Set POLYPROMPT_XAI_SIMULATION to run the native xAI simulation."); return; }
         File.WriteAllText(Path.Combine(_Directory, ".console-smoke.txt"), "xai-real-file-evidence");
-        using XAiCompletionClient client = new("test-key", endpoint);
+        using XAiClient client = new("test-key", endpoint);
         using StringWriter output = new();
         using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
         await session.SendAsync("xai-console-smoke: inspect directory and read fixture", streaming);
@@ -243,19 +243,19 @@ public sealed class ConsoleTests
     {
         string? endpoint = Environment.GetEnvironmentVariable("POLYPROMPT_XAI_SIMULATION");
         if (string.IsNullOrEmpty(endpoint)) { Assert.Ignore("Set POLYPROMPT_XAI_SIMULATION to run the native xAI simulation."); return; }
-        using XAiCompletionClient client = new("test-key", endpoint);
+        using XAiClient client = new("test-key", endpoint);
         using JsonDocument input = JsonDocument.Parse("\"stored response fixture\"");
-        XAiResponse created = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { Store = true });
+        ResponsesApiResponse created = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { Store = true });
         Assert.That(created.Success, Is.True, created.Error);
-        XAiResponse fetched = await client.GetResponseAsync(created.ResponseId!);
+        ResponsesApiResponse fetched = await client.GetResponseAsync(created.ResponseId!);
         Assert.That(fetched.Text, Is.EqualTo(created.Text));
-        XAiResponse continued = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { PreviousResponseId = created.ResponseId });
+        ResponsesApiResponse continued = await client.CreateResponseAsync(input.RootElement, new PolyPrompt.Options.XAiCompletionOptions { PreviousResponseId = created.ResponseId });
         Assert.That(continued.Success, Is.True, continued.Error);
         Assert.That((await client.ListResponseInputItemsAsync(created.ResponseId!)).Success, Is.True);
         Assert.That((await client.CompactConversationAsync(input.RootElement)).Data!.Value.GetProperty("output")[0].GetProperty("type").GetString(), Is.EqualTo("compaction"));
         Assert.That((await client.DeleteResponseAsync(created.ResponseId!)).Data!.Value.GetProperty("deleted").GetBoolean(), Is.True);
         Assert.That((await client.GetResponseAsync(created.ResponseId!)).StatusCode, Is.EqualTo(404));
-        XAiResponse transient = await client.CreateResponseAsync(input.RootElement);
+        ResponsesApiResponse transient = await client.CreateResponseAsync(input.RootElement);
         Assert.That((await client.GetResponseAsync(transient.ResponseId!)).StatusCode, Is.EqualTo(404), "Storage defaults to false.");
     }
 
@@ -271,7 +271,7 @@ public sealed class ConsoleTests
     // Exercise the exact generation command path through the console base rather than duplicating its observer setup.
     private sealed class GenerationHarness : ConsoleApplicationBase
     {
-        public static async Task RunAsync(CompletionClientBase client, bool streaming, TextWriter output)
+        public static async Task RunAsync(ProviderClientBase client, bool streaming, TextWriter output)
         {
             TextWriter previous = System.Console.Out;
             System.Console.SetOut(output);

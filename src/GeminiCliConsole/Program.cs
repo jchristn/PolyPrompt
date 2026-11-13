@@ -4,7 +4,7 @@ using PolyPrompt.AgentConsoleSupport;
 using PolyPrompt.Clients;
 
 /// <summary>
-/// Interactive and one-shot console for the Gemini CLI agent harness through <see cref="GeminiCliAgentClient"/>
+/// Interactive and one-shot console for the Gemini CLI agent harness through <see cref="GeminiCliClient"/>
 /// (<c>gemini --output-format stream-json</c>). For the Gemini HTTP API use GeminiConsole instead.
 /// </summary>
 public static class Program
@@ -14,7 +14,7 @@ public static class Program
     {
         ApplicationName = "GeminiCliConsole",
         HarnessName = "Gemini CLI",
-        CreateClient = () => new GeminiCliAgentClient(),
+        CreateClient = () => new GeminiCliClient(),
         Prerequisites =
             "Gemini CLI setup:\n" +
             "  1. Install the CLI (https://github.com/google-gemini/gemini-cli), for example: npm install -g @google/gemini-cli\n" +

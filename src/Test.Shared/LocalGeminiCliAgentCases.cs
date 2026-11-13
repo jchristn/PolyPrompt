@@ -5,7 +5,7 @@ namespace Test.Shared
     using Touchstone.Core;
 
     /// <summary>
-    /// Fake-CLI cases for <see cref="GeminiCliAgentClient"/>: the shared harness kit plus Gemini CLI's documented exit codes,
+    /// Fake-CLI cases for <see cref="GeminiCliClient"/>: the shared harness kit plus Gemini CLI's documented exit codes,
     /// session resume, and non-fatal error events. The scenarios are constructed from the Gemini CLI 0.66.0 documentation
     /// and source, not recorded (the CLI was not available when the adapter was written).
     /// </summary>
@@ -21,7 +21,7 @@ namespace Test.Shared
                 {
                     Id = "geminicli",
                     ExecutableName = "gemini",
-                    Create = () => new GeminiCliAgentClient(),
+                    Create = () => new GeminiCliClient(),
                     HappyScenario = "geminicli-happy",
                     ErrorExitScenario = "geminicli-error-exit",
                     StderrOnlyScenario = "geminicli-stderr-only",

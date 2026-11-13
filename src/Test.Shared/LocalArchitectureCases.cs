@@ -15,32 +15,22 @@ namespace Test.Shared
     /// </summary>
     internal static class LocalArchitectureCases
     {
-        private static readonly Type[] _CapabilityBases = new[]
+        private static readonly string[] _HarnessModelListers = new[] { "CodexClient", "CursorClient", "MuxClient", "PiClient", "OpenCodeClient" };
+
+        private static readonly string[] _ProviderClients = new[]
         {
-            typeof(CompletionClientBase), typeof(EmbeddingClientBase), typeof(SparseEmbeddingClientBase), typeof(RerankClientBase),
-            typeof(ClassificationClientBase), typeof(DecisionClientBase), typeof(ModelClientBase), typeof(CliAgentClientBase)
+            "XAiClient", "OllamaClient", "OllamaCloudClient", "OpenAiClient", "OpenAiCompatibleClient", "AzureOpenAiClient", "GeminiClient",
+            "VertexAiClient", "AnthropicClient", "CohereClient", "BedrockClient", "VoyageAiClient", "TeiClient", "TypeSafeClient",
         };
 
-        private static readonly string[] _HarnessModelListers = new[] { "CodexAgentClient", "CursorAgentClient", "MuxAgentClient", "PiAgentClient", "OpenCodeAgentClient" };
-
-        private static readonly Dictionary<Type, string[]> _ExpectedClients = new Dictionary<Type, string[]>
-        {
-            { typeof(CompletionClientBase), new[] { "XAiCompletionClient", "OllamaCompletionClient", "OllamaCloudCompletionClient", "OpenAiCompletionClient", "AzureOpenAiCompletionClient", "GeminiCompletionClient", "VertexAiCompletionClient", "AnthropicCompletionClient", "CohereCompletionClient", "BedrockCompletionClient" } },
-            { typeof(EmbeddingClientBase), new[] { "XAiEmbeddingClient", "OllamaEmbeddingClient", "OllamaCloudEmbeddingClient", "OpenAiEmbeddingClient", "AzureOpenAiEmbeddingClient", "GeminiEmbeddingClient", "VertexAiEmbeddingClient", "BedrockEmbeddingClient", "VoyageAiEmbeddingClient", "CohereEmbeddingClient", "TeiEmbeddingClient" } },
-            { typeof(SparseEmbeddingClientBase), new[] { "TeiSparseEmbeddingClient" } },
-            { typeof(RerankClientBase), new[] { "BedrockRerankClient", "VoyageAiRerankClient", "CohereRerankClient", "TeiRerankClient" } },
-            { typeof(ClassificationClientBase), new[] { "CohereClassificationClient", "TeiClassificationClient" } },
-            { typeof(DecisionClientBase), new[] { "TypeSafeDecisionClient" } },
-            { typeof(CliAgentClientBase), new[] { "ClaudeCodeAgentClient", "CodexAgentClient", "GeminiCliAgentClient", "CursorAgentClient", "MuxAgentClient", "PiAgentClient", "OpenCodeAgentClient" } },
-            { typeof(ModelClientBase), new[] { "XAiModelClient", "OllamaModelClient", "OllamaCloudModelClient", "OpenAiModelClient", "AzureOpenAiModelClient", "GeminiModelClient", "AnthropicModelClient", "CohereModelClient", "BedrockModelClient", "TeiModelClient" } },
-        };
+        private static readonly string[] _HarnessClients = new[] { "ClaudeCodeClient", "CodexClient", "GeminiCliClient", "CursorClient", "MuxClient", "PiClient", "OpenCodeClient" };
 
         public static IEnumerable<TestCaseDescriptor> Create(string suiteId)
         {
             return new List<TestCaseDescriptor>
             {
-                Case(suiteId, "arch_capability_matrix", "Every client derives from exactly one capability base and the provider-by-capability matrix is complete", RunCapabilityMatrixAsync),
-                Case(suiteId, "arch_defaults_types", "Each client's Defaults is its own instance of the capability's options type, and Model reads and writes Defaults.Model", RunDefaultsTypesAsync),
+                Case(suiteId, "arch_capability_matrix", "Every provider client derives from ProviderClientBase, harness clients from CliAgentClientBase, and every model operation is on the base", RunCapabilityMatrixAsync),
+                Case(suiteId, "arch_defaults_types", "Each client's Defaults is its own get-only instance with one section per supported capability", RunDefaultsTypesAsync),
                 Case(suiteId, "arch_completion_validation", "Every completion client rejects null prompts and empty or null-containing tool requests before sending", RunCompletionValidationAsync),
                 Case(suiteId, "arch_embedding_validation", "Every embedding and sparse embedding client rejects null, empty, and null-containing input before sending", RunEmbeddingValidationAsync),
                 Case(suiteId, "arch_rerank_validation", "Every rerank client rejects bad queries, documents, and TopN before sending", RunRerankValidationAsync),
@@ -71,55 +61,32 @@ namespace Test.Shared
                 .Where(t => t.IsClass && !t.IsAbstract && typeof(ClientBase).IsAssignableFrom(t))
                 .ToList();
 
+            List<string> providers = clients.Where(c => typeof(ProviderClientBase).IsAssignableFrom(c)).Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+            List<string> harnesses = clients.Where(c => typeof(CliAgentClientBase).IsAssignableFrom(c)).Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+            SharedAssert.Equal(string.Join(", ", _ProviderClients.OrderBy(n => n, StringComparer.Ordinal)), string.Join(", ", providers), "Exactly the expected provider clients exist.");
+            SharedAssert.Equal(string.Join(", ", _HarnessClients.OrderBy(n => n, StringComparer.Ordinal)), string.Join(", ", harnesses), "Exactly the expected harness clients exist.");
+            SharedAssert.Equal(_ProviderClients.Length + _HarnessClients.Length, clients.Count, "There should be no client outside the two families.");
+
             foreach (Type client in clients)
-            {
-                List<Type> bases = _CapabilityBases.Where(b => b.IsAssignableFrom(client)).ToList();
-                SharedAssert.Equal(1, bases.Count, client.Name + " should derive from exactly one capability base.");
                 SharedAssert.True(client.Name.EndsWith("Client", StringComparison.Ordinal), client.Name + " should be named *Client.");
+
+            SharedAssert.True(typeof(ProviderClientBase).IsAbstract && typeof(ProviderClientBase).BaseType == typeof(HttpClientBase), "ProviderClientBase is abstract and derives from HttpClientBase.");
+            SharedAssert.True(typeof(CliAgentClientBase).IsAbstract && typeof(CliAgentClientBase).BaseType == typeof(ClientBase), "CliAgentClientBase is abstract and derives from ClientBase.");
+
+            // Every model operation is declared once, on ProviderClientBase, so code written against it runs on any provider.
+            string[] operations = { "ChatAsync", "ChatStreamingAsync", "ToolChatAsync", "ToolChatStreamingAsync", "GenerateAsync", "GenerateStreamingAsync",
+                "EmbedAsync", "EmbedSparseAsync", "RerankAsync", "ClassifyAsync", "DecideAsync", "ListModelsAsync", "ModelExistsAsync", "GetModelInformationAsync" };
+            foreach (string operation in operations)
+            {
+                MethodInfo[] declared = typeof(ProviderClientBase).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => m.Name == operation).ToArray();
+                SharedAssert.True(declared.Length > 0, operation + " should be declared on ProviderClientBase.");
             }
 
-            foreach (Type capability in _CapabilityBases)
-            {
-                SharedAssert.True(capability.IsAbstract, capability.Name + " should be abstract.");
-                Type transport = capability == typeof(CliAgentClientBase) ? typeof(ClientBase) : typeof(HttpClientBase);
-                SharedAssert.True(capability.BaseType == transport, capability.Name + " should derive directly from " + transport.Name + ".");
-
-                List<string> actual = clients.Where(c => capability.IsAssignableFrom(c)).Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
-                List<string> expected = _ExpectedClients[capability].OrderBy(n => n, StringComparer.Ordinal).ToList();
-                SharedAssert.Equal(string.Join(", ", expected), string.Join(", ", actual), capability.Name + " should have exactly the expected provider clients.");
-            }
-
-            SharedAssert.Equal(_ExpectedClients.Values.Sum(v => v.Length), clients.Count, "There should be no client outside the capability matrix.");
-
-            // Capability methods live only on their capability base, so no client can expose an operation it does not support.
-            Dictionary<string, Type> operations = new Dictionary<string, Type>
-            {
-                { "ChatAsync", typeof(CompletionClientBase) }, { "ToolChatAsync", typeof(CompletionClientBase) }, { "GenerateAsync", typeof(CompletionClientBase) },
-                { "EmbedAsync", typeof(EmbeddingClientBase) }, { "EmbedSparseAsync", typeof(SparseEmbeddingClientBase) }, { "RerankAsync", typeof(RerankClientBase) },
-                { "ClassifyAsync", typeof(ClassificationClientBase) }, { "DecideAsync", typeof(DecisionClientBase) }, { "ListModelsAsync", typeof(ModelClientBase) },
-                { "RunAsync", typeof(CliAgentClientBase) }, { "RunStreamingAsync", typeof(CliAgentClientBase) },
-            };
-
-            foreach (Type client in clients)
-            {
-                foreach (KeyValuePair<string, Type> operation in operations)
-                {
-                    bool has = client.GetMethods(BindingFlags.Public | BindingFlags.Instance).Any(m => m.Name == operation.Key);
-                    bool expected = operation.Value.IsAssignableFrom(client);
-
-                    // Harness clients list models only where the CLI can (plan section 3); they are not ModelClientBase.
-                    if (operation.Key == "ListModelsAsync" && typeof(CliAgentClientBase).IsAssignableFrom(client)) expected = _HarnessModelListers.Contains(client.Name);
-
-                    SharedAssert.Equal(expected, has, client.Name + " should expose " + operation.Key + " only when it is a " + operation.Value.Name + ".");
-                }
-            }
-
-            // Harness clients are a separate capability: never completion clients, never HTTP clients.
             foreach (Type harness in clients.Where(c => typeof(CliAgentClientBase).IsAssignableFrom(c)))
             {
-                SharedAssert.False(typeof(CompletionClientBase).IsAssignableFrom(harness), harness.Name + " must not derive from CompletionClientBase.");
                 SharedAssert.False(typeof(HttpClientBase).IsAssignableFrom(harness), harness.Name + " must not derive from HttpClientBase.");
-                SharedAssert.True(harness.Name.EndsWith("AgentClient", StringComparison.Ordinal), harness.Name + " should be named *AgentClient.");
+                bool lists = harness.GetMethods(BindingFlags.Public | BindingFlags.Instance).Any(m => m.Name == "ListModelsAsync");
+                SharedAssert.Equal(_HarnessModelListers.Contains(harness.Name), lists, harness.Name + " should expose ListModelsAsync only where the CLI can list models.");
             }
 
             return Task.CompletedTask;
@@ -129,47 +96,41 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            List<HttpClientBase> first = LocalClients.All("http://127.0.0.1:1");
-            List<HttpClientBase> second = LocalClients.All("http://127.0.0.1:1");
+            List<ProviderClientBase> first = LocalClients.All("http://127.0.0.1:1");
+            List<ProviderClientBase> second = LocalClients.All("http://127.0.0.1:1");
             try
             {
-                Dictionary<Type, Type> optionsTypes = new Dictionary<Type, Type>
+                (string Section, Capability Capability, Type Options)[] sections =
                 {
-                    { typeof(CompletionClientBase), typeof(CompletionOptions) }, { typeof(EmbeddingClientBase), typeof(EmbeddingOptions) },
-                    { typeof(SparseEmbeddingClientBase), typeof(SparseEmbeddingOptions) }, { typeof(RerankClientBase), typeof(RerankOptions) },
-                    { typeof(ClassificationClientBase), typeof(ClassificationOptions) }, { typeof(DecisionClientBase), typeof(DecisionOptions) },
+                    ("Completion", Capability.Chat, typeof(CompletionOptions)), ("Embedding", Capability.Embed, typeof(EmbeddingOptions)),
+                    ("SparseEmbedding", Capability.SparseEmbed, typeof(SparseEmbeddingOptions)), ("Rerank", Capability.Rerank, typeof(RerankOptions)),
+                    ("Classification", Capability.Classify, typeof(ClassificationOptions)), ("Decision", Capability.Decide, typeof(DecisionOptions)),
                 };
 
                 for (int i = 0; i < first.Count; i++)
                 {
-                    HttpClientBase client = first[i];
+                    ProviderClientBase client = first[i];
                     string name = client.GetType().Name;
-                    if (client is ModelClientBase)
+                    ClientDefaults defaults = client.Defaults;
+                    SharedAssert.False(ReferenceEquals(defaults, second[i].Defaults), name + " instances should not share a Defaults object.");
+                    SharedAssert.False(client.GetType().GetProperties().Any(p => p.Name == "Defaults" && p.SetMethod != null && p.SetMethod.IsPublic), name + " Defaults should be get-only.");
+                    SharedAssert.True(client.GetType().GetProperty("Model", BindingFlags.Public | BindingFlags.Instance) == null, name + " should have no Model shorthand.");
+
+                    foreach (var (section, capability, options) in sections)
                     {
-                        SharedAssert.True(client.GetType().GetProperty("Defaults") == null, name + " should have no Defaults; model clients take no per-call settings.");
-                        continue;
+                        object? value = typeof(ClientDefaults).GetProperty(section)!.GetValue(defaults);
+                        if (client.Supports(capability))
+                        {
+                            SharedAssert.NotNull(value, name + " Defaults." + section + " should exist.");
+                            SharedAssert.True(options.IsAssignableFrom(value!.GetType()), name + " Defaults." + section + " should be a " + options.Name + ".");
+                            object? other = typeof(ClientDefaults).GetProperty(section)!.GetValue(second[i].Defaults);
+                            SharedAssert.False(ReferenceEquals(value, other), name + " Defaults." + section + " should not be shared.");
+                        }
+                        else
+                        {
+                            SharedAssert.True(value == null, name + " Defaults." + section + " should be null through ClientDefaults.");
+                        }
                     }
-
-                    Type capability = _CapabilityBases.First(b => b.IsAssignableFrom(client.GetType()));
-                    PropertyInfo defaults = capability.GetProperty("Defaults")!;
-                    object value = defaults.GetValue(client)!;
-                    SharedAssert.True(optionsTypes[capability].IsAssignableFrom(value.GetType()), name + " Defaults should be a " + optionsTypes[capability].Name + ".");
-                    SharedAssert.False(ReferenceEquals(value, defaults.GetValue(second[i])), name + " instances should not share a Defaults object.");
-                    SharedAssert.False(
-                        client.GetType().GetProperties().Any(p => p.Name == "Defaults" && p.SetMethod != null && p.SetMethod.IsPublic),
-                        name + " Defaults should be get-only.");
-
-                    PropertyInfo model = capability.GetProperty("Model")!;
-                    PropertyInfo defaultsModel = value.GetType().GetProperty("Model")!;
-                    model.SetValue(client, "set-through-model");
-                    SharedAssert.Equal("set-through-model", (string?)defaultsModel.GetValue(value), name + " Model should write Defaults.Model.");
-                    defaultsModel.SetValue(value, "set-through-defaults");
-                    SharedAssert.Equal("set-through-defaults", (string?)model.GetValue(client), name + " Model should read Defaults.Model.");
-
-                    bool threw = false;
-                    try { model.SetValue(client, " "); }
-                    catch (TargetInvocationException ex) when (ex.InnerException is ArgumentNullException) { threw = true; }
-                    SharedAssert.True(threw, name + " Model should reject whitespace.");
                 }
             }
             finally
@@ -188,10 +149,10 @@ namespace Test.Shared
         private static async Task RunCompletionValidationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<CompletionClientBase> clients = LocalClients.Completion(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.Completion(server.Endpoint);
             try
             {
-                foreach (CompletionClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ChatAsync(null!, token: token), name + " ChatAsync should reject a null prompt.").ConfigureAwait(false);
@@ -220,11 +181,11 @@ namespace Test.Shared
         private static async Task RunEmbeddingValidationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<EmbeddingClientBase> clients = LocalClients.Embedding(server.Endpoint);
-            using TeiSparseEmbeddingClient sparse = new TeiSparseEmbeddingClient(server.Endpoint, LocalClients.TestKey);
+            List<ProviderClientBase> clients = LocalClients.Embedding(server.Endpoint);
+            using TeiClient sparse = new TeiClient(server.Endpoint, LocalClients.TestKey);
             try
             {
-                foreach (EmbeddingClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.EmbedAsync((string)null!, null, token), name + " should reject a null input.").ConfigureAwait(false);
@@ -249,11 +210,11 @@ namespace Test.Shared
         private static async Task RunRerankValidationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<RerankClientBase> clients = LocalClients.Rerank(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.Rerank(server.Endpoint);
             List<string> documents = new List<string> { "a", "b" };
             try
             {
-                foreach (RerankClientBase client in clients)
+                foreach (ProviderClientBase client in clients)
                 {
                     string name = client.GetType().Name;
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.RerankAsync(null!, documents, null, token), name + " should reject a null query.").ConfigureAwait(false);
@@ -275,11 +236,11 @@ namespace Test.Shared
         private static async Task RunClassificationAndModelValidationAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<ClassificationClientBase> classifiers = LocalClients.Classification(server.Endpoint);
-            List<ModelClientBase> models = LocalClients.Models(server.Endpoint);
+            List<ProviderClientBase> classifiers = LocalClients.Classification(server.Endpoint);
+            List<ProviderClientBase> models = LocalClients.Models(server.Endpoint);
             try
             {
-                foreach (ClassificationClientBase client in classifiers)
+                foreach (ProviderClientBase client in classifiers)
                 {
                     string name = client.GetType().Name;
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ClassifyAsync((string)null!, null, token), name + " should reject a null input.").ConfigureAwait(false);
@@ -288,7 +249,7 @@ namespace Test.Shared
                     await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ClassifyAsync(new List<string> { null! }, null, token), name + " should reject a null element.").ConfigureAwait(false);
                 }
 
-                foreach (ModelClientBase client in models)
+                foreach (ProviderClientBase client in models)
                 {
                     string name = client.GetType().Name;
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ModelExistsAsync(null!, token), name + " ModelExistsAsync should reject a null name.").ConfigureAwait(false);
@@ -308,13 +269,13 @@ namespace Test.Shared
         private static async Task RunNoModelAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
-                foreach (CompletionClientBase client in clients.OfType<CompletionClientBase>())
+                foreach (ProviderClientBase client in clients.Where(c => c.Supports(Capability.Chat)))
                 {
                     string name = client.GetType().Name;
-                    client.Defaults.Model = null;
+                    client.Defaults.Completion.Model = null;
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.ChatAsync("hi", token: token), name + " ChatAsync should throw without a model.").ConfigureAwait(false);
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.GenerateStreamingAsync("hi", token: token), name + " GenerateStreamingAsync should throw without a model.").ConfigureAwait(false);
                     ToolChatRequest request = new ToolChatRequest();
@@ -325,11 +286,11 @@ namespace Test.Shared
                     SharedAssert.True(perCall.Success, name + " chat with only a per-call model should succeed. " + perCall.Error);
                 }
 
-                foreach (EmbeddingClientBase client in clients.OfType<EmbeddingClientBase>())
+                foreach (ProviderClientBase client in clients.Where(c => c.Supports(Capability.Embed)))
                 {
                     string name = client.GetType().Name;
-                    client.Defaults.Model = null;
-                    if (client is TeiEmbeddingClient)
+                    client.Defaults.Embedding.Model = null;
+                    if (client is TeiClient)
                     {
                         EmbeddingResponse tei = await client.EmbedAsync("hi", null, token).ConfigureAwait(false);
                         SharedAssert.True(tei.Success, "TEI serves one model and should embed without a model name. " + tei.Error);
@@ -340,11 +301,11 @@ namespace Test.Shared
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.EmbedAsync(new List<string> { "a", "b" }, null, token), name + " batch should throw without a model.").ConfigureAwait(false);
                 }
 
-                foreach (RerankClientBase client in clients.OfType<RerankClientBase>())
+                foreach (ProviderClientBase client in clients.Where(c => c.Supports(Capability.Rerank)))
                 {
                     string name = client.GetType().Name;
-                    client.Defaults.Model = null;
-                    if (client is TeiRerankClient)
+                    client.Defaults.Rerank.Model = null;
+                    if (client is TeiClient)
                     {
                         RerankResponse tei = await client.RerankAsync("q", new List<string> { "a", "b" }, null, token).ConfigureAwait(false);
                         SharedAssert.True(tei.Success, "TEI should rerank without a model name. " + tei.Error);
@@ -354,9 +315,9 @@ namespace Test.Shared
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.RerankAsync("q", new List<string> { "a" }, null, token), name + " should throw without a model.").ConfigureAwait(false);
                 }
 
-                foreach (DecisionClientBase client in clients.OfType<DecisionClientBase>())
+                foreach (ProviderClientBase client in clients.Where(c => c.Supports(Capability.Decide)))
                 {
-                    client.Defaults.Model = null;
+                    client.Defaults.Decision.Model = null;
                     DecisionRequest request = new DecisionRequest { State = "x", Questions = { DecisionQuestion.Binary("b", "Is it?") } };
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.DecideAsync(request, null, token), "DecideAsync should throw without a model.").ConfigureAwait(false);
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.DecideAsync(new List<DecisionRequest> { request }, null, token), "Batch DecideAsync should throw without a model.").ConfigureAwait(false);
@@ -382,25 +343,26 @@ namespace Test.Shared
             public Func<JsonElement, string, string, bool> UsesModel = (_, _, _) => false;
         }
 
-        private static CompletionWire WireFor(CompletionClientBase client)
+        private static CompletionWire WireFor(ProviderClientBase client)
         {
             Func<JsonElement, string, string, bool> bodyModel = (body, url, model) => GetString(body, "model") == model;
 
             switch (client)
             {
-                case XAiCompletionClient:
+                case XAiClient:
+                case OpenAiClient:
+                case AzureOpenAiClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "max_output_tokens"), Temperature = b => GetDouble(b, "temperature"), UsesModel = bodyModel };
-                case OllamaCompletionClient:
+                case OllamaClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "options", "num_predict"), Temperature = b => GetDouble(b, "options", "temperature"), UsesModel = bodyModel };
-                case AzureOpenAiCompletionClient:
-                    return new CompletionWire { MaxTokens = b => GetInt(b, "max_tokens"), Temperature = b => GetDouble(b, "temperature"), UsesModel = (b, url, m) => url.Contains("/deployments/" + m + "/", StringComparison.Ordinal) };
-                case OpenAiCompletionClient:
-                case AnthropicCompletionClient:
-                case CohereCompletionClient:
+                case OpenAiCompatibleClient:
+                case AnthropicClient:
+                case CohereClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "max_tokens"), Temperature = b => GetDouble(b, "temperature"), UsesModel = bodyModel };
-                case GeminiCompletionClient:
+                case GeminiClient:
+                case VertexAiClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "generationConfig", "maxOutputTokens"), Temperature = b => GetDouble(b, "generationConfig", "temperature"), UsesModel = (b, url, m) => url.Contains("/models/" + m + ":", StringComparison.Ordinal) };
-                case BedrockCompletionClient:
+                case BedrockClient:
                     return new CompletionWire { MaxTokens = b => GetInt(b, "inferenceConfig", "maxTokens"), Temperature = b => GetDouble(b, "inferenceConfig", "temperature"), UsesModel = (b, url, m) => url.Contains("/model/" + m + "/", StringComparison.Ordinal) };
                 default:
                     throw new TestFailureException("No wire mapping for " + client.GetType().Name + ".");
@@ -409,21 +371,21 @@ namespace Test.Shared
 
         private static async Task RunCompletionMergeAsync(CancellationToken token)
         {
-            foreach (CompletionClientBase client in LocalClients.Completion("http://127.0.0.1:1"))
+            foreach (ProviderClientBase client in LocalClients.Completion("http://127.0.0.1:1"))
             {
                 client.Dispose();
                 using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-                CompletionClientBase live = LocalClients.Completion(server.Endpoint).First(c => c.GetType() == client.GetType());
+                ProviderClientBase live = LocalClients.Completion(server.Endpoint).First(c => c.GetType() == client.GetType());
                 using (live)
                 {
                     string name = live.GetType().Name;
                     CompletionWire wire = WireFor(live);
-                    string defaultModel = live.Model!;
+                    string defaultModel = live.Defaults.Completion.Model!;
 
                     SharedAssert.True((await live.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, name + " baseline chat should succeed.");
 
-                    live.Defaults.MaxTokens = 77;
-                    live.Defaults.Temperature = 0.25;
+                    live.Defaults.Completion.MaxTokens = 77;
+                    live.Defaults.Completion.Temperature = 0.25;
                     SharedAssert.True((await live.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, name + " chat with defaults should succeed.");
 
                     SharedAssert.True((await live.ChatAsync("hi", new CompletionOptions { MaxTokens = 11, Model = "per-call-model" }, token).ConfigureAwait(false)).Success, name + " chat with per-call options should succeed.");
@@ -441,8 +403,8 @@ namespace Test.Shared
                     using JsonDocument b2 = JsonDocument.Parse(bodies[2]);
                     using JsonDocument b3 = JsonDocument.Parse(bodies[3]);
 
-                    int? builtIn = live is OllamaCompletionClient ? null : CompletionClientBase.DefaultMaxTokens;
-                    SharedAssert.Equal(!(live is OllamaCompletionClient), live.SendDefaultMaxTokens, name + " SendDefaultMaxTokens default.");
+                    int? builtIn = live is OllamaClient ? null : ProviderClientBase.DefaultMaxTokens;
+                    SharedAssert.Equal(!(live is OllamaClient), live.SendDefaultMaxTokens, name + " SendDefaultMaxTokens default.");
                     SharedAssert.Equal<int?>(builtIn, wire.MaxTokens(b0.RootElement), name + " should send the built-in MaxTokens (none on Ollama) when nothing sets it.");
                     SharedAssert.True(wire.Temperature(b0.RootElement) == null, name + " should send no temperature when nothing sets it.");
                     SharedAssert.True(wire.UsesModel(b0.RootElement, urls[0], defaultModel), name + " should use the default model.");
@@ -458,22 +420,22 @@ namespace Test.Shared
                     SharedAssert.Equal<int?>(77, wire.MaxTokens(b3.RootElement), name + " tool chat should use Defaults.MaxTokens.");
                     SharedAssert.Equal<double?>(0.75, wire.Temperature(b3.RootElement), name + " tool chat should use the request's temperature.");
                     SharedAssert.True(wire.UsesModel(b3.RootElement, urls[3], defaultModel), name + " tool chat should use the default model.");
-                    SharedAssert.Equal(defaultModel, live.Model, name + " a per-call model should not change the client's model.");
+                    SharedAssert.Equal(defaultModel, live.Defaults.Completion.Model, name + " a per-call model should not change the client's model.");
                 }
             }
         }
 
         private static async Task RunDefaultMaxTokensOptOutAsync(CancellationToken token)
         {
-            foreach (CompletionClientBase probe in LocalClients.Completion("http://127.0.0.1:1"))
+            foreach (ProviderClientBase probe in LocalClients.Completion("http://127.0.0.1:1"))
             {
                 Type type = probe.GetType();
                 probe.Dispose();
                 using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-                using CompletionClientBase live = LocalClients.Completion(server.Endpoint).First(c => c.GetType() == type);
+                using ProviderClientBase live = LocalClients.Completion(server.Endpoint).First(c => c.GetType() == type);
                 string name = type.Name;
                 CompletionWire wire = WireFor(live);
-                bool required = live is AnthropicCompletionClient || live is BedrockCompletionClient;
+                bool required = live is AnthropicClient || live is BedrockClient;
 
                 live.SendDefaultMaxTokens = false;
                 SharedAssert.True((await live.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, name + " chat with no default limit should succeed.");
@@ -485,24 +447,24 @@ namespace Test.Shared
                 using JsonDocument off = JsonDocument.Parse(bodies[0]);
                 using JsonDocument explicitLimit = JsonDocument.Parse(bodies[1]);
                 using JsonDocument on = JsonDocument.Parse(bodies[2]);
-                SharedAssert.Equal<int?>(required ? CompletionClientBase.DefaultMaxTokens : null, wire.MaxTokens(off.RootElement),
+                SharedAssert.Equal<int?>(required ? ProviderClientBase.DefaultMaxTokens : null, wire.MaxTokens(off.RootElement),
                     name + (required ? " must still send a limit, because the API requires one." : " should send no limit."));
                 SharedAssert.Equal<int?>(50, wire.MaxTokens(explicitLimit.RootElement), name + " should send an explicit MaxTokens.");
-                SharedAssert.Equal<int?>(CompletionClientBase.DefaultMaxTokens, wire.MaxTokens(on.RootElement), name + " should send the built-in limit when asked to.");
+                SharedAssert.Equal<int?>(ProviderClientBase.DefaultMaxTokens, wire.MaxTokens(on.RootElement), name + " should send the built-in limit when asked to.");
             }
 
             using LocalOpenAiTestServer bedrockServer = LocalOpenAiTestServer.Start();
-            using BedrockCompletionClient bedrock = (BedrockCompletionClient)LocalClients.Completion(bedrockServer.Endpoint).First(c => c is BedrockCompletionClient);
+            using BedrockClient bedrock = (BedrockClient)LocalClients.Completion(bedrockServer.Endpoint).First(c => c is BedrockClient);
             bedrock.SendDefaultMaxTokens = false;
-            bedrock.Model = "meta.llama3-8b-instruct-v1:0";
+            bedrock.Defaults.Completion.Model = "meta.llama3-8b-instruct-v1:0";
             SharedAssert.True((await bedrock.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Bedrock Llama chat should succeed.");
-            bedrock.Model = "us.anthropic.claude-sonnet-4-20250514-v1:0";
+            bedrock.Defaults.Completion.Model = "us.anthropic.claude-sonnet-4-20250514-v1:0";
             SharedAssert.True((await bedrock.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Bedrock Anthropic profile chat should succeed.");
             CompletionWire bedrockWire = WireFor(bedrock);
             using JsonDocument llama = JsonDocument.Parse(bedrockServer.RequestBodies[0]);
             using JsonDocument claude = JsonDocument.Parse(bedrockServer.RequestBodies[1]);
             SharedAssert.Equal<int?>(null, bedrockWire.MaxTokens(llama.RootElement), "Bedrock non-Anthropic models get no limit.");
-            SharedAssert.Equal<int?>(CompletionClientBase.DefaultMaxTokens, bedrockWire.MaxTokens(claude.RootElement), "Bedrock Anthropic inference profiles still get a limit.");
+            SharedAssert.Equal<int?>(ProviderClientBase.DefaultMaxTokens, bedrockWire.MaxTokens(claude.RootElement), "Bedrock Anthropic inference profiles still get a limit.");
         }
 
         #endregion
@@ -514,13 +476,13 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using HttpClient shared = new HttpClient();
 
-            OpenAiCompletionClient openAiA = new OpenAiCompletionClient(server.Endpoint, "key-a", httpClient: shared) { Model = "test-model" };
-            OpenAiCompletionClient openAiB = new OpenAiCompletionClient(server.Endpoint, "key-b", httpClient: shared) { Model = "test-model" };
-            AnthropicCompletionClient anthropic = new AnthropicCompletionClient(server.Endpoint, "key-c", httpClient: shared) { Model = "test-model" };
-            GeminiCompletionClient gemini = new GeminiCompletionClient(server.Endpoint, "key-d", httpClient: shared) { Model = "test-model" };
-            OllamaCompletionClient ollama = new OllamaCompletionClient(server.Endpoint, "key-e", httpClient: shared) { Model = "test-model" };
-            TypeSafeDecisionClient typeSafe = new TypeSafeDecisionClient(server.Endpoint, "key-f", httpClient: shared);
-            OpenAiEmbeddingClient embedding = new OpenAiEmbeddingClient(server.Endpoint, "key-g", httpClient: shared);
+            OpenAiCompatibleClient openAiA = new OpenAiCompatibleClient(server.Endpoint, "key-a", new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "test-model" } } };
+            OpenAiCompatibleClient openAiB = new OpenAiCompatibleClient(server.Endpoint, "key-b", new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "test-model" } } };
+            AnthropicClient anthropic = new AnthropicClient("key-c", server.Endpoint, new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "test-model" } } };
+            GeminiClient gemini = new GeminiClient("key-d", server.Endpoint, new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "test-model" } } };
+            OllamaClient ollama = new OllamaClient(server.Endpoint, "key-e", new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "test-model" } } };
+            TypeSafeClient typeSafe = new TypeSafeClient("key-f", server.Endpoint, new ClientOptions { HttpClient = shared });
+            OpenAiCompatibleClient embedding = new OpenAiCompatibleClient(server.Endpoint, "key-g", new ClientOptions { HttpClient = shared }) { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
             List<HttpClientBase> clients = new List<HttpClientBase> { openAiA, openAiB, anthropic, gemini, ollama, typeSafe, embedding };
 
             await openAiA.ChatAsync("hi", token: token).ConfigureAwait(false);
@@ -556,9 +518,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             const string key = "gemini-secret-key";
 
-            using (GeminiCompletionClient chat = new GeminiCompletionClient(server.Endpoint, key) { Model = "test-model" })
-            using (GeminiEmbeddingClient embed = new GeminiEmbeddingClient(server.Endpoint, key) { Model = "test-embed" })
-            using (GeminiModelClient models = new GeminiModelClient(server.Endpoint, key))
+            using (GeminiClient chat = new GeminiClient(key, server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } })
+            using (GeminiClient embed = new GeminiClient(key, server.Endpoint) { Defaults = { Embedding = { Model = "test-embed" } } })
+            using (GeminiClient models = new GeminiClient(key, server.Endpoint))
             {
                 SharedAssert.True((await chat.ChatAsync("hi", token: token).ConfigureAwait(false)).Success, "Gemini chat should succeed.");
                 ChatStreamingResponse stream = await chat.ChatStreamingAsync("hi", token: token).ConfigureAwait(false);
@@ -592,7 +554,7 @@ namespace Test.Shared
         private static async Task RunConnectivitySuccessAsync(CancellationToken token)
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
-            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
                 foreach (HttpClientBase client in clients)
@@ -610,8 +572,8 @@ namespace Test.Shared
         {
             LocalFakeHandler unauthorized = LocalFakeHandler.Always(HttpStatusCode.Unauthorized, "{\"error\":{\"message\":\"bad key\"}}");
             using HttpClient http = new HttpClient(unauthorized);
-            List<HttpClientBase> rejected = LocalClients.All("http://polyprompt.test", http);
-            List<HttpClientBase> unreachable = LocalClients.All("http://127.0.0.1:1");
+            List<ProviderClientBase> rejected = LocalClients.All("http://polyprompt.test", http);
+            List<ProviderClientBase> unreachable = LocalClients.All("http://127.0.0.1:1");
             try
             {
                 foreach (HttpClientBase client in rejected)
@@ -640,7 +602,7 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CancellationTokenSource cancelled = new CancellationTokenSource();
             cancelled.Cancel();
-            List<HttpClientBase> clients = LocalClients.All(server.Endpoint);
+            List<ProviderClientBase> clients = LocalClients.All(server.Endpoint);
             try
             {
                 foreach (HttpClientBase client in clients)
