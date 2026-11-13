@@ -376,6 +376,9 @@
         <member name="M:PolyPrompt.Clients.AnthropicClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ExtractCitations(System.Text.Json.JsonElement)">
+            <inheritdoc />
+        </member>
         <member name="P:PolyPrompt.Clients.AnthropicClient.PageSize">
             <summary>
             Page size requested by <see cref="M:PolyPrompt.Clients.ProviderClientBase.ListModelsAsync(System.Threading.CancellationToken)"/>. Clamped to 1..1,000 (the API maximum). Listing follows pagination,
@@ -1585,6 +1588,14 @@
             <param name="body">Response body.</param>
             <returns>The hint, or null.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExtractCitations(System.Text.Json.JsonElement)">
+            <summary>
+            Normalize the provider's citations from a successful completion response body, or null when the provider has
+            none. Default: null.
+            </summary>
+            <param name="root">Response JSON.</param>
+            <returns>Citations, or null.</returns>
+        </member>
         <member name="T:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult">
             <summary>
             Holds the HTTP response and timeout resources for a streaming request.
@@ -2466,6 +2477,9 @@
         <member name="M:PolyPrompt.Clients.BedrockClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.ExtractCitations(System.Text.Json.JsonElement)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -2801,6 +2815,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.CohereClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.ExtractCitations(System.Text.Json.JsonElement)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.CohereClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
@@ -3187,6 +3204,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.GenerateContentClientBase.GenerateStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ExtractCitations(System.Text.Json.JsonElement)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ReadParts(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ResponseBase,System.Collections.Generic.Dictionary{System.String,System.Object}@)">
@@ -4113,6 +4133,9 @@
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.GetModelInformationCoreAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ExtractCitations(System.Text.Json.JsonElement)">
             <inheritdoc />
         </member>
         <member name="T:PolyPrompt.Clients.OpenAiCompatibleDefaults">
@@ -5159,6 +5182,47 @@
         </member>
         <member name="P:PolyPrompt.Clients.XAiDefaults.Decision">
             <summary>Not supported by xAI; always null.</summary>
+        </member>
+        <member name="T:PolyPrompt.Helpers.CitationParser">
+            <summary>
+            Normalizes provider citation shapes into <see cref="T:PolyPrompt.Models.Citation"/>. Spans always index the response's final Text in
+            UTF-16 code units, end exclusive; positions inside the cited source go in <see cref="P:PolyPrompt.Models.Citation.Source"/>. Shapes
+            follow each provider's API reference (2026-11-12); unknown members are kept in <see cref="P:PolyPrompt.Models.Citation.Raw"/>.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.Anthropic(System.Text.Json.JsonElement)">
+            <summary>
+            Anthropic Messages: text blocks carry <c>citations[]</c>; the span is the containing block's range in Text.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.Gemini(System.Text.Json.JsonElement)">
+            <summary>
+            Gemini and Vertex AI: <c>groundingMetadata</c> supports joined to grounding chunks, and <c>citationMetadata</c>
+            sources. Segment offsets are UTF-8 bytes of the candidate's answer text and are converted to UTF-16 indices.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.ByteToChar(System.Byte[],System.Int32)">
+            <summary>
+            Convert a UTF-8 byte offset into a UTF-16 index, clamped to the text.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.Cohere(System.Text.Json.JsonElement)">
+            <summary>
+            Cohere v2: <c>message.citations[]</c> with character offsets into the message text. Citations of thinking
+            content are excluded (they index reasoning, not Text).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.Bedrock(System.Text.Json.JsonElement)">
+            <summary>
+            Bedrock Converse: <c>citationsContent</c> blocks; each citation has a location union (document char, page, or
+            chunk, search result, or web). Spans in the response text are not reported, so TextStart/TextEnd are null.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.CitationParser.ChatCompletions(System.Text.Json.JsonElement)">
+            <summary>
+            Chat Completions: <c>choices[0].message.annotations[]</c> with nested <c>url_citation</c>. Offsets are kept as
+            reported (whether <c>end_index</c> is inclusive is not documented).
+            </summary>
         </member>
         <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
             <summary>

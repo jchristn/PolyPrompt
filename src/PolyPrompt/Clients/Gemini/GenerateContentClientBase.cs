@@ -71,7 +71,7 @@ namespace PolyPrompt.Clients
         {
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "chat", ContentUrl(settings.Model, true), BuildPromptBody(prompt, settings, true),
-                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -105,8 +105,14 @@ namespace PolyPrompt.Clients
         {
             GenerationStreamingResponse response = new GenerationStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "generate", ContentUrl(settings.Model, true), BuildPromptBody(prompt, settings, false),
-                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
+        }
+
+        /// <inheritdoc />
+        private protected override List<Citation>? ExtractCitations(System.Text.Json.JsonElement root)
+        {
+            return Helpers.CitationParser.Gemini(root);
         }
 
         #endregion
@@ -581,10 +587,11 @@ namespace PolyPrompt.Clients
             return usage;
         }
 
-        private async IAsyncEnumerable<Dictionary<string, object>> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<Dictionary<string, object>> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token, ResponseBase? result = null)
         {
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             using StreamReader reader = new StreamReader(stream);
+            System.Text.StringBuilder answer = new System.Text.StringBuilder();
 
             string? line;
             while ((line = await reader.ReadLineAsync(token).ConfigureAwait(false)) != null)
@@ -597,8 +604,30 @@ namespace PolyPrompt.Clients
                 if (data == "[DONE]") yield break;
 
                 Dictionary<string, object> chunk = ParseStreamingObject(data, "Gemini");
+                if (result != null) CollectStreamCitations(chunk, data, answer, result);
                 yield return chunk;
             }
+        }
+
+        // Grounding and citation metadata arrive on the final chunk and index the whole answer text, so the streamed answer
+        // text is accumulated and the citations are computed against it.
+        private void CollectStreamCitations(Dictionary<string, object> chunk, string data, System.Text.StringBuilder answer, ResponseBase result)
+        {
+            List<Dictionary<string, object>>? parts = ReadChunkParts(chunk, out _);
+            if (parts != null)
+            {
+                SplitText(parts, true, out string? text, out _);
+                answer.Append(text);
+            }
+            if (!data.Contains("groundingMetadata", StringComparison.Ordinal) && !data.Contains("citationMetadata", StringComparison.Ordinal)) return;
+            System.Text.Json.Nodes.JsonObject root = System.Text.Json.Nodes.JsonNode.Parse(data)!.AsObject();
+            if (root["candidates"] is not System.Text.Json.Nodes.JsonArray candidates || candidates.Count == 0 || candidates[0] is not System.Text.Json.Nodes.JsonObject candidate) return;
+            candidate["content"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["parts"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["text"] = answer.ToString() })
+            };
+            using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(root.ToJsonString());
+            result.Citations = Helpers.CitationParser.Gemini(document.RootElement);
         }
 
         private List<Dictionary<string, object>>? ReadChunkParts(Dictionary<string, object> chunk, out string? finishReason)
@@ -614,9 +643,9 @@ namespace PolyPrompt.Clients
             return content == null ? null : ParseNestedList(content, "parts");
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 ChatStreamingChunk streamChunk = new ChatStreamingChunk();
                 streamChunk.ResponseId = chunk.ContainsKey("responseId") ? chunk["responseId"]?.ToString() : null;
@@ -647,7 +676,7 @@ namespace PolyPrompt.Clients
             var nativeParts = new List<Dictionary<string, object>>();
             int nextToolCallIndex = 0;
 
-            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
                 streamChunk.ResponseId = chunk.ContainsKey("responseId") ? chunk["responseId"]?.ToString() : null;
@@ -712,9 +741,9 @@ namespace PolyPrompt.Clients
             return delta;
         }
 
-        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 GenerationStreamingChunk streamChunk = new GenerationStreamingChunk();
                 streamChunk.Model = chunk.ContainsKey("modelVersion") ? chunk["modelVersion"]?.ToString() : null;

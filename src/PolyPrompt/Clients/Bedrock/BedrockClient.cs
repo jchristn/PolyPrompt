@@ -107,6 +107,12 @@ namespace PolyPrompt.Clients
             return Task.CompletedTask;
         }
 
+        /// <inheritdoc />
+        private protected override List<Citation>? ExtractCitations(System.Text.Json.JsonElement root)
+        {
+            return Helpers.CitationParser.Bedrock(Helpers.CitationParser.Prop(Helpers.CitationParser.Prop(Helpers.CitationParser.Prop(root, "output") ?? default, "message") ?? default, "content") ?? default);
+        }
+
         #endregion
 
         #region Private-Methods

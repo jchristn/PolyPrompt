@@ -110,6 +110,12 @@ namespace PolyPrompt.Clients
             return Task.CompletedTask;
         }
 
+        /// <inheritdoc />
+        private protected override List<Citation>? ExtractCitations(System.Text.Json.JsonElement root)
+        {
+            return Helpers.CitationParser.Anthropic(Helpers.CitationParser.Prop(root, "content") ?? default);
+        }
+
         #endregion
     }
 

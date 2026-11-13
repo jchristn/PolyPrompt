@@ -31,7 +31,7 @@ namespace PolyPrompt.Clients
         {
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "chat", BuildApiUrl("chat/completions", settings.Model), BuildChatBody(prompt, settings, true),
-                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -63,7 +63,7 @@ namespace PolyPrompt.Clients
         {
             GenerationStreamingResponse response = new GenerationStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "generate", BuildApiUrl("completions", settings.Model), BuildGenerateBody(prompt, settings, true),
-                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -455,7 +455,7 @@ namespace PolyPrompt.Clients
             return usage;
         }
 
-        private async IAsyncEnumerable<Dictionary<string, object>?> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<Dictionary<string, object>?> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token, ResponseBase? result = null)
         {
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             using StreamReader reader = new StreamReader(stream);
@@ -475,6 +475,17 @@ namespace PolyPrompt.Clients
                 }
 
                 Dictionary<string, object> chunk = ParseStreamingObject(data, "OpenAI");
+                if (result != null && data.Contains("\"annotations\"", StringComparison.Ordinal))
+                {
+                    // Streamed annotations arrive in choices[].delta; reuse the message-shape parser.
+                    System.Text.Json.Nodes.JsonObject node = System.Text.Json.Nodes.JsonNode.Parse(data)!.AsObject();
+                    if (node["choices"] is System.Text.Json.Nodes.JsonArray choices && choices.Count > 0 && choices[0]?["delta"] is System.Text.Json.Nodes.JsonObject delta)
+                    {
+                        System.Text.Json.Nodes.JsonObject shaped = new() { ["choices"] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["message"] = delta.DeepClone() }) };
+                        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(shaped.ToJsonString());
+                        result.Citations.AddRange(Helpers.CitationParser.ChatCompletions(document.RootElement));
+                    }
+                }
                 yield return chunk;
             }
         }
@@ -485,9 +496,9 @@ namespace PolyPrompt.Clients
             return created.HasValue ? DateTimeOffset.FromUnixTimeSeconds(created.Value).UtcDateTime : null;
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 if (chunk == null)
                 {
@@ -531,7 +542,7 @@ namespace PolyPrompt.Clients
         private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
             var continuation = new Dictionary<string, object>();
-            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 if (chunk == null)
                 {
@@ -607,9 +618,9 @@ namespace PolyPrompt.Clients
             return result;
         }
 
-        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach (Dictionary<string, object>? chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 if (chunk == null)
                 {

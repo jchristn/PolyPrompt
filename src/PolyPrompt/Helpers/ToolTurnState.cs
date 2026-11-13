@@ -82,11 +82,22 @@ namespace PolyPrompt.Helpers
                     else if (kind == "text_delta") Append(b, "text", delta["text"]);
                     else if (kind == "thinking_delta") Append(b, "thinking", delta["thinking"]);
                     else if (kind == "signature_delta") Append(b, "signature", delta["signature"]);
+                    else if (kind == "citations_delta" && delta["citation"] is JsonNode citation)
+                    {
+                        if (b["citations"] is not JsonArray list) b["citations"] = list = new JsonArray();
+                        list.Add(citation.DeepClone());
+                    }
                 }
                 if (type == "content_block_stop" && inputs.TryGetValue(index, out string? input))
                     blocks[index]["input"] = JsonNode.Parse(input);
             }
             internal JsonArray Content() => new(blocks.Values.Select(b => (JsonNode)b.DeepClone()).ToArray());
+
+            internal List<Citation> Citations()
+            {
+                using JsonDocument document = JsonDocument.Parse(Content().ToJsonString());
+                return CitationParser.Anthropic(document.RootElement);
+            }
         }
 
         internal sealed class BedrockBlocks

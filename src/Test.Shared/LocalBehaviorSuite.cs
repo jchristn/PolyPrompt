@@ -35,6 +35,8 @@ namespace Test.Shared
             cases.AddRange(LocalTelemetryCases.Create(SuiteId));
             cases.AddRange(LocalSerializerCases.Create(SuiteId));
             cases.AddRange(LocalXAiCases.Create(SuiteId));
+            cases.AddRange(LocalOpenAiResponsesCases.Create(SuiteId));
+            cases.AddRange(LocalV4Cases.Create(SuiteId));
             cases.AddRange(LocalToolTurnCases.Create(SuiteId));
             cases.AddRange(LocalStreamingLifecycleCases.Create(SuiteId));
             cases.AddRange(LocalCliAgentCases.Create(SuiteId));

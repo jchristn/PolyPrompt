@@ -41,7 +41,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = BuildBody(settings, UserMessages(prompt), SystemBlocks(settings.SystemPrompt), null, null, settings.ReasoningEffort);
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "chat", ConverseUrl(settings.Model, true), body,
-                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -85,7 +85,7 @@ namespace PolyPrompt.Clients
             Dictionary<string, object> body = BuildBody(settings, UserMessages(prompt), null, null, null, null);
             GenerationStreamingResponse response = new GenerationStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "generate", ConverseUrl(settings.Model, true), body,
-                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -377,7 +377,7 @@ namespace PolyPrompt.Clients
             return usage;
         }
 
-        private async IAsyncEnumerable<(string? Type, Dictionary<string, object> Payload)> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<(string? Type, Dictionary<string, object> Payload)> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token, ResponseBase? result = null)
         {
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             await foreach (EventStreamMessage message in EventStreamDecoder.DecodeAsync(stream, token).ConfigureAwait(false))
@@ -385,6 +385,12 @@ namespace PolyPrompt.Clients
                 Dictionary<string, object> payload = ParseStreamingObject(message.PayloadString, "Bedrock");
                 if (message.ExceptionType != null || message.EventType?.EndsWith("Exception", StringComparison.Ordinal) == true)
                     throw new InvalidDataException("Bedrock streaming provider exception: " + (message.ExceptionType ?? message.EventType));
+                if (result != null && message.EventType == "contentBlockDelta" && message.PayloadString.Contains("\"citation\"", StringComparison.Ordinal))
+                {
+                    using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(message.PayloadString);
+                    if (Helpers.CitationParser.Prop(Helpers.CitationParser.Prop(document.RootElement, "delta") ?? default, "citation") is System.Text.Json.JsonElement citation)
+                        result.Citations.Add(Helpers.CitationParser.BedrockCitation(citation));
+                }
                 yield return (message.EventType, payload);
             }
         }
@@ -427,9 +433,9 @@ namespace PolyPrompt.Clients
             };
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 ChatStreamingChunk chunk = new ChatStreamingChunk();
 
@@ -454,7 +460,7 @@ namespace PolyPrompt.Clients
         private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
             var native = new ToolTurnState.BedrockBlocks();
-            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 native.Apply(type, payload);
                 ToolChatStreamingChunk chunk = new ToolChatStreamingChunk();
@@ -486,9 +492,9 @@ namespace PolyPrompt.Clients
             SetTurnState(result, "bedrock", native.Content());
         }
 
-        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string? type, Dictionary<string, object> payload) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 GenerationStreamingChunk chunk = new GenerationStreamingChunk();
                 if (type == "contentBlockDelta") chunk.Text = ReadDelta(payload).Text;

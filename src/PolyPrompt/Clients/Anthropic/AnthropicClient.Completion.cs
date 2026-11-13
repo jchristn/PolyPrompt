@@ -47,7 +47,7 @@ namespace PolyPrompt.Clients
         {
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "chat", BuildUrl("/v1/messages"), BuildPromptBody(prompt, settings, true, true),
-                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -79,7 +79,7 @@ namespace PolyPrompt.Clients
         {
             GenerationStreamingResponse response = new GenerationStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "generate", BuildUrl("/v1/messages"), BuildPromptBody(prompt, settings, false, true),
-                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerateChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -467,12 +467,15 @@ namespace PolyPrompt.Clients
             return delta != null && delta.ContainsKey("stop_reason") && delta["stop_reason"] != null ? delta["stop_reason"]?.ToString() : null;
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
             StreamState state = new StreamState();
+            var native = new ToolTurnState.AnthropicBlocks();
 
             await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
             {
+                native.Apply(type, evt);
+                if (type == MessageStopEvent) result.Citations = native.Citations();
                 ChatStreamingChunk chunk = new ChatStreamingChunk { CreatedUtc = DateTime.UtcNow };
 
                 if (type == MessageStartEvent)
@@ -572,12 +575,16 @@ namespace PolyPrompt.Clients
                 yield return chunk;
             }
             SetTurnState(result, "anthropic", native.Content());
+            result.Citations = native.Citations();
         }
 
-        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerateChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
+            var native = new ToolTurnState.AnthropicBlocks();
             await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
             {
+                native.Apply(type, evt);
+                if (type == MessageStopEvent) result.Citations = native.Citations();
                 if (type == MessageStartEvent)
                 {
                     Dictionary<string, object>? message = ParseNestedObject(evt, "message");

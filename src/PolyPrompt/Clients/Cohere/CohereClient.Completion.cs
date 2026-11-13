@@ -43,7 +43,7 @@ namespace PolyPrompt.Clients
         {
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "chat", BuildUrl("/v2/chat"), BuildPromptBody(prompt, settings, true, true),
-                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -84,7 +84,7 @@ namespace PolyPrompt.Clients
         {
             GenerationStreamingResponse response = new GenerationStreamingResponse { Model = settings.Model };
             return ExecuteStreamingAsync(response, "generate", BuildUrl("/v2/chat"), BuildPromptBody(prompt, settings, false, true),
-                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerationChunks(stream.Response, stream.Token), sw, stream.Token, stream),
+                (stream, sw) => response.Chunks = WrapGenerationChunksWithTiming(response, ReadGenerationChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -367,7 +367,7 @@ namespace PolyPrompt.Clients
             return usage;
         }
 
-        private async IAsyncEnumerable<(string Type, Dictionary<string, object> Event)> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<(string Type, Dictionary<string, object> Event)> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token, ResponseBase? result = null)
         {
             using Stream stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
             using StreamReader reader = new StreamReader(stream);
@@ -387,6 +387,16 @@ namespace PolyPrompt.Clients
                 string? type = evt.ContainsKey("type") ? evt["type"]?.ToString() : null;
                 if (type == null) throw new InvalidDataException("Cohere stream event requires a type.");
 
+                if (result != null && type == "citation-start")
+                {
+                    using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(data);
+                    if (Helpers.CitationParser.Prop(Helpers.CitationParser.Prop(document.RootElement, "delta") ?? default, "message") is System.Text.Json.JsonElement message
+                        && Helpers.CitationParser.Prop(message, "citations") is System.Text.Json.JsonElement citation)
+                    {
+                        if (citation.ValueKind == System.Text.Json.JsonValueKind.Array) foreach (System.Text.Json.JsonElement c in citation.EnumerateArray()) Helpers.CitationParser.AddCohere(c, result.Citations);
+                        else Helpers.CitationParser.AddCohere(citation, result.Citations);
+                    }
+                }
                 yield return (type, evt);
                 if (type == MessageEndEvent) yield break;
             }
@@ -442,9 +452,9 @@ namespace PolyPrompt.Clients
             return delta;
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 ChatStreamingChunk chunk = new ChatStreamingChunk { CreatedUtc = DateTime.UtcNow };
 
@@ -466,7 +476,7 @@ namespace PolyPrompt.Clients
         {
             string plan = "";
             var contents = new SortedDictionary<int, System.Text.Json.Nodes.JsonObject>();
-            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 if (type == ToolPlanDeltaEvent) plan += ReadToolPlanDelta(evt);
                 if ((type == ContentDeltaEvent || type == "content-start") && DeltaMessage(evt) is Dictionary<string, object> m && ParseNestedObject(m, "content") is Dictionary<string, object> c)
@@ -506,9 +516,9 @@ namespace PolyPrompt.Clients
             if (continuation.Count > 0) SetTurnState(result, "cohere", continuation);
         }
 
-        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerationChunks(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<GenerationStreamingChunk> ReadGenerationChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
-            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token).ConfigureAwait(false))
+            await foreach ((string type, Dictionary<string, object> evt) in ReadEvents(response, token, result).ConfigureAwait(false))
             {
                 if (type == ContentDeltaEvent)
                 {

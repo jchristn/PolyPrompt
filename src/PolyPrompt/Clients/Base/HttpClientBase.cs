@@ -629,6 +629,17 @@ namespace PolyPrompt.Clients
             return null;
         }
 
+        /// <summary>
+        /// Normalize the provider's citations from a successful completion response body, or null when the provider has
+        /// none. Default: null.
+        /// </summary>
+        /// <param name="root">Response JSON.</param>
+        /// <returns>Citations, or null.</returns>
+        private protected virtual List<Citation>? ExtractCitations(JsonElement root)
+        {
+            return null;
+        }
+
         private string AppendHint(string message, int statusCode, string url, string? body)
         {
             string? hint = HttpErrorHint(statusCode, url, body);
@@ -683,6 +694,9 @@ namespace PolyPrompt.Clients
                 response.Error = null;
                 parse(result.ResponseBody, response);
                 if (response.RawResponse == null && TryParseJson(result.ResponseBody, out JsonElement raw)) response.RawResponse = raw;
+                if (response.Error == null && response.Citations.Count == 0 && response.RawResponse is JsonElement root
+                    && response is ChatResponse or ToolChatResponse or GenerationResponse)
+                    response.Citations = ExtractCitations(root) ?? response.Citations;
                 response.Success = response.Error == null;
                 if (!response.Success) _Logging.Warn(_Header + operation + " response could not be parsed: " + response.Error);
             }

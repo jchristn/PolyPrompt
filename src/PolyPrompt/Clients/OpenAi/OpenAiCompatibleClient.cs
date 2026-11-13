@@ -149,6 +149,12 @@ namespace PolyPrompt.Clients
             return OpenAiGetModelAsync(BuildApiUrl("models/" + Uri.EscapeDataString(model), null), model, token);
         }
 
+        /// <inheritdoc />
+        private protected override List<Citation>? ExtractCitations(System.Text.Json.JsonElement root)
+        {
+            return Helpers.CitationParser.ChatCompletions(root);
+        }
+
         #endregion
     }
 
