@@ -13,10 +13,6 @@ namespace CohereConsole
         private static bool _RunForever = true;
         private static bool _Streaming = true;
         private static CohereClient _Client = null!;
-        private static CohereClient _EmbeddingClient = null!;
-        private static CohereClient _RerankClient = null!;
-        private static CohereClient _ClassificationClient = null!;
-        private static CohereClient _ModelClient = null!;
 
         #endregion
 
@@ -30,9 +26,9 @@ namespace CohereConsole
 
             string endpoint = Inputty.GetString("Endpoint [https://api.cohere.com]:", "https://api.cohere.com", false);
             string? apiKey = Inputty.GetString("API key:", null, false);
-            string model = Inputty.GetString("Chat model [command-a-03-2025]:", "command-a-03-2025", false);
+            string model = Inputty.GetString("Chat model [command-a-plus-05-2026]:", "command-a-plus-05-2026", false);
             string embeddingModel = Inputty.GetString("Embedding model [embed-v4.0]:", "embed-v4.0", false);
-            string rerankModel = Inputty.GetString("Rerank model [rerank-v3.5]:", "rerank-v3.5", false);
+            string rerankModel = Inputty.GetString("Rerank model [rerank-v5.0-fast]:", "rerank-v5.0-fast", false);
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
@@ -41,19 +37,10 @@ namespace CohereConsole
             _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _EmbeddingClient = new CohereClient(apiKey, endpoint);
-            _EmbeddingClient.Defaults.Embedding.Model = embeddingModel;
-            _EmbeddingClient.TimeoutMs = timeoutMs;
+            _Client.Defaults.Embedding.Model = embeddingModel;
 
-            _RerankClient = new CohereClient(apiKey, endpoint);
-            _RerankClient.Defaults.Rerank.Model = rerankModel;
-            _RerankClient.TimeoutMs = timeoutMs;
-
-            _ClassificationClient = new CohereClient(apiKey, endpoint);
-            _ClassificationClient.TimeoutMs = timeoutMs;
-
-            _ModelClient = new CohereClient(apiKey, endpoint);
-            _ModelClient.TimeoutMs = timeoutMs;
+            _Client.Defaults.Rerank.Model = rerankModel;
+            _Client.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -70,10 +57,6 @@ namespace CohereConsole
             ShutdownSharedConsole();
 
             _Client.Dispose();
-            _EmbeddingClient.Dispose();
-            _RerankClient.Dispose();
-            _ClassificationClient.Dispose();
-            _ModelClient.Dispose();
         }
 
         #endregion
@@ -203,8 +186,8 @@ namespace CohereConsole
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
             Console.WriteLine("  Chat model    : " + _Client.Defaults.Completion.Model);
-            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Defaults.Embedding.Model);
-            Console.WriteLine("  Rerank model  : " + _RerankClient.Defaults.Rerank.Model);
+            Console.WriteLine("  Embed model   : " + _Client.Defaults.Embedding.Model);
+            Console.WriteLine("  Rerank model  : " + _Client.Defaults.Rerank.Model);
             Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
             Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
@@ -253,7 +236,7 @@ namespace CohereConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -293,7 +276,7 @@ namespace CohereConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -330,7 +313,7 @@ namespace CohereConsole
 
             try
             {
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -349,20 +332,9 @@ namespace CohereConsole
 
             try
             {
-                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
-
-                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
-
-                bool rerankOk = await _RerankClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(rerankOk ? "Connectivity (rerank): OK" : "Connectivity (rerank): FAILED");
-
-                bool classificationOk = await _ClassificationClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(classificationOk ? "Connectivity (classification): OK" : "Connectivity (classification): FAILED");
-
-                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {
@@ -404,7 +376,7 @@ namespace CohereConsole
 
             try
             {
-                RerankResponse response = await _RerankClient.RerankAsync(query, documents, options).ConfigureAwait(false);
+                RerankResponse response = await _Client.RerankAsync(query, documents, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -460,7 +432,7 @@ namespace CohereConsole
 
             try
             {
-                ClassificationResponse response = await _ClassificationClient.ClassifyAsync(inputs, options).ConfigureAwait(false);
+                ClassificationResponse response = await _Client.ClassifyAsync(inputs, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);

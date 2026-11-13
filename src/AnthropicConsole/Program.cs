@@ -12,7 +12,6 @@ namespace AnthropicConsole
         private static bool _RunForever = true;
         private static bool _Streaming = true;
         private static AnthropicClient _Client = null!;
-        private static AnthropicClient _ModelClient = null!;
 
         #endregion
 
@@ -27,7 +26,7 @@ namespace AnthropicConsole
             string endpoint = Inputty.GetString("Endpoint [https://api.anthropic.com]:", "https://api.anthropic.com", false);
             string? apiKey = Inputty.GetString("API key:", null, false);
             string? workspaceId = Inputty.GetString("Workspace ID (identity-linked keys only) [none]:", null, true);
-            string model = Inputty.GetString("Model [claude-opus-4-8]:", "claude-opus-4-8", false);
+            string model = Inputty.GetString("Model [claude-sonnet-5-5]:", "claude-sonnet-5-5", false);
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
@@ -37,9 +36,7 @@ namespace AnthropicConsole
             _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _ModelClient = new AnthropicClient(apiKey, endpoint);
-            _ModelClient.WorkspaceId = workspaceId;
-            _ModelClient.TimeoutMs = timeoutMs;
+            _Client.WorkspaceId = workspaceId;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -56,7 +53,6 @@ namespace AnthropicConsole
             ShutdownSharedConsole();
 
             _Client.Dispose();
-            _ModelClient.Dispose();
         }
 
         #endregion
@@ -222,7 +218,7 @@ namespace AnthropicConsole
 
             try
             {
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -241,11 +237,9 @@ namespace AnthropicConsole
 
             try
             {
-                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
-
-                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

@@ -11,11 +11,7 @@ namespace TeiConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static TeiClient _EmbeddingClient = null!;
-        private static TeiClient _SparseClient = null!;
-        private static TeiClient _RerankClient = null!;
-        private static TeiClient _ClassificationClient = null!;
-        private static TeiClient _ModelClient = null!;
+        private static TeiClient _Client = null!;
 
         #endregion
 
@@ -33,11 +29,7 @@ namespace TeiConsole
 
             string? key = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey;
 
-            _EmbeddingClient = new TeiClient(endpoint, key);
-            _SparseClient = new TeiClient(endpoint, key);
-            _RerankClient = new TeiClient(endpoint, key);
-            _ClassificationClient = new TeiClient(endpoint, key);
-            _ModelClient = new TeiClient(endpoint, key);
+            _Client = new TeiClient(endpoint, key);
 
             foreach (HttpClientBase client in AllClients())
             {
@@ -70,7 +62,7 @@ namespace TeiConsole
 
         private static List<HttpClientBase> AllClients()
         {
-            return new List<HttpClientBase> { _EmbeddingClient, _SparseClient, _RerankClient, _ClassificationClient, _ModelClient };
+            return new List<HttpClientBase> { _Client };
         }
 
         private static async Task ProcessCommand(string input)
@@ -169,9 +161,9 @@ namespace TeiConsole
         private static void PrintSettings()
         {
             Console.WriteLine("");
-            Console.WriteLine("  Endpoint   : " + _EmbeddingClient.Endpoint);
-            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_EmbeddingClient.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Timeout ms : " + _EmbeddingClient.TimeoutMs);
+            Console.WriteLine("  Endpoint   : " + _Client.Endpoint);
+            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
+            Console.WriteLine("  Timeout ms : " + _Client.TimeoutMs);
             Console.WriteLine("");
         }
 
@@ -207,7 +199,7 @@ namespace TeiConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs, options).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -248,7 +240,7 @@ namespace TeiConsole
 
             try
             {
-                SparseEmbeddingResponse response = await _SparseClient.EmbedSparseAsync(inputs).ConfigureAwait(false);
+                SparseEmbeddingResponse response = await _Client.EmbedSparseAsync(inputs).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -292,7 +284,7 @@ namespace TeiConsole
 
             try
             {
-                RerankResponse response = await _RerankClient.RerankAsync(query, documents, options).ConfigureAwait(false);
+                RerankResponse response = await _Client.RerankAsync(query, documents, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -328,7 +320,7 @@ namespace TeiConsole
 
             try
             {
-                ClassificationResponse response = await _ClassificationClient.ClassifyAsync(inputs).ConfigureAwait(false);
+                ClassificationResponse response = await _Client.ClassifyAsync(inputs).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -358,7 +350,7 @@ namespace TeiConsole
             try
             {
                 bool found = false;
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     found = true;
                     Console.WriteLine("  Model id     : " + model.Name);
@@ -386,11 +378,9 @@ namespace TeiConsole
 
             try
             {
-                foreach (HttpClientBase client in AllClients())
-                {
-                    bool ok = await client.ValidateConnectivityAsync().ConfigureAwait(false);
-                    Console.WriteLine("Connectivity (" + client.GetType().Name + "): " + (ok ? "OK" : "FAILED"));
-                }
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

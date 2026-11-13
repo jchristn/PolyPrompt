@@ -1,0 +1,989 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenAI Responses API (PolyPrompt contract fixture)",
+    "version": "2026-11-12",
+    "description": "The subset of OpenAI's Responses API that PolyPrompt 4.0 OpenAiClient uses, for local contract fixtures. Derived from OpenAI's official OpenAPI spec (github.com/openai/openai-openapi, main branch, openapi.json), fetched 2026-11-12. The authoritative contract is OpenAI's spec."
+  },
+  "servers": [
+    {
+      "url": "https://api.openai.com"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "paths": {
+    "/v1/responses": {
+      "post": {
+        "operationId": "createResponse",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResponse"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A response, or an SSE stream when stream is true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses/{response_id}": {
+      "get": {
+        "operationId": "getResponse",
+        "parameters": [
+          {
+            "name": "response_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteResponse",
+        "parameters": [
+          {
+            "name": "response_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses/{response_id}/cancel": {
+      "post": {
+        "operationId": "cancelResponse",
+        "parameters": [
+          {
+            "name": "response_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses/{response_id}/input_items": {
+      "get": {
+        "operationId": "listInputItems",
+        "parameters": [
+          {
+            "name": "response_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "first_id": {
+                      "type": "string"
+                    },
+                    "last_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses/compact": {
+      "post": {
+        "operationId": "compactResponse",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {},
+                  "previous_response_id": {
+                    "type": "string"
+                  },
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "type": "string"
+                  },
+                  "service_tier": {
+                    "$ref": "#/components/schemas/ServiceTier"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "object": {
+                      "type": "string"
+                    },
+                    "output": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "usage": {
+                      "$ref": "#/components/schemas/Usage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/responses/input_tokens": {
+      "post": {
+        "operationId": "countInputTokens",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {},
+                  "instructions": {
+                    "type": "string"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "reasoning": {
+                    "$ref": "#/components/schemas/Reasoning"
+                  },
+                  "text": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string"
+                    },
+                    "input_tokens": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "operationId": "createEmbedding",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "input"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string"
+                  },
+                  "input": {},
+                  "encoding_format": {
+                    "type": "string",
+                    "enum": [
+                      "float",
+                      "base64"
+                    ]
+                  },
+                  "dimensions": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "integer"
+                          },
+                          "embedding": {}
+                        }
+                      }
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "object": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Model"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{model}": {
+      "get": {
+        "operationId": "retrieveModel",
+        "parameters": [
+          {
+            "name": "model",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "ReasoningEffort": {
+        "type": "string",
+        "enum": [
+          "none",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      "ReasoningSummary": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "concise",
+          "detailed"
+        ]
+      },
+      "ServiceTier": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "default",
+          "flex",
+          "scale",
+          "priority",
+          "fast"
+        ]
+      },
+      "Reasoning": {
+        "type": "object",
+        "properties": {
+          "effort": {
+            "$ref": "#/components/schemas/ReasoningEffort"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReasoningSummary"
+          }
+        }
+      },
+      "CreateResponse": {
+        "type": "object",
+        "required": [
+          "model"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "input": {
+            "description": "String or array of input items"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "store": {
+            "type": "boolean",
+            "description": "Server default true; PolyPrompt always sends it (false unless Store = true)."
+          },
+          "previous_response_id": {
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "type": "integer"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "top_p": {
+            "type": "number"
+          },
+          "parallel_tool_calls": {
+            "type": "boolean"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/Reasoning"
+          },
+          "service_tier": {
+            "$ref": "#/components/schemas/ServiceTier"
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "file_search_call.results",
+                "web_search_call.results",
+                "web_search_call.action.sources",
+                "message.input_image.image_url",
+                "computer_call_output.output.image_url",
+                "code_interpreter_call.outputs",
+                "reasoning.encrypted_content",
+                "message.output_text.logprobs"
+              ]
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "tool_choice": {},
+          "text": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "object"
+              }
+            }
+          },
+          "prompt_cache_key": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          },
+          "safety_identifier": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "background": {
+            "type": "boolean"
+          },
+          "conversation": {},
+          "max_tool_calls": {
+            "type": "integer"
+          },
+          "top_logprobs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "prompt_cache_options": {
+            "type": "object"
+          },
+          "context_management": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "stream_options": {
+            "type": "object"
+          }
+        }
+      },
+      "Annotation": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "url_citation",
+              "file_citation",
+              "container_file_citation",
+              "file_path"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "start_index": {
+            "type": "integer"
+          },
+          "end_index": {
+            "type": "integer"
+          },
+          "file_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "container_id": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          }
+        }
+      },
+      "OutputItem": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "message, reasoning, function_call, web_search_call, file_search_call, code_interpreter_call, mcp_call, image_generation_call, custom_tool_call, shell_call, local_shell_call, apply_patch_call, computer_call, compaction, ..."
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "output_text",
+                    "refusal"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "refusal": {
+                  "type": "string"
+                },
+                "annotations": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Annotation"
+                  }
+                }
+              }
+            }
+          },
+          "summary": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "encrypted_content": {
+            "type": "string"
+          },
+          "call_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "arguments": {
+            "type": "string"
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "total_tokens": {
+            "type": "integer"
+          },
+          "input_tokens_details": {
+            "type": "object",
+            "properties": {
+              "cached_tokens": {
+                "type": "integer"
+              },
+              "cache_write_tokens": {
+                "type": "integer"
+              }
+            }
+          },
+          "output_tokens_details": {
+            "type": "object",
+            "properties": {
+              "reasoning_tokens": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Response": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "status",
+          "output"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "response"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "failed",
+              "in_progress",
+              "cancelled",
+              "queued",
+              "incomplete"
+            ]
+          },
+          "incomplete_details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "max_output_tokens",
+                  "content_filter",
+                  "max_messages",
+                  "steered"
+                ]
+              }
+            }
+          },
+          "error": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputItem"
+            }
+          },
+          "store": {
+            "type": "boolean"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "service_tier": {
+            "$ref": "#/components/schemas/ServiceTier"
+          }
+        }
+      },
+      "Model": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string"
+          },
+          "created": {
+            "type": "integer"
+          },
+          "owned_by": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

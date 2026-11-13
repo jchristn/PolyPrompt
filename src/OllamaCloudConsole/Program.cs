@@ -12,8 +12,6 @@ namespace OllamaCloudConsole
         private static bool _RunForever = true;
         private static bool _Streaming = true;
         private static OllamaCloudClient _Client = null!;
-        private static OllamaCloudClient _EmbeddingClient = null!;
-        private static OllamaCloudClient _ModelClient = null!;
 
         #endregion
 
@@ -26,22 +24,18 @@ namespace OllamaCloudConsole
             Console.WriteLine("");
 
             string apiKey = Environment.GetEnvironmentVariable("OLLAMA_API_KEY") ?? Inputty.GetString("Bearer token:", null, false);
+            string endpoint = Inputty.GetString("Endpoint [https://ollama.com:443]:", "https://ollama.com:443", false);
             string model = Inputty.GetString("Model [gpt-oss:20b]:", "gpt-oss:20b", false);
             string embeddingModel = Inputty.GetString("Embedding model [all-minilm]:", "all-minilm", false);
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new OllamaCloudClient(apiKey, options: new ClientOptions { HttpClient = CreateConsoleHttpClient() });
+            _Client = new OllamaCloudClient(apiKey, endpoint, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
             _Client.Defaults.Completion.Model = model;
             _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _EmbeddingClient = new OllamaCloudClient(apiKey);
-            _EmbeddingClient.Defaults.Embedding.Model = embeddingModel;
-            _EmbeddingClient.TimeoutMs = timeoutMs;
-
-            _ModelClient = new OllamaCloudClient(apiKey);
-            _ModelClient.TimeoutMs = timeoutMs;
+            _Client.Defaults.Embedding.Model = embeddingModel;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -58,8 +52,6 @@ namespace OllamaCloudConsole
             ShutdownSharedConsole();
 
             _Client.Dispose();
-            _EmbeddingClient.Dispose();
-            _ModelClient.Dispose();
         }
 
         #endregion
@@ -177,7 +169,7 @@ namespace OllamaCloudConsole
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
             Console.WriteLine("  Model         : " + _Client.Defaults.Completion.Model);
-            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Defaults.Embedding.Model);
+            Console.WriteLine("  Embed model   : " + _Client.Defaults.Embedding.Model);
             Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
             Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
@@ -227,7 +219,7 @@ namespace OllamaCloudConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -279,7 +271,7 @@ namespace OllamaCloudConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -324,7 +316,7 @@ namespace OllamaCloudConsole
 
             try
             {
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -343,14 +335,9 @@ namespace OllamaCloudConsole
 
             try
             {
-                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
-
-                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
-
-                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

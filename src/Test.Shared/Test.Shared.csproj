@@ -21,4 +21,7 @@
     <EmbeddedResource Include="FakeCli\Scripts\*.txt" LogicalName="FakeCli/%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Test.Console" />
+  </ItemGroup>
 </Project>

@@ -12,8 +12,6 @@ namespace OllamaConsole
         private static bool _RunForever = true;
         private static bool _Streaming = true;
         private static OllamaClient _Client = null!;
-        private static OllamaClient _EmbeddingClient = null!;
-        private static OllamaClient _ModelClient = null!;
 
         #endregion
 
@@ -37,12 +35,7 @@ namespace OllamaConsole
             _Client.Defaults.Completion.MaxTokens = maxTokens;
             _Client.TimeoutMs = timeoutMs;
 
-            _EmbeddingClient = new OllamaClient(endpoint, apiKey);
-            _EmbeddingClient.Defaults.Embedding.Model = embeddingModel;
-            _EmbeddingClient.TimeoutMs = timeoutMs;
-
-            _ModelClient = new OllamaClient(endpoint, apiKey);
-            _ModelClient.TimeoutMs = timeoutMs;
+            _Client.Defaults.Embedding.Model = embeddingModel;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -59,8 +52,6 @@ namespace OllamaConsole
             ShutdownSharedConsole();
 
             _Client.Dispose();
-            _EmbeddingClient.Dispose();
-            _ModelClient.Dispose();
         }
 
         #endregion
@@ -178,7 +169,7 @@ namespace OllamaConsole
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
             Console.WriteLine("  Model         : " + _Client.Defaults.Completion.Model);
-            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Defaults.Embedding.Model);
+            Console.WriteLine("  Embed model   : " + _Client.Defaults.Embedding.Model);
             Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
             Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
@@ -228,7 +219,7 @@ namespace OllamaConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -280,7 +271,7 @@ namespace OllamaConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -325,7 +316,7 @@ namespace OllamaConsole
 
             try
             {
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -344,14 +335,9 @@ namespace OllamaConsole
 
             try
             {
-                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
-
-                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
-
-                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

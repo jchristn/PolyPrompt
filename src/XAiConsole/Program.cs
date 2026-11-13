@@ -249,6 +249,7 @@ namespace XAiConsole
             {
                 bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
                 Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

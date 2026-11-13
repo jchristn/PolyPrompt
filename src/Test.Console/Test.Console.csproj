@@ -20,6 +20,16 @@
     <ProjectReference Include="..\MuxConsole\MuxConsole.csproj" />
     <ProjectReference Include="..\PiConsole\PiConsole.csproj" />
     <ProjectReference Include="..\OpenCodeConsole\OpenCodeConsole.csproj" />
+    <ProjectReference Include="..\AnthropicConsole\AnthropicConsole.csproj" />
+    <ProjectReference Include="..\CohereConsole\CohereConsole.csproj" />
+    <ProjectReference Include="..\GeminiConsole\GeminiConsole.csproj" />
+    <ProjectReference Include="..\OllamaConsole\OllamaConsole.csproj" />
+    <ProjectReference Include="..\OllamaCloudConsole\OllamaCloudConsole.csproj" />
+    <ProjectReference Include="..\OpenAIConsole\OpenAIConsole.csproj" />
+    <ProjectReference Include="..\TeiConsole\TeiConsole.csproj" />
+    <ProjectReference Include="..\TypeSafeConsole\TypeSafeConsole.csproj" />
+    <ProjectReference Include="..\VoyageAIConsole\VoyageAIConsole.csproj" />
+    <ProjectReference Include="..\XAiConsole\XAiConsole.csproj" />
   </ItemGroup>
   <Import Project="../Console.Shared/Console.Tools.targets" />
 </Project>

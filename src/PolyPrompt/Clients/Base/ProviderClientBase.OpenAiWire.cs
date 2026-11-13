@@ -28,7 +28,7 @@ namespace PolyPrompt.Clients
             if (dimensions.HasValue) body["dimensions"] = dimensions.Value;
 
             EmbeddingResponse response = new EmbeddingResponse { Model = model };
-            return ExecutePostAsync(response, "embed", url, body, ParseEmbeddings, token);
+            return ExecutePostAsync(response, "embed", url, body, OpenAiParseEmbeddings, token);
         }
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace PolyPrompt.Clients
             foreach (Dictionary<string, object> modelObj in data)
             {
                 token.ThrowIfCancellationRequested();
-                yield return ParseModel(modelObj, string.Empty);
+                yield return OpenAiParseModel(modelObj, string.Empty);
             }
         }
 
@@ -73,7 +73,7 @@ namespace PolyPrompt.Clients
                 }
 
                 Dictionary<string, object>? responseObj = TryDeserializeObject(result.ResponseBody);
-                return responseObj == null ? null : ParseModel(responseObj, model);
+                return responseObj == null ? null : OpenAiParseModel(responseObj, model);
             }
             catch (OperationCanceledException)
             {
@@ -86,7 +86,7 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private void ParseEmbeddings(string responseBody, EmbeddingResponse response)
+        private void OpenAiParseEmbeddings(string responseBody, EmbeddingResponse response)
         {
             Dictionary<string, object>? responseObj = TryDeserializeObject(responseBody);
             if (responseObj == null || !responseObj.ContainsKey("data"))
@@ -129,7 +129,7 @@ namespace PolyPrompt.Clients
             return values;
         }
 
-        private static ModelInformation ParseModel(Dictionary<string, object> modelObj, string fallbackName)
+        private static ModelInformation OpenAiParseModel(Dictionary<string, object> modelObj, string fallbackName)
         {
             ModelInformation info = new ModelInformation();
             info.Name = modelObj.ContainsKey("id") ? modelObj["id"]?.ToString() ?? fallbackName : fallbackName;

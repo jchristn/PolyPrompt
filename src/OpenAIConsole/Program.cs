@@ -11,9 +11,7 @@ namespace OpenAIConsole
 
         private static bool _RunForever = true;
         private static bool _Streaming = true;
-        private static OpenAiCompatibleClient _Client = null!;
-        private static OpenAiCompatibleClient _EmbeddingClient = null!;
-        private static OpenAiCompatibleClient _ModelClient = null!;
+        private static ProviderClientBase _Client = null!;
 
         #endregion
 
@@ -22,27 +20,43 @@ namespace OpenAIConsole
         public static async Task Main(string[] args)
         {
             Console.WriteLine("");
-            Console.WriteLine("OpenAIConsole - OpenAI Test Harness");
+            // Default: OpenAiClient (the Responses API). --compatible <url> drives OpenAiCompatibleClient (Chat Completions)
+            // for vLLM, Ollama /v1, LM Studio, gateways, and the like.
+            string? compatible = null;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--compatible" && i + 1 < args.Length) compatible = args[++i];
+            }
+
+            Console.WriteLine(compatible == null
+                ? "OpenAIConsole - OpenAI Responses API Test Harness (OpenAiClient)"
+                : "OpenAIConsole - Chat Completions Test Harness (OpenAiCompatibleClient, " + compatible + ")");
             Console.WriteLine("");
 
-            string endpoint = Inputty.GetString("Endpoint [https://api.openai.com]:", "https://api.openai.com", false);
-            string? apiKey = Inputty.GetString("API key:", null, false);
-            string model = Inputty.GetString("Model [gpt-4o-mini]:", "gpt-4o-mini", false);
+            string? apiKey;
+            string model;
+            if (compatible == null)
+            {
+                string endpoint = Inputty.GetString("Endpoint [https://api.openai.com]:", "https://api.openai.com", false);
+                apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? Inputty.GetString("API key:", null, false);
+                model = Inputty.GetString("Model [gpt-6.1-sol]:", "gpt-6.1-sol", false);
+                _Client = new OpenAiClient(apiKey!, endpoint, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
+            }
+            else
+            {
+                apiKey = Inputty.GetString("API key [none]:", null, true);
+                model = Inputty.GetString("Model:", null, false);
+                _Client = new OpenAiCompatibleClient(compatible, string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
+            }
+
             string embeddingModel = Inputty.GetString("Embedding model [text-embedding-3-small]:", "text-embedding-3-small", false);
             int maxTokens = Inputty.GetInteger("Max tokens [4096]:", 4096, true, false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new OpenAiCompatibleClient(endpoint, apiKey, new ClientOptions { HttpClient = CreateConsoleHttpClient() });
-            _Client.Defaults.Completion.Model = model;
+            _Client.Defaults.Completion!.Model = model;
             _Client.Defaults.Completion.MaxTokens = maxTokens;
+            _Client.Defaults.Embedding!.Model = embeddingModel;
             _Client.TimeoutMs = timeoutMs;
-
-            _EmbeddingClient = new OpenAiCompatibleClient(endpoint, apiKey);
-            _EmbeddingClient.Defaults.Embedding.Model = embeddingModel;
-            _EmbeddingClient.TimeoutMs = timeoutMs;
-
-            _ModelClient = new OpenAiCompatibleClient(endpoint, apiKey);
-            _ModelClient.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. Type ? for help.");
@@ -59,8 +73,6 @@ namespace OpenAIConsole
             ShutdownSharedConsole();
 
             _Client.Dispose();
-            _EmbeddingClient.Dispose();
-            _ModelClient.Dispose();
         }
 
         #endregion
@@ -177,27 +189,27 @@ namespace OpenAIConsole
             Console.WriteLine("");
             Console.WriteLine("  Endpoint      : " + _Client.Endpoint);
             Console.WriteLine("  API key       : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Model         : " + _Client.Defaults.Completion.Model);
-            Console.WriteLine("  Embed model   : " + _EmbeddingClient.Defaults.Embedding.Model);
-            Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion.MaxTokens);
+            Console.WriteLine("  Model         : " + _Client.Defaults.Completion!.Model);
+            Console.WriteLine("  Embed model   : " + _Client.Defaults.Embedding!.Model);
+            Console.WriteLine("  Max tokens    : " + _Client.Defaults.Completion!.MaxTokens);
             Console.WriteLine("  Timeout ms    : " + _Client.TimeoutMs);
-            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion.Temperature.HasValue ? _Client.Defaults.Completion.Temperature.Value.ToString("F1") : "(default)"));
-            Console.WriteLine("  Top-P         : " + (_Client.Defaults.Completion.TopP.HasValue ? _Client.Defaults.Completion.TopP.Value.ToString("F2") : "(default)"));
+            Console.WriteLine("  Temperature   : " + (_Client.Defaults.Completion!.Temperature.HasValue ? _Client.Defaults.Completion!.Temperature.Value.ToString("F1") : "(default)"));
+            Console.WriteLine("  Top-P         : " + (_Client.Defaults.Completion!.TopP.HasValue ? _Client.Defaults.Completion!.TopP.Value.ToString("F2") : "(default)"));
             Console.WriteLine("  Streaming     : " + (_Streaming ? "on" : "off"));
-            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "(none)" : _Client.Defaults.Completion.SystemPrompt));
+            Console.WriteLine("  System prompt : " + (string.IsNullOrEmpty(_Client.Defaults.Completion!.SystemPrompt) ? "(none)" : _Client.Defaults.Completion!.SystemPrompt));
             Console.WriteLine("");
         }
 
         private static void SetSystemPrompt()
         {
             Console.WriteLine("");
-            if (!string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt))
+            if (!string.IsNullOrEmpty(_Client.Defaults.Completion!.SystemPrompt))
             {
-                Console.WriteLine("Current system prompt: " + _Client.Defaults.Completion.SystemPrompt);
+                Console.WriteLine("Current system prompt: " + _Client.Defaults.Completion!.SystemPrompt);
             }
             string? newPrompt = Inputty.GetString("System prompt [Enter to clear]:", null, true);
-            _Client.Defaults.Completion.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
-            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.Completion.SystemPrompt) ? "cleared" : "set") + ".");
+            _Client.Defaults.Completion!.SystemPrompt = string.IsNullOrWhiteSpace(newPrompt) ? null : newPrompt;
+            Console.WriteLine("System prompt " + (string.IsNullOrEmpty(_Client.Defaults.Completion!.SystemPrompt) ? "cleared" : "set") + ".");
             Console.WriteLine("");
         }
 
@@ -227,7 +239,7 @@ namespace OpenAIConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(input).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -279,7 +291,7 @@ namespace OpenAIConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs).ConfigureAwait(false);
 
                 if (!response.Success)
                 {
@@ -324,7 +336,7 @@ namespace OpenAIConsole
 
             try
             {
-                await foreach (ModelInformation model in _ModelClient.ListModelsAsync().ConfigureAwait(false))
+                await foreach (ModelInformation model in _Client.ListModelsAsync().ConfigureAwait(false))
                 {
                     Console.WriteLine("  " + model.Name + (model.DisplayName != null ? " (" + model.DisplayName + ")" : ""));
                 }
@@ -343,14 +355,9 @@ namespace OpenAIConsole
 
             try
             {
-                bool completionOk = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(completionOk ? "Connectivity (completion): OK" : "Connectivity (completion): FAILED");
-
-                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
-
-                bool modelOk = await _ModelClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(modelOk ? "Connectivity (models): OK" : "Connectivity (models): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

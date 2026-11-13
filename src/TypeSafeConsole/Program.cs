@@ -29,7 +29,7 @@ namespace TypeSafeConsole
             string model = Inputty.GetString("Model [jev-latest]:", "jev-latest", false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _Client = new TypeSafeClient(string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, endpoint);
+            _Client = new TypeSafeClient(string.IsNullOrWhiteSpace(apiKey) ? "ollaya" : apiKey, endpoint);
             _Client.CallDetailCapture = CallDetailCapture.Full;   // the "call details" command can show bodies
             _Client.Defaults.Decision.Model = model;
             _Client.TimeoutMs = timeoutMs;
@@ -483,6 +483,7 @@ namespace TypeSafeConsole
             {
                 bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
                 Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {

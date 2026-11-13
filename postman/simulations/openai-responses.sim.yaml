@@ -1,0 +1,5 @@
+simulation: openai-responses
+routing: path
+mocks:
+  - routeKey: openai-responses
+    path: ../mocks/openai-responses/config.yaml

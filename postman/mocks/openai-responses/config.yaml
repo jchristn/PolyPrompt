@@ -1,0 +1,10 @@
+version: 1
+name: OpenAI Responses contract fixture
+slug: openai-responses
+protocol: http
+port: 4913
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./default.js
+    default: true

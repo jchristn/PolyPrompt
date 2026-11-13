@@ -11,8 +11,7 @@ namespace VoyageAIConsole
         #region Private-Members
 
         private static bool _RunForever = true;
-        private static VoyageAiClient _EmbeddingClient = null!;
-        private static VoyageAiClient _RerankClient = null!;
+        private static VoyageAiClient _Client = null!;
 
         #endregion
 
@@ -29,12 +28,9 @@ namespace VoyageAIConsole
             string model = Inputty.GetString("Model [voyage-3.5]:", "voyage-3.5", false);
             int timeoutMs = Inputty.GetInteger("Timeout ms [120000]:", 120000, true, false);
 
-            _EmbeddingClient = new VoyageAiClient(apiKey, endpoint);
-            _EmbeddingClient.Defaults.Embedding.Model = model;
-            _EmbeddingClient.TimeoutMs = timeoutMs;
-
-            _RerankClient = new VoyageAiClient(apiKey, endpoint);
-            _RerankClient.TimeoutMs = timeoutMs;
+            _Client = new VoyageAiClient(apiKey, endpoint);
+            _Client.Defaults.Embedding.Model = model;
+            _Client.TimeoutMs = timeoutMs;
 
             Console.WriteLine("");
             Console.WriteLine("Client initialized. VoyageAI supports embeddings and reranking. Type ? for help.");
@@ -50,8 +46,6 @@ namespace VoyageAIConsole
 
             ShutdownSharedConsole();
 
-            _EmbeddingClient.Dispose();
-            _RerankClient.Dispose();
         }
 
         #endregion
@@ -135,11 +129,11 @@ namespace VoyageAIConsole
         private static void PrintSettings()
         {
             Console.WriteLine("");
-            Console.WriteLine("  Endpoint   : " + _EmbeddingClient.Endpoint);
-            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_EmbeddingClient.ApiKey) ? "(none)" : "(set)"));
-            Console.WriteLine("  Model      : " + _EmbeddingClient.Defaults.Embedding.Model);
-            Console.WriteLine("  Rerank     : " + _RerankClient.Defaults.Rerank.Model);
-            Console.WriteLine("  Timeout ms : " + _EmbeddingClient.TimeoutMs);
+            Console.WriteLine("  Endpoint   : " + _Client.Endpoint);
+            Console.WriteLine("  API key    : " + (string.IsNullOrEmpty(_Client.ApiKey) ? "(none)" : "(set)"));
+            Console.WriteLine("  Model      : " + _Client.Defaults.Embedding.Model);
+            Console.WriteLine("  Rerank     : " + _Client.Defaults.Rerank.Model);
+            Console.WriteLine("  Timeout ms : " + _Client.TimeoutMs);
             Console.WriteLine("");
         }
 
@@ -192,7 +186,7 @@ namespace VoyageAIConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(input, options).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(input, options).ConfigureAwait(false);
                 PrintEmbeddings(response);
             }
             catch (Exception ex)
@@ -226,7 +220,7 @@ namespace VoyageAIConsole
 
             try
             {
-                EmbeddingResponse response = await _EmbeddingClient.EmbedAsync(inputs, options).ConfigureAwait(false);
+                EmbeddingResponse response = await _Client.EmbedAsync(inputs, options).ConfigureAwait(false);
                 PrintEmbeddings(response);
             }
             catch (Exception ex)
@@ -264,7 +258,7 @@ namespace VoyageAIConsole
 
             try
             {
-                RerankResponse response = await _RerankClient.RerankAsync(query, documents, options).ConfigureAwait(false);
+                RerankResponse response = await _Client.RerankAsync(query, documents, options).ConfigureAwait(false);
                 if (!response.Success)
                 {
                     Console.WriteLine("Error: " + response.Error);
@@ -295,11 +289,9 @@ namespace VoyageAIConsole
 
             try
             {
-                bool embeddingOk = await _EmbeddingClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(embeddingOk ? "Connectivity (embedding): OK" : "Connectivity (embedding): FAILED");
-
-                bool rerankOk = await _RerankClient.ValidateConnectivityAsync().ConfigureAwait(false);
-                Console.WriteLine(rerankOk ? "Connectivity (rerank): OK" : "Connectivity (rerank): FAILED");
+                bool ok = await _Client.ValidateConnectivityAsync().ConfigureAwait(false);
+                Console.WriteLine(ok ? "Connectivity: OK" : "Connectivity: FAILED");
+                Console.WriteLine("Capabilities: " + _Client.Capabilities);
             }
             catch (Exception ex)
             {
