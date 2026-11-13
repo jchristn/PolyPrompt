@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PiConsole", "PiConsole\PiCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenCodeConsole", "OpenCodeConsole\OpenCodeConsole.csproj", "{E4264A90-94CF-4870-B1CB-E5EF01BA34AB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test.Docs", "Test.Docs\Test.Docs.csproj", "{868462C0-E3DC-404C-AAB5-77C4887DB76A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -419,6 +421,18 @@ Global
 		{E4264A90-94CF-4870-B1CB-E5EF01BA34AB}.Release|x64.Build.0 = Release|Any CPU
 		{E4264A90-94CF-4870-B1CB-E5EF01BA34AB}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4264A90-94CF-4870-B1CB-E5EF01BA34AB}.Release|x86.Build.0 = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|x64.Build.0 = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Debug|x86.Build.0 = Debug|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|x64.ActiveCfg = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|x64.Build.0 = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|x86.ActiveCfg = Release|Any CPU
+		{868462C0-E3DC-404C-AAB5-77C4887DB76A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

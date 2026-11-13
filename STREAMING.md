@@ -1,6 +1,6 @@
-# Streaming lifecycle in PolyPrompt 3.5
+# Streaming in PolyPrompt 4.0
 
-`ChatStreamingResponse`, `ToolChatStreamingResponse`, `GenerationStreamingResponse`, and native `XAiStreamingResponse` derive from `StreamingResponseBase` and implement `IStreamingResponse`. Their lifecycle works across providers and without telemetry listeners.
+`ChatStreamingResponse`, `ToolChatStreamingResponse`, `GenerationStreamingResponse`, and the native `ResponsesApiStreamingResponse` (OpenAI, Azure OpenAI, and xAI) derive from `StreamingResponseBase` and implement `IStreamingResponse`. Their lifecycle is the same on every provider client and works without telemetry listeners. Every streaming operation is declared on `ProviderClientBase`; a client without the capability throws `CapabilityNotSupportedException` before opening a stream.
 
 ## State contract
 
@@ -23,6 +23,17 @@ Caller cancellation records `Cancelled` and rethrows `OperationCanceledException
 ## Accepting a tool turn
 
 ```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+CancellationToken token = CancellationToken.None;
+using OpenAiClient client = new OpenAiClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+ToolChatRequest request = new ToolChatRequest
+{
+    Messages = { ChatMessage.User("List the files in the repository.") },
+    Tools = { ToolDefinition.Function("list_directory", "List a directory.", new Dictionary<string, object> { { "type", "object" } }) }
+};
+
 ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token);
 await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token))
 {
@@ -42,11 +53,46 @@ request.Messages.Add(response.ToAssistantMessage());
 
 Partial text, tool calls, and `ToAssistantMessage()` remain accessible for compatibility and diagnostics. The accessor does not gate execution. A completed stream can still have a token-limit finish reason, invalid tool arguments, or an answer the application should reject. Completion establishes stream integrity, not task success or permission to execute a tool. No automatic inference retries are introduced.
 
-The same state check applies to chat and generation. For native xAI, enumerate `Events`; `response.completed` or an accepted `response.incomplete` terminal event can finish the stream, while provider failure/cancellation is a failure. Inspect the native response status and finish reason separately.
+The same state check applies to chat and generation. `Citations`, the continuation `ProviderState`, and (on Responses clients) `RawResponse` are filled once the stream completes.
+
+## Responses API streams (OpenAI, Azure OpenAI, xAI)
+
+The generic streaming operations on `OpenAiClient`, `AzureOpenAiClient`, and `XAiClient` project Responses events onto chunks: `response.output_text.delta` becomes `Text`, reasoning summary and reasoning text deltas become `ReasoningText`, function-call items and `response.function_call_arguments.*` become `ToolCallDeltas` (indexed by output index, so parallel calls keep their own arguments), and the terminal `response.completed` or `response.incomplete` event fills any text the deltas missed, the finish reason, usage, citations, and `RawResponse`. `response.failed`, an `error` event, or EOF before a terminal event fails the stream, and no tool call escapes a failed stream.
+
+`CreateResponseStreamingAsync` returns every native event with its raw `Type` and a mapped `ResponsesApiEventKind`: `Created`, `Queued`, `InProgress`, `OutputItemAdded`, `OutputItemDone`, `ContentPartAdded`, `ContentPartDone`, `TextDelta`, `TextDone`, `AnnotationAdded`, `RefusalDelta`, `RefusalDone`, `ReasoningSummaryPartAdded`, `ReasoningSummaryPartDone`, `ReasoningSummaryDelta`, `ReasoningSummaryDone`, `ReasoningDelta`, `ReasoningDone`, `FunctionCallArgumentsDelta`, `FunctionCallArgumentsDone`, `CustomToolInputDelta`, `CustomToolInputDone`, `HostedToolProgress` (web search, file search, code interpreter, image generation, MCP, and shell events), `Compacting`, `Completed`, `Incomplete`, `Failed`, `Error`, and `Other` for anything else (including Realtime-only names).
+
+```csharp
+using System.Text.Json;
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using OpenAiClient openai = new OpenAiClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+JsonElement input = JsonDocument.Parse("\"Summarize the latest .NET release.\"").RootElement;
+
+ResponsesApiStreamingResponse stream = await openai.CreateResponseStreamingAsync(input);
+await foreach (ResponsesApiEvent evt in stream.Events)
+{
+    switch (evt.Kind)
+    {
+        case ResponsesApiEventKind.ReasoningSummaryDelta: Console.Write("[thinking] " + evt.Data.GetProperty("delta").GetString()); break;
+        case ResponsesApiEventKind.TextDelta: Console.Write(evt.Data.GetProperty("delta").GetString()); break;
+        case ResponsesApiEventKind.AnnotationAdded: Console.WriteLine("\n[citation] " + evt.Data.GetProperty("annotation").GetRawText()); break;
+    }
+}
+
+if (stream.State == StreamingState.Completed && stream.Response != null)
+    Console.WriteLine("\n" + stream.Response.Status + ", " + stream.Response.Usage?.CompletionTokens + " output tokens");
+```
+
+Inspect the native response status and finish reason separately from the stream state.
+
+## Continuation state
+
+A completed stream's `ToAssistantMessage()` carries the same tagged continuation envelope as a non-streaming response: `{ "protocol", "provider", "scope", "value" }`. A client replays only state with its own protocol, provider, and endpoint; state from another provider falls back to the plain message. Do not accept the message (or execute its tool calls) unless `State == StreamingState.Completed`.
 
 ## Protocol validation
 
-Provider readers translate their completion signals into the shared contract: Ollama's boolean `done`, OpenAI-compatible completion chunks/sentinel, Gemini/Vertex finish reasons, Anthropic/Cohere terminal events, Bedrock message-stop events, and xAI native response events. Ordinary EOF without a completion signal fails.
+Provider readers translate their completion signals into the shared contract: Ollama's boolean `done`, OpenAI-compatible completion chunks/sentinel, Gemini/Vertex finish reasons, Anthropic/Cohere terminal events, Bedrock message-stop events, and Responses API terminal events (OpenAI, Azure OpenAI, xAI). Ordinary EOF without a completion signal fails.
 
 JSON streaming readers reject malformed and non-object records and recognize top-level native errors before mapping output. Bedrock exception frames fail the stream. This is targeted stream-integrity validation, not exhaustive validation of every provider field or future event shape.
 
@@ -63,7 +109,7 @@ Telemetry records successful streaming completion only when the final state is `
 
 ## Verification
 
-The shared local suite includes 300 Ollama/Ollama Cloud fault cases: 25 scenarios across both client types, all three streaming operations, and telemetry capture on/off. Another 27 descriptors check all nine generic completion client variants for completion, early disposal, request/enumeration cancellation before and during enumeration, and repeat-enumeration rejection. Native xAI event coverage checks the shared lifecycle, and console regressions reject provisional calls before execution.
+The shared local suite includes 300 Ollama/Ollama Cloud fault cases: 25 scenarios across both client types, all three streaming operations, and telemetry capture on/off. Further descriptors check every completion-capable provider client for completion, early disposal, request/enumeration cancellation before and during enumeration, and repeat-enumeration rejection. Native Responses event coverage (OpenAI and xAI) checks the shared lifecycle and every event kind, and console regressions reject provisional calls before execution.
 
 Run deterministic checks with the existing shared Touchstone runners:
 
@@ -86,9 +132,9 @@ dotnet run --project src/Test.Automated -c Release -f net10.0 -- ollamacloud-str
 
 The live suite checks chat, generation, a tool name and integer argument, a synthetic tool result, and the subsequent native continuation. It does not perform filesystem or external tool actions. Passing these checks establishes compatibility with the selected hosted model, not every Cloud model or historical Armada mission.
 
-## Agent harness streams (3.6)
+## Agent harness streams
 
-The seven agent harness clients (`ClaudeCodeAgentClient`, `CodexAgentClient`, `GeminiCliAgentClient`, `CursorAgentClient`, `MuxAgentClient`, `PiAgentClient`, `OpenCodeAgentClient`) stream something different from the HTTP clients. `CliAgentClientBase.RunStreamingAsync` yields `CliAgentEvent`s that the harness CLI reports while it runs its own tool loop: `Started`, `TextDelta`, `ReasoningDelta`, `ToolUse`, `ToolResult`, `Notice`, and exactly one terminal `Completed` or `Failed`. There is no `StreamingResponseBase` and no `StreamingState` for a harness run; the terminal event is the completion signal.
+The seven agent harness clients (`ClaudeCodeClient`, `CodexClient`, `GeminiCliClient`, `CursorClient`, `MuxClient`, `PiClient`, `OpenCodeClient`) stream something different from the HTTP clients. `CliAgentClientBase.RunStreamingAsync` yields `CliAgentEvent`s that the harness CLI reports while it runs its own tool loop: `Started`, `TextDelta`, `ReasoningDelta`, `ToolUse`, `ToolResult`, `Notice`, and exactly one terminal `Completed` or `Failed`. There is no `StreamingResponseBase` and no `StreamingState` for a harness run; the terminal event is the completion signal.
 
 **It is not token streaming.** A harness stream is coarse and non-deterministic in its chunk boundaries:
 

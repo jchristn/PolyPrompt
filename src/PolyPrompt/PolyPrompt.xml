@@ -4481,7 +4481,7 @@
         <member name="T:PolyPrompt.Clients.ResponsesApiClientBase">
             <summary>
             Base class for clients that speak the Responses API (<c>/v1/responses</c>): <see cref="T:PolyPrompt.Clients.OpenAiClient"/>,
-            <see cref="T:PolyPrompt.Clients.AzureOpenAiClient"/>, and <see cref="T:PolyPrompt.Clients.XAiClient"/>. Chat, tool chat, and generation (streaming and not) go
+            <see cref="T:PolyPrompt.Clients.AzureOpenAiClient"/>, and the xAI client. Chat, tool chat, and generation (streaming and not) go
             through one shared engine; provider differences (allowed values, hosted tool types, provider-only fields, and
             message wording) come from each client. It also hosts the native Responses operations shared by every Responses
             provider: <see cref="M:PolyPrompt.Clients.ResponsesApiClientBase.CreateResponseAsync(System.Text.Json.JsonElement,PolyPrompt.Options.ResponsesApiCompletionOptions,System.Threading.CancellationToken)"/>, <see cref="M:PolyPrompt.Clients.ResponsesApiClientBase.CreateResponseStreamingAsync(System.Text.Json.JsonElement,PolyPrompt.Options.ResponsesApiCompletionOptions,System.Threading.CancellationToken)"/>,
@@ -8482,7 +8482,7 @@
             <summary>
             A native Responses API tool definition (hosted tools such as web search, and client-executed non-function tools
             such as shell). Parameters keep provider-specific options. Build one with <see cref="T:PolyPrompt.Models.ResponsesApiTools"/>,
-            <see cref="T:PolyPrompt.Models.OpenAiTools"/>, <see cref="T:PolyPrompt.Models.XAiTools"/>, or <see cref="M:PolyPrompt.Models.ResponsesApiHostedTool.Create(System.String,System.Collections.Generic.Dictionary{System.String,System.Object})"/>. Function tools go in
+            <see cref="T:PolyPrompt.Models.OpenAiTools"/>, the xAI tool factory, or <see cref="M:PolyPrompt.Models.ResponsesApiHostedTool.Create(System.String,System.Collections.Generic.Dictionary{System.String,System.Object})"/>. Function tools go in
             <c>ToolChatRequest.Tools</c> or <c>FunctionTools</c> instead.
             </summary>
         </member>
@@ -8547,16 +8547,6 @@
         <member name="M:PolyPrompt.Models.ResponsesApiTools.ToolSearch(System.Collections.Generic.Dictionary{System.String,System.Object})">
             <summary><c>tool_search</c>: hosted tool search.</summary>
             <param name="parameters">Optional tool fields.</param>
-            <returns>The tool.</returns>
-        </member>
-        <member name="T:PolyPrompt.Models.XAiTools">
-            <summary>
-            Factories for Responses API tools only xAI accepts.
-            </summary>
-        </member>
-        <member name="M:PolyPrompt.Models.XAiTools.XSearch(System.Collections.Generic.Dictionary{System.String,System.Object})">
-            <summary><c>x_search</c>: search posts on X.</summary>
-            <param name="parameters">Optional tool fields (for example handle or date filters).</param>
             <returns>The tool.</returns>
         </member>
         <member name="T:PolyPrompt.Models.OpenAiTools">
@@ -9258,6 +9248,16 @@
             <param name="parameters">JSON Schema parameter object.</param>
             <returns>A function tool definition.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
+        </member>
+        <member name="T:PolyPrompt.Models.XAiTools">
+            <summary>
+            Factories for Responses API tools only xAI accepts.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.XAiTools.XSearch(System.Collections.Generic.Dictionary{System.String,System.Object})">
+            <summary><c>x_search</c>: search posts on X.</summary>
+            <param name="parameters">Optional tool fields (for example handle or date filters).</param>
+            <returns>The tool.</returns>
         </member>
         <member name="T:PolyPrompt.Options.AnthropicCompletionOptions">
             <summary>

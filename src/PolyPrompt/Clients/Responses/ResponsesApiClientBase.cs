@@ -6,7 +6,7 @@ namespace PolyPrompt.Clients
 
     /// <summary>
     /// Base class for clients that speak the Responses API (<c>/v1/responses</c>): <see cref="OpenAiClient"/>,
-    /// <see cref="AzureOpenAiClient"/>, and <see cref="XAiClient"/>. Chat, tool chat, and generation (streaming and not) go
+    /// <see cref="AzureOpenAiClient"/>, and the xAI client. Chat, tool chat, and generation (streaming and not) go
     /// through one shared engine; provider differences (allowed values, hosted tool types, provider-only fields, and
     /// message wording) come from each client. It also hosts the native Responses operations shared by every Responses
     /// provider: <see cref="CreateResponseAsync"/>, <see cref="CreateResponseStreamingAsync"/>,

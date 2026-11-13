@@ -24,6 +24,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <ImplicitUsings>enable</ImplicitUsings>
     <NoWarn>CS1998;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+    <WarningsAsErrors Condition="'$(Configuration)' == 'Release'">$(WarningsAsErrors);CS1591;CS1572;CS1573;CS1574</WarningsAsErrors>
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <Title>PolyPrompt</Title>
   </PropertyGroup>

@@ -5,7 +5,7 @@ namespace PolyPrompt.Models
     /// <summary>
     /// A native Responses API tool definition (hosted tools such as web search, and client-executed non-function tools
     /// such as shell). Parameters keep provider-specific options. Build one with <see cref="ResponsesApiTools"/>,
-    /// <see cref="OpenAiTools"/>, <see cref="XAiTools"/>, or <see cref="Create"/>. Function tools go in
+    /// <see cref="OpenAiTools"/>, the xAI tool factory, or <see cref="Create"/>. Function tools go in
     /// <c>ToolChatRequest.Tools</c> or <c>FunctionTools</c> instead.
     /// </summary>
     public class ResponsesApiHostedTool
@@ -99,17 +99,6 @@ namespace PolyPrompt.Models
         /// <param name="parameters">Optional tool fields.</param>
         /// <returns>The tool.</returns>
         public static ResponsesApiHostedTool ToolSearch(Dictionary<string, object>? parameters = null) => ResponsesApiHostedTool.Create("tool_search", parameters);
-    }
-
-    /// <summary>
-    /// Factories for Responses API tools only xAI accepts.
-    /// </summary>
-    public static class XAiTools
-    {
-        /// <summary><c>x_search</c>: search posts on X.</summary>
-        /// <param name="parameters">Optional tool fields (for example handle or date filters).</param>
-        /// <returns>The tool.</returns>
-        public static ResponsesApiHostedTool XSearch(Dictionary<string, object>? parameters = null) => ResponsesApiHostedTool.Create("x_search", parameters);
     }
 
     /// <summary>
