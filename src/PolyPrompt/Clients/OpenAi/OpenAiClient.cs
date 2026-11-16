@@ -26,7 +26,7 @@ namespace PolyPrompt.Clients
     /// </list>
     /// </summary>
     /// <seealso href="https://github.com/jchristn/Polyprompt#capability-matrix">Capability matrix</seealso>
-    public class OpenAiClient : ResponsesApiClientBase
+    public partial class OpenAiClient : ResponsesApiClientBase
     {
         #region Private-Members
 

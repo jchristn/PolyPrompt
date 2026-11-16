@@ -29,6 +29,7 @@
     <Compile Include="..\Test.Shared\LocalOpenAiTestServer.cs" Link="Shared\LocalOpenAiTestServer.cs" />
     <Compile Include="..\Test.Shared\LocalExtendedRoutes.cs" Link="Shared\LocalExtendedRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalTranscriptionRoutes.cs" Link="Shared\LocalTranscriptionRoutes.cs" />
+    <Compile Include="..\Test.Shared\LocalFileRoutes.cs" Link="Shared\LocalFileRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalDecisionRoutes.cs" Link="Shared\LocalDecisionRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalGeminiToolRoutes.cs" Link="Shared\LocalGeminiToolRoutes.cs" />
     <Compile Include="..\Test.Shared\LocalRequestParser.cs" Link="Shared\LocalRequestParser.cs" />

@@ -240,6 +240,24 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
+        /// Run any send function and fill <paramref name="response"/> the way <see cref="ExecutePostAsync{TResponse}"/>
+        /// does: status, errors with hints, parsing, RawResponse, and runtime. Used for multi-step calls such as resumable
+        /// uploads, where the function returns the last call's result or the first failure.
+        /// </summary>
+        private protected Task<TResponse> ExecuteSendAsync<TResponse>(
+            TResponse response,
+            string operation,
+            string method,
+            string url,
+            Func<CancellationToken, Task<HttpCallResult>> send,
+            Action<string, TResponse> parse,
+            CancellationToken token)
+            where TResponse : ResponseBase
+        {
+            return ExecuteAsync(response, operation, method, url, send, parse, token);
+        }
+
+        /// <summary>
         /// POST a <c>multipart/form-data</c> body and fill <paramref name="response"/>. See
         /// <see cref="ExecutePostAsync{TResponse}"/>.
         /// </summary>
@@ -464,8 +482,18 @@ namespace PolyPrompt.Clients
         /// wire body decoded as UTF-8 when bodies are captured.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>An HttpCallResult containing the response and body.</returns>
-        protected async Task<HttpCallResult> PostAndRecordAsync(
+        protected Task<HttpCallResult> PostAndRecordAsync(
             string url, byte[] wireBody, string contentType, string? recordedBody, CancellationToken token)
+        {
+            return PostAndRecordAsync(url, wireBody, contentType, recordedBody, null, token);
+        }
+
+        /// <summary>
+        /// <see cref="PostAndRecordAsync(string, byte[], string, string?, CancellationToken)"/> with extra request headers,
+        /// added before <see cref="PrepareRequestAsync"/> runs (for example the resumable upload protocol headers).
+        /// </summary>
+        private protected async Task<HttpCallResult> PostAndRecordAsync(
+            string url, byte[] wireBody, string contentType, string? recordedBody, IReadOnlyDictionary<string, string>? headers, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(wireBody);
             CallDetail detail = new CallDetail();
@@ -486,6 +514,8 @@ namespace PolyPrompt.Clients
                 // token or a SigV4 signature computed over the body) via PrepareRequestAsync.
                 using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Content = BodyContent(wireBody, contentType);
+                if (headers != null)
+                    foreach (KeyValuePair<string, string> header in headers) request.Headers.TryAddWithoutValidation(header.Key, header.Value);
                 await PrepareRequestAsync(request, wireBody, linkedCts.Token).ConfigureAwait(false);
                 detail.RequestHeaders = CaptureRequestHeaders(request);
                 http = HttpCallScope.Start(TelemetryProvider, "POST", url, wireBody.Length);

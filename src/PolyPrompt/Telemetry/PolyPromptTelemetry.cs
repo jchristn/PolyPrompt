@@ -311,6 +311,10 @@ namespace PolyPrompt.Telemetry
                 case null: return client is ProviderClientBase ? "provider" : "other";
                 case PolyPromptTelemetryNames.OperationEmbed: return "embedding";
                 case PolyPromptTelemetryNames.OperationTranscribe: return "transcription";
+                case PolyPromptTelemetryNames.OperationFileUpload:
+                case PolyPromptTelemetryNames.OperationFileGet:
+                case PolyPromptTelemetryNames.OperationFileDelete:
+                case PolyPromptTelemetryNames.OperationFileList: return "file";
                 case PolyPromptTelemetryNames.OperationSparseEmbed: return "sparse_embedding";
                 case PolyPromptTelemetryNames.OperationRerank: return "rerank";
                 case PolyPromptTelemetryNames.OperationClassify: return "classification";

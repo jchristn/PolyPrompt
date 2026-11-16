@@ -210,6 +210,8 @@ namespace Test.Shared
 
                 if (await LocalTranscriptionRoutes.TryHandleAsync(context, path, rawBody).ConfigureAwait(false)) return;
 
+                if (await LocalFileRoutes.TryHandleAsync(context, path, rawBody).ConfigureAwait(false)) return;
+
                 if (await StreamingFaultRoutes.TryHandleAsync(context, path, requestBody, _Cancellation.Token).ConfigureAwait(false)) return;
 
                 if (await LocalToolTurnCases.TryHandleAsync(context, path, requestBody).ConfigureAwait(false)) return;

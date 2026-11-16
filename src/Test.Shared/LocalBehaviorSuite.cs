@@ -52,6 +52,7 @@ namespace Test.Shared
             cases.AddRange(LocalChatModelCases.Create(SuiteId));
             cases.AddRange(LocalMultimodalCases.Create(SuiteId));
             cases.AddRange(LocalTranscriptionCases.Create(SuiteId));
+            cases.AddRange(LocalFileUploadCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

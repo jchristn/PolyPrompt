@@ -493,6 +493,26 @@ namespace PolyPrompt.Telemetry
         public const string OperationTranscribe = "transcribe";
 
         /// <summary>
+        /// Operation value: a provider file upload (<c>GeminiClient.UploadFileAsync</c>, <c>OpenAiClient.UploadFileAsync</c>).
+        /// </summary>
+        public const string OperationFileUpload = "file_upload";
+
+        /// <summary>
+        /// Operation value: reading a provider file's metadata or waiting for it to become active.
+        /// </summary>
+        public const string OperationFileGet = "file_get";
+
+        /// <summary>
+        /// Operation value: deleting a provider file.
+        /// </summary>
+        public const string OperationFileDelete = "file_delete";
+
+        /// <summary>
+        /// Operation value: listing provider files.
+        /// </summary>
+        public const string OperationFileList = "file_list";
+
+        /// <summary>
         /// Operation value: <c>EmbedSparseAsync</c>.
         /// </summary>
         public const string OperationSparseEmbed = "sparse_embed";

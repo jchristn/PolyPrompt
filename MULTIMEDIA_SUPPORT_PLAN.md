@@ -189,7 +189,8 @@ Large media must be uploaded first on some providers. Gemini needs this for vide
 - **`GeminiClient`** (new partial `GeminiClient.Files.cs`): `UploadFileAsync(byte[] data, string mediaType, string? displayName, CancellationToken)` using the resumable upload protocol. Also `GetFileAsync(string name, ...)`, `WaitForFileActiveAsync(string name, TimeSpan timeout, ...)` (video is processed asynchronously and must reach `ACTIVE`), `DeleteFileAsync`, and `ListFilesAsync`. Returns `GeminiFile` (`Name`, `Uri`, `MediaType`, `SizeBytes`, `State`, `ExpirationUtc`). The caller then uses `ContentPart.FileReferenceOf(ContentPartType.Video, file.Uri, file.MediaType)`.
 - **`VertexAiClient`**: no upload API. It takes `gs://` URIs through `FileReference`, documented in PROVIDERS.md.
 - **`BedrockClient`**: `s3://` URIs through `FileReference` for images and video on models that accept `s3Location`. Optional `bucketOwner` comes from `BedrockClient.S3BucketOwner`.
-- **`OpenAiClient`**: `UploadFileAsync(byte[] data, string fileName, string purpose, ...)` for `purpose = "vision"` (or `"user_data"`), plus `DeleteFileAsync`. It reuses the multipart path built for transcription.
+- **`OpenAiClient`**: `UploadFileAsync(byte[] data, string fileName, string purpose = "vision", ...)` returning `OpenAiFileResponse`, plus `DeleteFileAsync` returning `FileDeleteResponse`. It reuses the multipart path built for transcription.
+- File operations report telemetry operations `file_upload`, `file_get`, `file_delete`, and `file_list` with the capability label `file`.
 
 ### 2.7 Usage detail by modality
 
@@ -459,9 +460,9 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - [x] Tests: `LocalTranscriptionCases`, multipart redaction cases, architecture operations list, default-models section
 
 ### Phase 4: Files
-- [ ] `GeminiClient.Files.cs` with the resumable upload, polling, and deletion
-- [ ] `OpenAiClient` file upload and delete
-- [ ] Tests: `LocalFileUploadCases`
+- [x] `GeminiClient.Files.cs` with the resumable upload, polling, and deletion
+- [x] `OpenAiClient` file upload and delete
+- [x] Tests: `LocalFileUploadCases`
 
 ### Phase 5: Telemetry, AOT, consoles
 - [ ] Span attributes, metrics, modality token labels
@@ -486,3 +487,4 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - **2026-11-16**: Phase 1 done. Chat and tool chat merged; `ChatMessage.Content` is parts. Wire identity: 156 of 160 bodies are byte-identical, including `Content-Type`; the 4 differences are the intended OpenAI-compatible fix (no `tool_choice` without tools), recorded in `V5Changes`. The Native AOT request digest over 222 requests equals the 4.0.0 digest. Local suite 854 passed on net8.0 and net10.0; Xunit, Nunit, Docs, Console, and AOT green. `MIGRATION_V3_TO_V4.md` is no longer compiled by `Test.Docs` because its snippets target 4.0; `MIGRATION_V4_TO_V5.md` replaces it in Phase 6.
 - **2026-11-16**: Phase 2 done. Checked the *verify* cells against provider docs: OpenAI and Azure audio input ship off; Cohere vision and Vertex YouTube are confirmed; only `whisper-1` has `verbose_json` and timestamps. Media is written raw through `MediaValue`; recorded bodies use placeholders. Ten local clients send images (plus Ollama Cloud), with audio and video on OpenAI-compatible, Gemini, Vertex, and Bedrock (video). Local suite 867 passed on net8.0 and net10.0; Docs, Console, and AOT green; the AOT request digest is still the 4.0.0 digest. Deviations: `S3BucketOwner` is a `BedrockClient` property; `MaxInlineMediaBytes` lives on `ClientOptions`; no fixture-server media DTOs.
 - **2026-11-16**: Phase 3 done. `TranscribeAsync` on OpenAI, Azure (deployment as model, `/openai/v1/audio/transcriptions`), and OpenAI-compatible, through one shared multipart path that sends exactly the bytes it signs and records a field summary. OpenAI and Azure reject `text`, `verbose_json`, and granularities for `gpt-4o` transcription models before sending (the diarizing model accepts `text`). The fixture server now keeps raw request bytes, and `LocalTranscriptionRoutes` parses multipart bodies. 7 transcription cases; local suite 874 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.
+- **2026-11-16**: Phase 4 done. Gemini File API (two-step resumable upload, get, wait for ACTIVE with FAILED, timeout, and cancellation, delete, paged list) and OpenAI `/v1/files` (multipart upload, delete), with uploaded files used as content parts. `HttpClientBase` gained a header-aware POST and `ExecuteSendAsync` for multi-step calls. 5 file cases; local suite 879 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.

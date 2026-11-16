@@ -1500,6 +1500,13 @@
             <param name="token">Cancellation token.</param>
             <returns>The filled response.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteSendAsync``1(``0,System.String,System.String,System.String,System.Func{System.Threading.CancellationToken,System.Threading.Tasks.Task{PolyPrompt.Models.HttpCallResult}},System.Action{System.String,``0},System.Threading.CancellationToken)">
+            <summary>
+            Run any send function and fill <paramref name="response"/> the way <see cref="M:PolyPrompt.Clients.HttpClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)"/>
+            does: status, errors with hints, parsing, RawResponse, and runtime. Used for multi-step calls such as resumable
+            uploads, where the function returns the last call's result or the first failure.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteMultipartAsync``1(``0,System.String,System.String,System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField},System.Action{System.String,``0},System.Threading.CancellationToken)">
             <summary>
             POST a <c>multipart/form-data</c> body and fill <paramref name="response"/>. See
@@ -1571,6 +1578,12 @@
             wire body decoded as UTF-8 when bodies are captured.</param>
             <param name="token">Cancellation token.</param>
             <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostAndRecordAsync(System.String,System.Byte[],System.String,System.String,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String},System.Threading.CancellationToken)">
+            <summary>
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.PostAndRecordAsync(System.String,System.Byte[],System.String,System.String,System.Threading.CancellationToken)"/> with extra request headers,
+            added before <see cref="M:PolyPrompt.Clients.HttpClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> runs (for example the resumable upload protocol headers).
+            </summary>
         </member>
         <member name="M:PolyPrompt.Clients.HttpClientBase.PostMultipartAndRecordAsync(System.String,System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField},System.Threading.CancellationToken)">
             <summary>
@@ -3316,6 +3329,59 @@
         <member name="M:PolyPrompt.Clients.GeminiClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.UploadFileAsync(System.Byte[],System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Upload media to the Gemini File API with the resumable upload protocol, for media too large to send inline (most
+            video). Video is processed after upload: call <see cref="M:PolyPrompt.Clients.GeminiClient.WaitForFileActiveAsync(System.String,System.TimeSpan,System.Nullable{System.TimeSpan},System.Threading.CancellationToken)"/> before using it, then send
+            <c>ContentPart.FileReferenceOf(type, file.Uri, file.MediaType)</c>. Files expire after about 48 hours.
+            </summary>
+            <param name="data">The file bytes.</param>
+            <param name="mediaType">The media type, for example <c>video/mp4</c>.</param>
+            <param name="displayName">Optional display name.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The uploaded file, or an unsuccessful response with the error.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when data is empty or the media type is blank.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.GetFileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Read a file's metadata and processing state.
+            </summary>
+            <param name="name">The resource name (<c>files/abc123</c>) or ID (<c>abc123</c>).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The file, or an unsuccessful response with the error.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when name is blank.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.WaitForFileActiveAsync(System.String,System.TimeSpan,System.Nullable{System.TimeSpan},System.Threading.CancellationToken)">
+            <summary>
+            Poll a file until it is <see cref="F:PolyPrompt.Models.GeminiFileState.Active"/>, it fails, or the timeout passes.
+            </summary>
+            <param name="name">The resource name or ID.</param>
+            <param name="timeout">How long to wait in total.</param>
+            <param name="pollInterval">Delay between polls. Default: 2 seconds.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The active file; or an unsuccessful response when processing failed, the timeout passed, or a poll failed.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when name is blank.</exception>
+            <exception cref="T:System.ArgumentOutOfRangeException">Thrown when timeout or pollInterval is not positive.</exception>
+            <exception cref="T:System.OperationCanceledException">Thrown when the token is canceled.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.DeleteFileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete a file.
+            </summary>
+            <param name="name">The resource name or ID.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The result; <see cref="P:PolyPrompt.Models.FileDeleteResponse.Deleted"/> is true on success.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when name is blank.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.GeminiClient.ListFilesAsync(System.Nullable{System.Int32},System.String,System.Threading.CancellationToken)">
+            <summary>
+            List one page of files.
+            </summary>
+            <param name="pageSize">Files per page (the API allows up to 100). Null uses the API default.</param>
+            <param name="pageToken">The <see cref="P:PolyPrompt.Models.GeminiFileListResponse.NextPageToken"/> of the previous page, or null for the first.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The page.</returns>
+        </member>
         <member name="M:PolyPrompt.Clients.GeminiClient.ListModelsCoreAsync(System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -4263,6 +4329,27 @@
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.GetModelInformationCoreAsync(System.String,System.Threading.CancellationToken)">
             <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.UploadFileAsync(System.Byte[],System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Upload a file to <c>/v1/files</c>, for example an image to reuse across requests by ID. Send it with
+            <c>ContentPart.FileReferenceOf(ContentPartType.Image, file.Id, mediaType)</c>.
+            </summary>
+            <param name="data">The file bytes.</param>
+            <param name="fileName">The file name; its extension sets the uploaded media type.</param>
+            <param name="purpose">The purpose: <c>vision</c> (default) or <c>user_data</c>.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The uploaded file, or an unsuccessful response with the error.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when data is empty or fileName or purpose is blank.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.DeleteFileAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Delete a file from <c>/v1/files</c>.
+            </summary>
+            <param name="fileId">The file ID.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The result; <see cref="P:PolyPrompt.Models.FileDeleteResponse.Deleted"/> reports the provider's confirmation.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when fileId is blank.</exception>
         </member>
         <member name="T:PolyPrompt.Clients.OpenAiDefaults">
             <summary>
@@ -5885,6 +5972,31 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.FileDeleteResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GeminiFile">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GeminiFileListResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GeminiFileResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GeminiFileState">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GenerationResponse">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -5906,6 +6018,16 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ModelInformation">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.OpenAiFile">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.OpenAiFileResponse">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -6141,6 +6263,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListEmbeddingResult">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListGeminiFile">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -8393,6 +8520,79 @@
             The embedding vector as an array of floats.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.GeminiFile">
+            <summary>
+            A file in the Gemini File API. Send it with
+            <c>ContentPart.FileReferenceOf(type, file.Uri, file.MediaType)</c> once <see cref="P:PolyPrompt.Models.GeminiFile.State"/> is
+            <see cref="F:PolyPrompt.Models.GeminiFileState.Active"/>. Files expire (see <see cref="P:PolyPrompt.Models.GeminiFile.ExpirationUtc"/>, about 48 hours after upload).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.Name">
+            <summary>Resource name, for example <c>files/abc123</c>. Use it with Get, Wait, and Delete.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.DisplayName">
+            <summary>Display name, when one was given.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.Uri">
+            <summary>The URI to send as a file reference.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.MediaType">
+            <summary>The media type.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.SizeBytes">
+            <summary>Size in bytes.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.State">
+            <summary>Processing state. Video is processed after upload and must reach Active before use.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.StateError">
+            <summary>The processing error message when <see cref="P:PolyPrompt.Models.GeminiFile.State"/> is <see cref="F:PolyPrompt.Models.GeminiFileState.Failed"/>.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.Sha256Hash">
+            <summary>Base64 SHA-256 of the contents, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.CreatedUtc">
+            <summary>When the file was created.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFile.ExpirationUtc">
+            <summary>When the file expires and is deleted.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GeminiFileState">
+            <summary>
+            Gemini File API processing state.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiFileState.Unspecified">
+            <summary>Not reported.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiFileState.Processing">
+            <summary>Still processing; not usable yet.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiFileState.Active">
+            <summary>Ready to use.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.GeminiFileState.Failed">
+            <summary>Processing failed.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GeminiFileResponse">
+            <summary>
+            Result of a Gemini File API call. <see cref="P:PolyPrompt.Models.GeminiFileResponse.File"/> is null when the call failed or deleted a file.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFileResponse.File">
+            <summary>The file, when returned.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.GeminiFileListResponse">
+            <summary>
+            One page of Gemini File API files.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFileListResponse.Files">
+            <summary>The files on this page.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.GeminiFileListResponse.NextPageToken">
+            <summary>The token for the next page, or null on the last page.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.GenerationResponse">
             <summary>
             Response from a non-streaming text generation request.
@@ -8731,6 +8931,46 @@
             <summary>
             Percentage complete for the current layer (0.0 to 100.0). Null when total is unknown.
             </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.OpenAiFile">
+            <summary>
+            A file uploaded to OpenAI (<c>/v1/files</c>). Send an image with
+            <c>ContentPart.FileReferenceOf(ContentPartType.Image, file.Id, mediaType)</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFile.Id">
+            <summary>The file ID, for example <c>file-abc123</c>.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFile.FileName">
+            <summary>The uploaded file name.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFile.Purpose">
+            <summary>The purpose, for example <c>vision</c> or <c>user_data</c>.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFile.SizeBytes">
+            <summary>Size in bytes.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFile.CreatedUtc">
+            <summary>When the file was created.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.OpenAiFileResponse">
+            <summary>
+            Result of an OpenAI file upload. <see cref="P:PolyPrompt.Models.OpenAiFileResponse.File"/> is null when the call failed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.OpenAiFileResponse.File">
+            <summary>The file, when returned.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.FileDeleteResponse">
+            <summary>
+            Result of deleting a provider file.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.FileDeleteResponse.Id">
+            <summary>The file ID or resource name.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.FileDeleteResponse.Deleted">
+            <summary>True when the provider confirmed the deletion.</summary>
         </member>
         <member name="T:PolyPrompt.Models.ProcessCallDetail">
             <summary>
@@ -11843,6 +12083,26 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationTranscribe">
             <summary>
             Operation value: <c>TranscribeAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationFileUpload">
+            <summary>
+            Operation value: a provider file upload (<c>GeminiClient.UploadFileAsync</c>, <c>OpenAiClient.UploadFileAsync</c>).
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationFileGet">
+            <summary>
+            Operation value: reading a provider file's metadata or waiting for it to become active.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationFileDelete">
+            <summary>
+            Operation value: deleting a provider file.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationFileList">
+            <summary>
+            Operation value: listing provider files.
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationSparseEmbed">
