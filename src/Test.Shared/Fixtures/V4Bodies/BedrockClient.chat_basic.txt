@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/model/anthropic.claude-3-5-sonnet-20240620-v1:0/converse
+content-type: application/json; charset=utf-8
+{"messages":[{"role":"user","content":[{"text":"Hello there"}]}],"inferenceConfig":{"maxTokens":4096}}

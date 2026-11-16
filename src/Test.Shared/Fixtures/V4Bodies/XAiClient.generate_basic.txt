@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/responses
+content-type: application/json; charset=utf-8
+{"model":"grok-4.7","input":"Once upon a time","stream":false,"max_output_tokens":64,"temperature":0.25,"store":false,"include":["reasoning.encrypted_content"]}

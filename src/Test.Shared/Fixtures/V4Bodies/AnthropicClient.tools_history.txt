@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/messages
+content-type: application/json; charset=utf-8
+{"model":"claude-sonnet-5-5","max_tokens":64,"messages":[{"role":"user","content":"What is the weather in Paris?"},{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"get_weather","input":{"city":"Paris"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":"{\u0022temperature\u0022:20,\u0022unit\u0022:\u0022C\u0022}"}]},{"role":"user","content":"And should I bring a coat? \u003Cyes/no\u003E \u0026 why \u002B how"}],"system":"Answer briefly.","temperature":0.25,"tools":[{"name":"get_weather","description":"Get the weather for a city.","input_schema":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}],"tool_choice":{"type":"auto"}}

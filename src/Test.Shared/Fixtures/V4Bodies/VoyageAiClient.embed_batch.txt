@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/embeddings
+content-type: application/json; charset=utf-8
+{"model":"voyage-3.5","input":["alpha","beta \u003C\u0026\u002B\u003E"]}

@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/responses
+content-type: application/json; charset=utf-8
+{"model":"gpt-6.1-sol","input":"Hello there","stream":true,"max_output_tokens":64,"instructions":"Answer briefly.","temperature":0.25,"store":false,"include":["reasoning.encrypted_content"]}

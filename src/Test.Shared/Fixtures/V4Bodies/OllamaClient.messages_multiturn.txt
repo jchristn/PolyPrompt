@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/api/chat
+content-type: application/json; charset=utf-8
+{"model":"gemma3:4b","messages":[{"role":"system","content":"You are terse."},{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello."},{"role":"user","content":"Say \u0022again\u0022 in French, \u00FCn\u00EFc\u00F6d\u00E9 \u2713"}],"stream":false,"options":{}}

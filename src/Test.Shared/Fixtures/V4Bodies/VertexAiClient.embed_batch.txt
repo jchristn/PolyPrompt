@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/projects/test-project/locations/us-central1/publishers/google/models/gemini-embedding-001:predict
+content-type: application/json; charset=utf-8
+{"instances":[{"content":"alpha"},{"content":"beta \u003C\u0026\u002B\u003E"}]}

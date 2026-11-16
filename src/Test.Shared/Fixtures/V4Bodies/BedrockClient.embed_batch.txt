@@ -1,0 +1,8 @@
+outcome: ok
+POST {endpoint}/model/amazon.titan-embed-text-v2:0/invoke
+content-type: application/json; charset=utf-8
+{"inputText":"alpha"}
+
+POST {endpoint}/model/amazon.titan-embed-text-v2:0/invoke
+content-type: application/json; charset=utf-8
+{"inputText":"beta \u003C\u0026\u002B\u003E"}

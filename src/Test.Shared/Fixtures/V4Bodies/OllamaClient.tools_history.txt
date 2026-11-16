@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/api/chat
+content-type: application/json; charset=utf-8
+{"model":"gemma3:4b","messages":[{"role":"system","content":"Answer briefly."},{"role":"user","content":"What is the weather in Paris?"},{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]},{"role":"tool","content":"{\u0022temperature\u0022:20,\u0022unit\u0022:\u0022C\u0022}","tool_name":"get_weather"},{"role":"user","content":"And should I bring a coat? \u003Cyes/no\u003E \u0026 why \u002B how"}],"stream":false,"options":{"num_predict":64,"temperature":0.25},"tools":[{"type":"function","function":{"name":"get_weather","description":"Get the weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}}]}

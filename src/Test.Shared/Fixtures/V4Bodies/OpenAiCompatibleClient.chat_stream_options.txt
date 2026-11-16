@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/chat/completions
+content-type: application/json; charset=utf-8
+{"model":"gpt-4o-mini","messages":[{"role":"system","content":"Answer briefly."},{"role":"user","content":"Hello there"}],"max_tokens":64,"temperature":0.25,"stream":true,"stream_options":{"include_usage":true}}

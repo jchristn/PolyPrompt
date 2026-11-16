@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/api/generate
+content-type: application/json; charset=utf-8
+{"model":"gemma3:4b","prompt":"Once upon a time","stream":false,"options":{"num_predict":64,"temperature":0.25}}

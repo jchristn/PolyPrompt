@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse
+content-type: application/json; charset=utf-8
+{"contents":[{"role":"user","parts":[{"text":"Hello there"}]}],"generationConfig":{"maxOutputTokens":64,"temperature":0.25},"systemInstruction":{"parts":[{"text":"Answer briefly."}]}}

@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/openai/v1/responses
+content-type: application/json; charset=utf-8
+{"model":"test-deployment","input":[{"role":"system","content":"Answer briefly."},{"role":"user","content":"Hello there"}],"stream":false,"max_output_tokens":64,"temperature":0.25,"store":false,"include":["reasoning.encrypted_content"]}

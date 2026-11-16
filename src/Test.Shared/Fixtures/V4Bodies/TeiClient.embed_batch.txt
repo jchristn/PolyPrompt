@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/embed
+content-type: application/json; charset=utf-8
+{"inputs":["alpha","beta \u003C\u0026\u002B\u003E"]}

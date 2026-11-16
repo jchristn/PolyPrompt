@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/model/anthropic.claude-3-5-sonnet-20240620-v1:0/converse
+content-type: application/json; charset=utf-8
+{"messages":[{"role":"user","content":[{"text":"What is the weather in Paris?"}]},{"role":"assistant","content":[{"toolUse":{"toolUseId":"call_1","name":"get_weather","input":{"city":"Paris"}}}]},{"role":"user","content":[{"toolResult":{"toolUseId":"call_1","content":[{"text":"{\u0022temperature\u0022:20,\u0022unit\u0022:\u0022C\u0022}"}]}}]},{"role":"user","content":[{"text":"And should I bring a coat? \u003Cyes/no\u003E \u0026 why \u002B how"}]}],"inferenceConfig":{"maxTokens":64,"temperature":0.25},"system":[{"text":"Answer briefly."}],"toolConfig":{"tools":[{"toolSpec":{"name":"get_weather","description":"Get the weather for a city.","inputSchema":{"json":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}}}],"toolChoice":{"auto":{}}}}

@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse
+content-type: application/json; charset=utf-8
+{"contents":[{"role":"user","parts":[{"text":"Hi"}]},{"role":"model","parts":[{"text":"Hello."}]},{"role":"user","parts":[{"text":"Say \u0022again\u0022 in French, \u00FCn\u00EFc\u00F6d\u00E9 \u2713"}]}],"generationConfig":{"maxOutputTokens":4096},"systemInstruction":{"parts":[{"text":"You are terse."}]}}

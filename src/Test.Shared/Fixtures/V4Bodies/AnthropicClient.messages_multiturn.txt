@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/messages
+content-type: application/json; charset=utf-8
+{"model":"claude-sonnet-5-5","max_tokens":4096,"messages":[{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello."},{"role":"user","content":"Say \u0022again\u0022 in French, \u00FCn\u00EFc\u00F6d\u00E9 \u2713"}],"system":"You are terse."}

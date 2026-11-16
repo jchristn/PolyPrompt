@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v2/chat
+content-type: application/json; charset=utf-8
+{"model":"command-a-plus-05-2026","messages":[{"role":"system","content":"Answer briefly."},{"role":"user","content":"Hello there"}],"stream":false,"max_tokens":64,"temperature":0.25}

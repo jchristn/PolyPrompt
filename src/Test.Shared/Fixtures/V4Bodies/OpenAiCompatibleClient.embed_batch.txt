@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/embeddings
+content-type: application/json; charset=utf-8
+{"model":"text-embedding-3-small","input":["alpha","beta \u003C\u0026\u002B\u003E"]}

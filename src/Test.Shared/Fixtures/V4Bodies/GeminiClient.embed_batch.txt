@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1beta/models/gemini-embedding-001:batchEmbedContents
+content-type: application/json; charset=utf-8
+{"requests":[{"model":"models/gemini-embedding-001","content":{"parts":[{"text":"alpha"}]}},{"model":"models/gemini-embedding-001","content":{"parts":[{"text":"beta \u003C\u0026\u002B\u003E"}]}}]}

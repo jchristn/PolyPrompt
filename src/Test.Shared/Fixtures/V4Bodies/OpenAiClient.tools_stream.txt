@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/responses
+content-type: application/json; charset=utf-8
+{"model":"gpt-6.1-sol","input":[{"role":"user","content":"What is the weather in Paris?"},{"type":"function_call","call_id":"call_1","name":"get_weather","arguments":"{\u0022city\u0022:\u0022Paris\u0022}"},{"type":"function_call_output","call_id":"call_1","output":"{\u0022temperature\u0022:20,\u0022unit\u0022:\u0022C\u0022}"},{"role":"user","content":"And should I bring a coat? \u003Cyes/no\u003E \u0026 why \u002B how"}],"stream":true,"max_output_tokens":4096,"store":false,"include":["reasoning.encrypted_content"],"tools":[{"type":"function","name":"get_weather","description":"Get the weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}],"tool_choice":"auto"}

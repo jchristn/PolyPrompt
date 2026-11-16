@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v1/messages
+content-type: application/json; charset=utf-8
+{"model":"claude-sonnet-5-5","max_tokens":4096,"messages":[{"role":"user","content":"Weather in Paris?"}]}

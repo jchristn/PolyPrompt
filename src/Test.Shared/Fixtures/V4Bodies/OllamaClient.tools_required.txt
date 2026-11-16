@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/api/chat
+content-type: application/json; charset=utf-8
+{"model":"gemma3:4b","messages":[{"role":"user","content":"Weather in Paris?"}],"stream":false,"options":{},"tools":[{"type":"function","function":{"name":"get_weather","description":"Get the weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}}]}

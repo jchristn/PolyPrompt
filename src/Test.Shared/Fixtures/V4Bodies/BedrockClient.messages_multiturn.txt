@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/model/anthropic.claude-3-5-sonnet-20240620-v1:0/converse
+content-type: application/json; charset=utf-8
+{"messages":[{"role":"user","content":[{"text":"Hi"}]},{"role":"assistant","content":[{"text":"Hello."}]},{"role":"user","content":[{"text":"Say \u0022again\u0022 in French, \u00FCn\u00EFc\u00F6d\u00E9 \u2713"}]}],"inferenceConfig":{"maxTokens":4096},"system":[{"text":"You are terse."}]}

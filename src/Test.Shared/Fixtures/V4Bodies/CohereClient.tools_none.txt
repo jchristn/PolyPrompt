@@ -1,0 +1,4 @@
+outcome: ok
+POST {endpoint}/v2/chat
+content-type: application/json; charset=utf-8
+{"model":"command-a-plus-05-2026","messages":[{"role":"user","content":"Weather in Paris?"}],"stream":false,"max_tokens":4096,"tool_choice":"NONE","tools":[{"type":"function","function":{"name":"get_weather","description":"Get the weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string","description":"City name"}},"required":["city"]}}}]}

@@ -48,6 +48,7 @@ namespace Test.Shared
             cases.AddRange(LocalMuxAgentCases.Create(SuiteId));
             cases.AddRange(LocalPiAgentCases.Create(SuiteId));
             cases.AddRange(LocalOpenCodeAgentCases.Create(SuiteId));
+            cases.AddRange(LocalWireIdentityCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 
