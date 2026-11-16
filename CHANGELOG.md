@@ -1,6 +1,6 @@
 # Changelog
 
-## v5.0.0 (unreleased)
+## v5.0.0 (2026-11-15)
 
 5.0 adds image, audio, and video input to chat, speech-to-text transcription, and provider file uploads. To make media fit, tool chat merges into chat and `ChatMessage.Content` becomes a list of parts. Text-only requests are unchanged on the wire: every text-only body is byte-identical to 4.0.0 except one OpenAI-compatible fix below. See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md) for the mapping and a checklist, and [MULTIMEDIA.md](MULTIMEDIA.md) for the media reference.
 
@@ -40,6 +40,9 @@
 
 - Wire identity: 160 text-only request bodies (chat, streaming chat, tool chat, generate, and embed, on every provider) captured from 4.0.0 are compared byte for byte, with path and `Content-Type`; 156 match and the 4 OpenAI-compatible `tool_choice` changes are recorded as reviewed fixtures.
 - The Native AOT request digest over 222 text-only requests equals 4.0.0's; a separate media digest matches between the JIT and native builds on .NET 8 and .NET 10.
+- Local suite: 918 cases in Test.Automated on .NET 8 and .NET 10 (882 passed, 0 failed, 36 live-only cases skipped without credentials); 882 passed in Test.Xunit and Test.Nunit on each framework; Test.Docs compiles 39 snippets; Test.Console 82 passed; Test.Aot 147 checks.
+- Live, against real providers: OpenAI (including an image and `whisper-1` transcription), Gemini (including image and video), xAI (including image), VoyageAI, and TypeSafe passed every case with 0 failures. Ollama passed every chat case (including an image on `gemma3:4b`) and every embedding and model-management case. Separate live checks covered the Gemini File API (upload, wait for active, chat with the file, list, delete), Gemini audio input, streaming images on Gemini and Ollama, Ollama and xAI input modalities, and Gemini usage by modality.
+- Live runs also fixed four bugs in the live tests themselves (OpenAI options type, sampling on reasoning models, blank-model handling, and call-detail capture), all present since 4.0.
 
 ## v4.0.0 (2026-11-12)
 
