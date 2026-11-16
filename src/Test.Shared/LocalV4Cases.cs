@@ -82,6 +82,7 @@ namespace Test.Shared
             (Capability.Models, "ListModelsAsync", c => { c.ListModelsAsync(); return Task.CompletedTask; }),
             (Capability.Models, "ModelExistsAsync", c => c.ModelExistsAsync("m")),
             (Capability.Models, "GetModelInformationAsync", c => c.GetModelInformationAsync("m")),
+            (Capability.Transcribe, "TranscribeAsync", c => c.TranscribeAsync(new TranscriptionRequest { Audio = _Wav })),
         };
 
         private static Task UnsupportedAsync(CancellationToken token)
@@ -129,6 +130,7 @@ namespace Test.Shared
             [Capability.Classify] = new[] { "ClassifyCoreAsync" },
             [Capability.Decide] = new[] { "DecideCoreAsync" },
             [Capability.Models] = new[] { "ListModelsCoreAsync", "GetModelInformationCoreAsync" },
+            [Capability.Transcribe] = new[] { "TranscribeCoreAsync" },
         };
 
         private static Task SupportedOverriddenAsync(CancellationToken token)

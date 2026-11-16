@@ -148,5 +148,11 @@ namespace PolyPrompt.Clients
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         [Obsolete("Ollama does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
+
+        /// <summary>Not supported by Ollama; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("Ollama does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

@@ -40,5 +40,10 @@ namespace PolyPrompt.Clients
         /// Decision defaults, or null when the provider does not support decisions.
         /// </summary>
         public virtual DecisionOptions? Decision => null;
+
+        /// <summary>
+        /// Transcription defaults (the model), or null when the client does not support <see cref="Capability.Transcribe"/>.
+        /// </summary>
+        public virtual TranscriptionOptions? Transcription => null;
     }
 }

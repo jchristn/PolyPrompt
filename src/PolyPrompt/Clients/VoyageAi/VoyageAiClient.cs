@@ -134,5 +134,10 @@ namespace PolyPrompt.Clients
         [Obsolete("VoyageAI does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
 
+        /// <summary>Not supported by VoyageAI; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("VoyageAI does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

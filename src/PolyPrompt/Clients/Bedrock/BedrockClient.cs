@@ -170,5 +170,10 @@ namespace PolyPrompt.Clients
         [Obsolete("Bedrock does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
 
+        /// <summary>Not supported by Bedrock; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("Bedrock does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

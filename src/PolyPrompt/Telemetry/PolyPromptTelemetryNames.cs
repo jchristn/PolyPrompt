@@ -314,6 +314,21 @@ namespace PolyPrompt.Telemetry
         public const string ToolDefinitionCount = "polyprompt.tool.definitions";
 
         /// <summary>
+        /// Audio bytes sent to <c>TranscribeAsync</c>. Span attribute only.
+        /// </summary>
+        public const string TranscriptionAudioBytes = "polyprompt.transcription.audio_bytes";
+
+        /// <summary>
+        /// Audio duration in seconds reported by the transcription response. Span attribute only.
+        /// </summary>
+        public const string TranscriptionDurationSeconds = "polyprompt.transcription.duration_seconds";
+
+        /// <summary>
+        /// Segments in the transcription response. Span attribute only.
+        /// </summary>
+        public const string TranscriptionSegments = "polyprompt.transcription.segments";
+
+        /// <summary>
         /// Number of tool calls returned by the model. Span attribute only.
         /// </summary>
         public const string ToolCallCount = "polyprompt.tool.calls";
@@ -471,6 +486,11 @@ namespace PolyPrompt.Telemetry
         /// Operation value: <c>EmbedAsync</c>.
         /// </summary>
         public const string OperationEmbed = "embed";
+
+        /// <summary>
+        /// Operation value: <c>TranscribeAsync</c>.
+        /// </summary>
+        public const string OperationTranscribe = "transcribe";
 
         /// <summary>
         /// Operation value: <c>EmbedSparseAsync</c>.

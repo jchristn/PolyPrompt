@@ -46,7 +46,7 @@ namespace Test.Shared
             SharedAssert.Equal("gpt-6.1-sol", client.Defaults.Completion.Model, "Default completion model.");
             SharedAssert.Equal("text-embedding-3-small", client.Defaults.Embedding.Model, "Default embedding model.");
             SharedAssert.Equal<bool?>(false, client.Defaults.Completion.Store, "Store defaults to false.");
-            SharedAssert.Equal(Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput, client.Capabilities, "Capabilities.");
+            SharedAssert.Equal(Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.Transcribe, client.Capabilities, "Capabilities.");
             ArgumentException? url = null;
             try { using OpenAiClient bad = new("http://localhost:8000/v1"); } catch (ArgumentException ex) { url = ex; }
             SharedAssert.NotNull(url, "A URL-shaped key throws.");

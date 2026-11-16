@@ -12,6 +12,8 @@ namespace Test.Shared
         private readonly Task _Loop;
         private readonly object _RequestBodiesLock = new object();
         private readonly List<string> _RequestBodies = new List<string>();
+        private readonly List<byte[]> _RequestRawBodies = new List<byte[]>();
+        private readonly List<string> _RequestContentTypes = new List<string>();
         private readonly object _RequestPathsLock = new object();
         private readonly List<string> _RequestPaths = new List<string>();
         private readonly List<string> _RequestUrls = new List<string>();
@@ -26,6 +28,18 @@ namespace Test.Shared
         /// <summary>
         /// Detached snapshot of request bodies received by the local test server.
         /// </summary>
+        /// <summary>The exact request body bytes, for multipart and binary bodies.</summary>
+        public List<byte[]> RequestRawBodies
+        {
+            get { lock (_RequestBodiesLock) return new List<byte[]>(_RequestRawBodies); }
+        }
+
+        /// <summary>Each request's Content-Type.</summary>
+        public List<string> RequestContentTypes
+        {
+            get { lock (_RequestBodiesLock) return new List<string>(_RequestContentTypes); }
+        }
+
         public List<string> RequestBodies
         {
             get
@@ -162,8 +176,14 @@ namespace Test.Shared
             try
             {
                 string path = context.Request.Url?.AbsolutePath ?? string.Empty;
+                byte[] rawBody;
+                using (MemoryStream buffer = new MemoryStream())
+                {
+                    await context.Request.InputStream.CopyToAsync(buffer).ConfigureAwait(false);
+                    rawBody = buffer.ToArray();
+                }
                 string requestBody;
-                using (StreamReader reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding ?? Encoding.UTF8))
+                using (StreamReader reader = new StreamReader(new MemoryStream(rawBody), context.Request.ContentEncoding ?? Encoding.UTF8))
                 {
                     requestBody = await reader.ReadToEndAsync().ConfigureAwait(false);
                 }
@@ -171,6 +191,8 @@ namespace Test.Shared
                 lock (_RequestBodiesLock)
                 {
                     _RequestBodies.Add(requestBody);
+                    _RequestRawBodies.Add(rawBody);
+                    _RequestContentTypes.Add(context.Request.ContentType ?? string.Empty);
                 }
 
                 Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -185,6 +207,8 @@ namespace Test.Shared
                     _RequestUrls.Add(context.Request.Url?.PathAndQuery ?? path);
                     _RequestHeaders.Add(headers);
                 }
+
+                if (await LocalTranscriptionRoutes.TryHandleAsync(context, path, rawBody).ConfigureAwait(false)) return;
 
                 if (await StreamingFaultRoutes.TryHandleAsync(context, path, requestBody, _Cancellation.Token).ConfigureAwait(false)) return;
 

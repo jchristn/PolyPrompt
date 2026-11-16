@@ -14,6 +14,7 @@ namespace PolyPrompt.Clients
     /// (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
     /// <see cref="ResponsesApiClientBase"/> and <see cref="CancelResponseAsync"/>.</description></item>
     /// <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
+    /// <item><description>Speech to text: Transcribe (<c>/openai/v1/audio/transcriptions</c> with the deployment name as the model).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: an <c>api-key</c> header, or an Entra ID bearer token (scope
@@ -42,9 +43,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, and Transcribe.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.Transcribe;
 
         /// <inheritdoc />
         public override string ProviderName => "Azure OpenAI";
@@ -159,6 +160,18 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        protected override Task<TranscriptionResponse> TranscribeCoreAsync(TranscriptionRequest request, string mediaType, string model, CancellationToken token)
+        {
+            return OpenAiTranscribeAsync(Url("audio/transcriptions"), request, mediaType, model, token);
+        }
+
+        /// <inheritdoc />
+        protected override void ValidateTranscriptionFormat(TranscriptionRequest request, string model)
+        {
+            OpenAiValidateTranscriptionFormat(request, model);
+        }
+
+        /// <inheritdoc />
         protected override Task<EmbeddingResponse> EmbedCoreAsync(List<string> inputs, string? model, EmbeddingOptions? options, CancellationToken token)
         {
             return OpenAiEmbedAsync(Url("embeddings"), inputs, model, options, token);
@@ -225,6 +238,11 @@ namespace PolyPrompt.Clients
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         [Obsolete("Azure OpenAI does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
+
+        /// <summary>
+        /// Transcription defaults. No default model: set <c>Model</c> to your transcription deployment name.
+        /// </summary>
+        public override TranscriptionOptions Transcription { get; } = new TranscriptionOptions();
 
     }
 }

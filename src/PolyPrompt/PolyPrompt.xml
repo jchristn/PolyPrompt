@@ -416,6 +416,9 @@
         <member name="P:PolyPrompt.Clients.AnthropicDefaults.Decision">
             <summary>Not supported by Anthropic; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.AnthropicDefaults.Transcription">
+            <summary>Not supported by Anthropic; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.AnthropicProtocol">
             <summary>
             Wire details shared by the Anthropic clients.
@@ -1095,6 +1098,11 @@
             Decision defaults, or null when the provider does not support decisions.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Clients.ClientDefaults.Transcription">
+            <summary>
+            Transcription defaults (the model), or null when the client does not support <see cref="F:PolyPrompt.Models.Capability.Transcribe"/>.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.ClientOptions">
             <summary>
             Construction settings shared by every client. Every field is optional; null keeps the client's default.
@@ -1492,6 +1500,12 @@
             <param name="token">Cancellation token.</param>
             <returns>The filled response.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteMultipartAsync``1(``0,System.String,System.String,System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField},System.Action{System.String,``0},System.Threading.CancellationToken)">
+            <summary>
+            POST a <c>multipart/form-data</c> body and fill <paramref name="response"/>. See
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.ExecutePostAsync``1(``0,System.String,System.String,System.Object,System.Action{System.String,``0},System.Threading.CancellationToken)"/>.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.HttpClientBase.ExecuteGetAsync``1(``0,System.String,System.String,System.Action{System.String,``0},System.Threading.CancellationToken)">
             <summary>
             GET <paramref name="url"/> and fill <paramref name="response"/>. See
@@ -1555,6 +1569,16 @@
             <param name="contentType">The Content-Type header value.</param>
             <param name="recordedBody">The body to record, for example with media replaced by placeholders. Null records the
             wire body decoded as UTF-8 when bodies are captured.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>An HttpCallResult containing the response and body.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostMultipartAndRecordAsync(System.String,System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField},System.Threading.CancellationToken)">
+            <summary>
+            POST a <c>multipart/form-data</c> body (transcription, file uploads) and record the call details. The recorded
+            body is a JSON summary of the fields with files shown by size, type, and name, never their bytes.
+            </summary>
+            <param name="url">Full URL to call.</param>
+            <param name="fields">The form fields, in order.</param>
             <param name="token">Cancellation token.</param>
             <returns>An HttpCallResult containing the response and body.</returns>
         </member>
@@ -2468,6 +2492,17 @@
             <param name="token">Cancellation token.</param>
             <returns>The models.</returns>
         </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.OpenAiTranscribeAsync(System.String,PolyPrompt.Models.TranscriptionRequest,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            POST an OpenAI-style <c>/audio/transcriptions</c> multipart request.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.OpenAiValidateTranscriptionFormat(PolyPrompt.Models.TranscriptionRequest,System.String)">
+            <summary>
+            Reject the formats OpenAI's <c>gpt-4o</c> transcription models do not support: they return <c>json</c> only
+            (the diarizing model also <c>text</c>), without segments or timestamps; <c>whisper-1</c> supports everything.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.OpenAiEmbedAsync(System.String,System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <summary>
             POST an OpenAI-style <c>/embeddings</c> request.
@@ -2519,6 +2554,40 @@
             <param name="options">Per-call options as passed, for provider-specific settings.</param>
             <param name="token">Cancellation token.</param>
             <returns>The rerank response with unsorted results.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.TranscribeAsync(PolyPrompt.Models.TranscriptionRequest,PolyPrompt.Models.TranscriptionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Transcribe audio to text through the provider's dedicated speech-to-text endpoint. The model comes from
+            <paramref name="options"/>, else <c>Defaults.Transcription.Model</c>. Segments and words are returned for
+            <see cref="F:PolyPrompt.Models.TranscriptionFormat.VerboseJson"/> on models that support it.
+            </summary>
+            <param name="request">The audio and transcription settings.</param>
+            <param name="options">Optional per-call settings (the model).</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The transcript.</returns>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when <c>Supports(Capability.Transcribe)</c> is false for this client.</exception>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the audio is empty, the media type is unknown or not audio, timestamp
+            granularities are set without VerboseJson, or the model does not support the requested format.</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.TranscribeCoreAsync(PolyPrompt.Models.TranscriptionRequest,System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.TranscribeAsync(PolyPrompt.Models.TranscriptionRequest,PolyPrompt.Models.TranscriptionOptions,System.Threading.CancellationToken)"/>.
+            </summary>
+            <param name="request">The validated request.</param>
+            <param name="mediaType">The audio media type (given or detected).</param>
+            <param name="model">The resolved model.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>The transcript.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ValidateTranscriptionFormat(PolyPrompt.Models.TranscriptionRequest,System.String)">
+            <summary>
+            Reject a format the model is known not to support, before sending. Default: accept everything.
+            </summary>
+            <param name="request">The request.</param>
+            <param name="model">The resolved model.</param>
+            <exception cref="T:System.ArgumentException">Thrown when the model does not support the format.</exception>
         </member>
         <member name="T:PolyPrompt.Clients.BedrockClient">
             <summary>
@@ -2658,6 +2727,9 @@
             <summary>Not supported by Bedrock; always null.</summary>
         </member>
         <member name="P:PolyPrompt.Clients.BedrockDefaults.Decision">
+            <summary>Not supported by Bedrock; always null.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.BedrockDefaults.Transcription">
             <summary>Not supported by Bedrock; always null.</summary>
         </member>
         <member name="T:PolyPrompt.Clients.BedrockProtocol">
@@ -3011,6 +3083,9 @@
         <member name="P:PolyPrompt.Clients.CohereDefaults.Decision">
             <summary>Not supported by Cohere; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.CohereDefaults.Transcription">
+            <summary>Not supported by Cohere; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.CohereProtocol">
             <summary>
             Wire details shared by the Cohere clients.
@@ -3274,6 +3349,9 @@
         <member name="P:PolyPrompt.Clients.GeminiDefaults.Decision">
             <summary>Not supported by Gemini; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.GeminiDefaults.Transcription">
+            <summary>Not supported by Gemini; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.GeminiProtocol">
             <summary>
             Wire details shared by the Gemini (Google AI Studio) and Vertex AI clients.
@@ -3457,6 +3535,9 @@
             <summary>Not supported by Vertex AI; always null.</summary>
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiDefaults.Decision">
+            <summary>Not supported by Vertex AI; always null.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.VertexAiDefaults.Transcription">
             <summary>Not supported by Vertex AI; always null.</summary>
         </member>
         <member name="T:PolyPrompt.Clients.GeminiCliClient">
@@ -3878,6 +3959,9 @@
         <member name="P:PolyPrompt.Clients.OllamaDefaults.Decision">
             <summary>Not supported by Ollama; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.OllamaDefaults.Transcription">
+            <summary>Not supported by Ollama; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.OllamaProtocol">
             <summary>
             Wire details shared by the Ollama clients.
@@ -3943,6 +4027,7 @@
             (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and <see cref="M:PolyPrompt.Clients.AzureOpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/>.</description></item>
             <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
+            <item><description>Speech to text: Transcribe (<c>/openai/v1/audio/transcriptions</c> with the deployment name as the model).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: an <c>api-key</c> header, or an Entra ID bearer token (scope
@@ -3959,7 +4044,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, and Transcribe.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.ProviderName">
@@ -4027,6 +4112,12 @@
         <member name="M:PolyPrompt.Clients.AzureOpenAiClient.HttpErrorHint(System.Int32,System.String,System.String)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.TranscribeCoreAsync(PolyPrompt.Models.TranscriptionRequest,System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.AzureOpenAiClient.ValidateTranscriptionFormat(PolyPrompt.Models.TranscriptionRequest,System.String)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.AzureOpenAiClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -4063,6 +4154,11 @@
         <member name="P:PolyPrompt.Clients.AzureOpenAiDefaults.Decision">
             <summary>Not supported by Azure OpenAI; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.AzureOpenAiDefaults.Transcription">
+            <summary>
+            Transcription defaults. No default model: set <c>Model</c> to your transcription deployment name.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.OpenAiClient">
             <summary>
             OpenAI client for the Responses API (<c>/v1/responses</c>), OpenAI's current API for reasoning and tool use. It
@@ -4076,6 +4172,7 @@
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and the OpenAI-only <see cref="M:PolyPrompt.Clients.OpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/> and
             <see cref="M:PolyPrompt.Clients.OpenAiClient.CountInputTokensAsync(System.Text.Json.JsonElement,PolyPrompt.Options.OpenAiCompletionOptions,System.Threading.CancellationToken)"/>.</description></item>
             <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
+            <item><description>Speech to text: Transcribe (<c>/v1/audio/transcriptions</c>; <c>whisper-1</c> for <c>verbose_json</c> segments and timestamps, <c>gpt-4o</c> transcription models for <c>json</c>).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -4087,7 +4184,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, and Transcribe.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.ProviderName">
@@ -4152,6 +4249,12 @@
         <member name="M:PolyPrompt.Clients.OpenAiClient.AddProviderFields(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Boolean,PolyPrompt.Clients.ResponsesApiClientBase.ResponsesApiFieldStage)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.TranscribeCoreAsync(PolyPrompt.Models.TranscriptionRequest,System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiClient.ValidateTranscriptionFormat(PolyPrompt.Models.TranscriptionRequest,System.String)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.OpenAiClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -4188,6 +4291,11 @@
         <member name="P:PolyPrompt.Clients.OpenAiDefaults.Decision">
             <summary>Not supported by OpenAI; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.OpenAiDefaults.Transcription">
+            <summary>
+            Transcription defaults. Default model: <c>whisper-1</c> (the only OpenAI model with <c>verbose_json</c>, segments, and timestamps).
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.OpenAiCompatibleClient">
             <summary>
             Client for servers that implement OpenAI's Chat Completions API: vLLM, Ollama's <c>/v1</c> API, LM Studio,
@@ -4199,6 +4307,7 @@
             (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
             <c>extra_content.google.thought_signature</c>.</description></item>
             <item><description>Media input: ImageInput, AudioInput, and VideoInput (Chat Completions <c>image_url</c>, <c>input_audio</c>, and the vLLM <c>video_url</c>; what a server accepts depends on the server and model).</description></item>
+            <item><description>Speech to text: Transcribe (<c>/v1/audio/transcriptions</c>, for local Whisper servers such as faster-whisper, speaches, whisper.cpp, and vLLM; a server without the route returns its 404).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: optional API key; placement set by <see cref="P:PolyPrompt.Clients.OpenAiCompatibleClientOptions.AuthPlacement"/>
@@ -4239,7 +4348,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, VideoInput, and Transcribe.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.ProviderName">
@@ -4289,6 +4398,9 @@
         <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.TranscribeCoreAsync(PolyPrompt.Models.TranscriptionRequest,System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
         <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.EmbedCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.EmbeddingOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
@@ -4327,6 +4439,11 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleDefaults.Decision">
             <summary>Not supported by OpenAiCompatibleClient; always null.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.OpenAiCompatibleDefaults.Transcription">
+            <summary>
+            Transcription defaults. No default model: models are server-specific (for example <c>Systran/faster-whisper-large-v3</c> on speaches), so set <c>Model</c>.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.OpenAiProtocol">
             <summary>
@@ -5043,6 +5160,9 @@
         <member name="P:PolyPrompt.Clients.TeiDefaults.Decision">
             <summary>Not supported by TEI; always null.</summary>
         </member>
+        <member name="P:PolyPrompt.Clients.TeiDefaults.Transcription">
+            <summary>Not supported by TEI; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.TeiProtocol">
             <summary>
             Wire details shared by the Hugging Face Text Embeddings Inference (TEI) clients. A TEI server hosts exactly one
@@ -5141,6 +5261,9 @@
             Decision defaults. Default model: <c>jev-latest</c>.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Clients.TypeSafeDefaults.Transcription">
+            <summary>Not supported by TypeSafe; always null.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.VoyageAiClient">
             <summary>
             VoyageAI client.
@@ -5223,6 +5346,9 @@
             <summary>Not supported by VoyageAI; always null.</summary>
         </member>
         <member name="P:PolyPrompt.Clients.VoyageAiDefaults.Decision">
+            <summary>Not supported by VoyageAI; always null.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.VoyageAiDefaults.Transcription">
             <summary>Not supported by VoyageAI; always null.</summary>
         </member>
         <member name="T:PolyPrompt.Clients.VoyageAiProtocol">
@@ -5354,6 +5480,9 @@
             <summary>Not supported by xAI; always null.</summary>
         </member>
         <member name="P:PolyPrompt.Clients.XAiDefaults.Decision">
+            <summary>Not supported by xAI; always null.</summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.XAiDefaults.Transcription">
             <summary>Not supported by xAI; always null.</summary>
         </member>
         <member name="T:PolyPrompt.Helpers.CitationParser">
@@ -5516,6 +5645,56 @@
             </summary>
             <param name="writer">The JSON writer.</param>
             <param name="value">The value.</param>
+        </member>
+        <member name="T:PolyPrompt.Helpers.MultipartField">
+            <summary>
+            One field of a <c>multipart/form-data</c> body: a text value, or a file.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MultipartField.Name">
+            <summary>The form field name.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MultipartField.Value">
+            <summary>The text value, for a text field.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MultipartField.Data">
+            <summary>The file bytes, for a file field.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MultipartField.FileName">
+            <summary>The file name, for a file field.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MultipartField.MediaType">
+            <summary>The file media type, for a file field.</summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MultipartField.Text(System.String,System.String)">
+            <summary>A text field.</summary>
+            <param name="name">Field name.</param>
+            <param name="value">Value.</param>
+            <returns>The field.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MultipartField.File(System.String,System.Byte[],System.String,System.String)">
+            <summary>A file field.</summary>
+            <param name="name">Field name.</param>
+            <param name="data">File bytes.</param>
+            <param name="fileName">File name.</param>
+            <param name="mediaType">Media type.</param>
+            <returns>The field.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MultipartField.Build(System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField},System.String@)">
+            <summary>
+            Build the body bytes and the Content-Type header value (with its boundary).
+            </summary>
+            <param name="fields">The fields, in order.</param>
+            <param name="contentType">The Content-Type value.</param>
+            <returns>The body bytes.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MultipartField.Summary(System.Collections.Generic.IReadOnlyList{PolyPrompt.Helpers.MultipartField})">
+            <summary>
+            The recorded summary: a JSON object of field names to values, with files shown as
+            <c>&lt;binary N bytes type name=file&gt;</c>.
+            </summary>
+            <param name="fields">The fields.</param>
+            <returns>The JSON summary.</returns>
         </member>
         <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
             <summary>
@@ -5841,6 +6020,41 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionFormat">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionOptions">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionRequest">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionSegment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionTimestampGranularity">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.TranscriptionWord">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.VideoClip">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -5962,6 +6176,21 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListToolDefinition">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListTranscriptionSegment">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListTranscriptionTimestampGranularity">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListTranscriptionWord">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -9770,6 +9999,149 @@
             <returns>A function tool definition.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
         </member>
+        <member name="T:PolyPrompt.Models.TranscriptionFormat">
+            <summary>
+            Transcription response format, sent as <c>response_format</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.TranscriptionFormat.Text">
+            <summary>Plain text (<c>text</c>).</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.TranscriptionFormat.Json">
+            <summary>JSON with the text (<c>json</c>).</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.TranscriptionFormat.VerboseJson">
+            <summary>JSON with the language, duration, segments, and optional words (<c>verbose_json</c>). On OpenAI, <c>whisper-1</c> only.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionOptions">
+            <summary>
+            Per-call transcription settings, and the type of <c>Defaults.Transcription</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionOptions.Model">
+            <summary>
+            The transcription model (an Azure deployment name on <c>AzureOpenAiClient</c>). Null uses
+            <c>Defaults.Transcription.Model</c>. Default: null.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionRequest">
+            <summary>
+            Audio to transcribe and how. The model comes from <see cref="T:PolyPrompt.Models.TranscriptionOptions"/> or <c>Defaults.Transcription</c>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.Audio">
+            <summary>
+            The audio bytes. Required.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.MediaType">
+            <summary>
+            The audio media type, for example <see cref="F:PolyPrompt.Models.MediaTypes.AudioFlac"/>. Null detects it from the bytes. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.FileName">
+            <summary>
+            The file name sent with the upload. Servers use its extension to pick a decoder. Null derives one from the media
+            type, for example <c>audio.flac</c>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.Language">
+            <summary>
+            The spoken language as an ISO-639-1 code, for example <c>en</c>. Null lets the model detect it. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.Prompt">
+            <summary>
+            Text that guides style or spelling, or continues a previous chunk. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.Temperature">
+            <summary>
+            Sampling temperature from 0 to 1. Null uses the provider default. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.Format">
+            <summary>
+            The response format. Default: <see cref="F:PolyPrompt.Models.TranscriptionFormat.Json"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionRequest.TimestampGranularities">
+            <summary>
+            Timestamp detail. Requires <see cref="F:PolyPrompt.Models.TranscriptionFormat.VerboseJson"/>. Default: empty.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionResponse">
+            <summary>
+            A transcript. <see cref="P:PolyPrompt.Models.TranscriptionResponse.Segments"/> and <see cref="P:PolyPrompt.Models.TranscriptionResponse.Words"/> are filled only for
+            <see cref="F:PolyPrompt.Models.TranscriptionFormat.VerboseJson"/> and the requested granularities, and stay empty when a server omits them.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.Text">
+            <summary>The transcript text.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.Language">
+            <summary>The detected or requested language, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.DurationSeconds">
+            <summary>The audio duration in seconds, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.Segments">
+            <summary>Timed segments, when requested and reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.Words">
+            <summary>Timed words, when requested and reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionResponse.Usage">
+            <summary>Token or duration usage, when reported.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionSegment">
+            <summary>
+            A timed segment of a transcript.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.Id">
+            <summary>Segment index.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.StartSeconds">
+            <summary>Start time in seconds.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.EndSeconds">
+            <summary>End time in seconds.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.Text">
+            <summary>Segment text.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.AverageLogProbability">
+            <summary>Average log probability of the segment's tokens, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionSegment.NoSpeechProbability">
+            <summary>Probability that the segment contains no speech, when reported.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionTimestampGranularity">
+            <summary>
+            Timestamp detail for <see cref="F:PolyPrompt.Models.TranscriptionFormat.VerboseJson"/>, sent as <c>timestamp_granularities[]</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.TranscriptionTimestampGranularity.Segment">
+            <summary>Segment start and end times.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.TranscriptionTimestampGranularity.Word">
+            <summary>Word start and end times.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.TranscriptionWord">
+            <summary>
+            A timed word of a transcript.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionWord.Word">
+            <summary>The word.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionWord.StartSeconds">
+            <summary>Start time in seconds.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TranscriptionWord.EndSeconds">
+            <summary>End time in seconds.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.VideoClip">
             <summary>
             The portion of a video to use, and how densely to sample it. Sent as Gemini and Vertex AI <c>videoMetadata</c>
@@ -11302,6 +11674,21 @@
             Number of tool definitions offered to the model. Span attribute only.
             </summary>
         </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.TranscriptionAudioBytes">
+            <summary>
+            Audio bytes sent to <c>TranscribeAsync</c>. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.TranscriptionDurationSeconds">
+            <summary>
+            Audio duration in seconds reported by the transcription response. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.TranscriptionSegments">
+            <summary>
+            Segments in the transcription response. Span attribute only.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolCallCount">
             <summary>
             Number of tool calls returned by the model. Span attribute only.
@@ -11451,6 +11838,11 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationEmbed">
             <summary>
             Operation value: <c>EmbedAsync</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationTranscribe">
+            <summary>
+            Operation value: <c>TranscribeAsync</c>.
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationSparseEmbed">

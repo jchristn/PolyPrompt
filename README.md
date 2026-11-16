@@ -91,9 +91,9 @@ Every client has every method, but not every provider supports every capability.
 <!-- capability-matrix:start -->
 | Client | Chat | ToolCalling | Generate | Embed | SparseEmbed | Rerank | Classify | Decide | Models | ImageInput | AudioInput | VideoInput | Transcribe |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `OpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
-| `OpenAiCompatibleClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | ✅ | ✅ | |
-| `AzureOpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
+| `OpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | ✅ |
+| `OpenAiCompatibleClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `AzureOpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | ✅ |
 | `XAiClient` | ✅ | ✅ | ✅ | | | | | | ✅ | ✅ | | | |
 | `AnthropicClient` | ✅ | ✅ | ✅ | | | | | | ✅ | ✅ | | | |
 | `GeminiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | ✅ | ✅ | |
@@ -382,10 +382,13 @@ A compact, exact reference. Read the [capability matrix](#capability-matrix) and
 |---|---|---|
 | `OpenAiClient` | Completion | `gpt-6.1-sol` |
 | `OpenAiClient` | Embedding | `text-embedding-3-small` |
+| `OpenAiClient` | Transcription | `whisper-1` |
 | `OpenAiCompatibleClient` | Completion | none |
 | `OpenAiCompatibleClient` | Embedding | none |
+| `OpenAiCompatibleClient` | Transcription | none |
 | `AzureOpenAiClient` | Completion | none |
 | `AzureOpenAiClient` | Embedding | none |
+| `AzureOpenAiClient` | Transcription | none |
 | `XAiClient` | Completion | `grok-4.7` |
 | `AnthropicClient` | Completion | `claude-sonnet-5-5` |
 | `GeminiClient` | Completion | `gemini-3.8-flash` |

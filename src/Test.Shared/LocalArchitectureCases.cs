@@ -74,13 +74,18 @@ namespace Test.Shared
             SharedAssert.True(typeof(CliAgentClientBase).IsAbstract && typeof(CliAgentClientBase).BaseType == typeof(ClientBase), "CliAgentClientBase is abstract and derives from ClientBase.");
 
             // Every model operation is declared once, on ProviderClientBase, so code written against it runs on any provider.
-            string[] operations = { "ChatAsync", "ChatStreamingAsync", "ChatAsync", "ChatStreamingAsync", "GenerateAsync", "GenerateStreamingAsync",
-                "EmbedAsync", "EmbedSparseAsync", "RerankAsync", "ClassifyAsync", "DecideAsync", "ListModelsAsync", "ModelExistsAsync", "GetModelInformationAsync" };
-            foreach (string operation in operations)
+            (string Name, int Overloads)[] operations =
+            {
+                ("ChatAsync", 4), ("ChatStreamingAsync", 4), ("GenerateAsync", 1), ("GenerateStreamingAsync", 1),
+                ("EmbedAsync", 2), ("EmbedSparseAsync", 2), ("RerankAsync", 1), ("ClassifyAsync", 2), ("DecideAsync", 2),
+                ("ListModelsAsync", 1), ("ModelExistsAsync", 1), ("GetModelInformationAsync", 1), ("TranscribeAsync", 1),
+            };
+            foreach (var (operation, overloads) in operations)
             {
                 MethodInfo[] declared = typeof(ProviderClientBase).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => m.Name == operation).ToArray();
-                SharedAssert.True(declared.Length > 0, operation + " should be declared on ProviderClientBase.");
+                SharedAssert.Equal(overloads, declared.Length, operation + " should be declared on ProviderClientBase with " + overloads + " overloads.");
             }
+            SharedAssert.False(typeof(ProviderClientBase).GetMethods().Any(m => m.Name.StartsWith("ToolChat", StringComparison.Ordinal)), "ToolChat methods are gone in 5.0.");
 
             foreach (Type harness in clients.Where(c => typeof(CliAgentClientBase).IsAssignableFrom(c)))
             {

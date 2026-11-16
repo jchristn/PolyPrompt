@@ -342,5 +342,10 @@ namespace PolyPrompt.Clients
         /// </summary>
         public override DecisionOptions Decision { get; } = new DecisionOptions { Model = "jev-latest" };
 
+        /// <summary>Not supported by TypeSafe; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("TypeSafe does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

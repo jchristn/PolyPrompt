@@ -173,10 +173,10 @@ New files in `src/PolyPrompt/Models/`:
 New public method (new partial `ProviderClientBase.Transcription.cs`):
 
 ```csharp
-Task<TranscriptionResponse> TranscribeAsync(TranscriptionRequest request, CancellationToken token = default)
+Task<TranscriptionResponse> TranscribeAsync(TranscriptionRequest request, TranscriptionOptions? options = null, CancellationToken token = default)
 ```
 
-The hook is `protected virtual Task<TranscriptionResponse> TranscribeCoreAsync(TranscriptionRequest request, string model, CancellationToken token)`.
+The hook is `protected virtual Task<TranscriptionResponse> TranscribeCoreAsync(TranscriptionRequest request, string mediaType, string model, CancellationToken token)`, plus `protected virtual void ValidateTranscriptionFormat(TranscriptionRequest request, string model)` for per-model format rules. Every defaults type that does not support transcription hides `Transcription` as a compile error, as for the other sections.
 
 **Format support depends on the model.** On OpenAI, `VerboseJson` and timestamp granularities work only with `whisper-1`; the `gpt-4o-*-transcribe` models return `json` or `text` only (*verify* the current list at implementation). `OpenAiClient` and `AzureOpenAiClient` throw `ArgumentException` before sending when the format or granularities are not supported by the resolved model, with a message that names `whisper-1`. Azure checks the deployment's model name when it is known and otherwise passes the request through. `OpenAiCompatibleClient` always passes the request through because local servers vary. The response parser tolerates missing segments and words in every case. MULTIMEDIA.md has the per-model table.
 
@@ -453,10 +453,10 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - [x] Tests: `LocalMultimodalCases` (13 cases: shapes per provider, URLs, detail, escaping, tools, audio and video, Gemini and Bedrock specifics, streaming, validation, inline limit, redaction, usage and modalities) and capability contract rows
 
 ### Phase 3: Transcription
-- [ ] Multipart helper and summary recording
-- [ ] Transcription models, defaults section, `TranscribeAsync`, telemetry operation
-- [ ] OpenAI, Azure, and OpenAI-compatible implementations (new `.Transcription.cs` partials) with model format validation
-- [ ] Tests: `LocalTranscriptionCases`, multipart redaction cases, architecture operations list, default-models section
+- [x] Multipart helper and summary recording
+- [x] Transcription models, defaults section, `TranscribeAsync`, telemetry operation
+- [x] OpenAI, Azure, and OpenAI-compatible implementations (new `.Transcription.cs` partials) with model format validation
+- [x] Tests: `LocalTranscriptionCases`, multipart redaction cases, architecture operations list, default-models section
 
 ### Phase 4: Files
 - [ ] `GeminiClient.Files.cs` with the resumable upload, polling, and deletion
@@ -485,3 +485,4 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - **2026-11-15**: Phase 0 done (`b159ef3`): 160 wire fixtures captured from 4.0.0, deterministic across two runs and both frameworks.
 - **2026-11-16**: Phase 1 done. Chat and tool chat merged; `ChatMessage.Content` is parts. Wire identity: 156 of 160 bodies are byte-identical, including `Content-Type`; the 4 differences are the intended OpenAI-compatible fix (no `tool_choice` without tools), recorded in `V5Changes`. The Native AOT request digest over 222 requests equals the 4.0.0 digest. Local suite 854 passed on net8.0 and net10.0; Xunit, Nunit, Docs, Console, and AOT green. `MIGRATION_V3_TO_V4.md` is no longer compiled by `Test.Docs` because its snippets target 4.0; `MIGRATION_V4_TO_V5.md` replaces it in Phase 6.
 - **2026-11-16**: Phase 2 done. Checked the *verify* cells against provider docs: OpenAI and Azure audio input ship off; Cohere vision and Vertex YouTube are confirmed; only `whisper-1` has `verbose_json` and timestamps. Media is written raw through `MediaValue`; recorded bodies use placeholders. Ten local clients send images (plus Ollama Cloud), with audio and video on OpenAI-compatible, Gemini, Vertex, and Bedrock (video). Local suite 867 passed on net8.0 and net10.0; Docs, Console, and AOT green; the AOT request digest is still the 4.0.0 digest. Deviations: `S3BucketOwner` is a `BedrockClient` property; `MaxInlineMediaBytes` lives on `ClientOptions`; no fixture-server media DTOs.
+- **2026-11-16**: Phase 3 done. `TranscribeAsync` on OpenAI, Azure (deployment as model, `/openai/v1/audio/transcriptions`), and OpenAI-compatible, through one shared multipart path that sends exactly the bytes it signs and records a field summary. OpenAI and Azure reject `text`, `verbose_json`, and granularities for `gpt-4o` transcription models before sending (the diarizing model accepts `text`). The fixture server now keeps raw request bytes, and `LocalTranscriptionRoutes` parses multipart bodies. 7 transcription cases; local suite 874 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.

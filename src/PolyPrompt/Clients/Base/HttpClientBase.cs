@@ -240,6 +240,22 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
+        /// POST a <c>multipart/form-data</c> body and fill <paramref name="response"/>. See
+        /// <see cref="ExecutePostAsync{TResponse}"/>.
+        /// </summary>
+        private protected Task<TResponse> ExecuteMultipartAsync<TResponse>(
+            TResponse response,
+            string operation,
+            string url,
+            IReadOnlyList<MultipartField> fields,
+            Action<string, TResponse> parse,
+            CancellationToken token)
+            where TResponse : ResponseBase
+        {
+            return ExecuteAsync(response, operation, "POST", url, t => PostMultipartAndRecordAsync(url, fields, t), parse, token);
+        }
+
+        /// <summary>
         /// GET <paramref name="url"/> and fill <paramref name="response"/>. See
         /// <see cref="ExecutePostAsync{TResponse}"/>.
         /// </summary>
@@ -491,6 +507,21 @@ namespace PolyPrompt.Clients
                 RecordCallDetail(detail);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// POST a <c>multipart/form-data</c> body (transcription, file uploads) and record the call details. The recorded
+        /// body is a JSON summary of the fields with files shown by size, type, and name, never their bytes.
+        /// </summary>
+        /// <param name="url">Full URL to call.</param>
+        /// <param name="fields">The form fields, in order.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>An HttpCallResult containing the response and body.</returns>
+        private protected Task<HttpCallResult> PostMultipartAndRecordAsync(string url, IReadOnlyList<MultipartField> fields, CancellationToken token)
+        {
+            byte[] body = MultipartField.Build(fields, out string contentType);
+            string? recorded = CallDetailCapture == CallDetailCapture.Full ? MultipartField.Summary(fields) : null;
+            return PostAndRecordAsync(url, body, contentType, recorded, token);
         }
 
         /// <summary>

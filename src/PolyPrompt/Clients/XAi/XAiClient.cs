@@ -176,5 +176,10 @@ namespace PolyPrompt.Clients
         [Obsolete("xAI does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
 
+        /// <summary>Not supported by xAI; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("xAI does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

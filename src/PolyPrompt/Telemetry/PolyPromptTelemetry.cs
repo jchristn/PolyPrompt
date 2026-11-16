@@ -310,6 +310,7 @@ namespace PolyPrompt.Telemetry
             {
                 case null: return client is ProviderClientBase ? "provider" : "other";
                 case PolyPromptTelemetryNames.OperationEmbed: return "embedding";
+                case PolyPromptTelemetryNames.OperationTranscribe: return "transcription";
                 case PolyPromptTelemetryNames.OperationSparseEmbed: return "sparse_embedding";
                 case PolyPromptTelemetryNames.OperationRerank: return "rerank";
                 case PolyPromptTelemetryNames.OperationClassify: return "classification";

@@ -77,7 +77,7 @@ namespace Test.Shared
             foreach (Type type in ProviderTypes())
             {
                 using ProviderClientBase client = LocalV4Cases.Construct(type);
-                foreach (string section in new[] { "Completion", "Embedding", "SparseEmbedding", "Rerank", "Classification", "Decision" })
+                foreach (string section in new[] { "Completion", "Embedding", "SparseEmbedding", "Rerank", "Classification", "Decision", "Transcription" })
                 {
                     object? options = typeof(ClientDefaults).GetProperty(section)!.GetValue(client.Defaults);
                     string[]? row = rows.FirstOrDefault(r => Name(r[0]) == type.Name && r[1] == section);
@@ -101,6 +101,7 @@ namespace Test.Shared
             {
                 ("Completion", Capability.Chat), ("Embedding", Capability.Embed), ("SparseEmbedding", Capability.SparseEmbed),
                 ("Rerank", Capability.Rerank), ("Classification", Capability.Classify), ("Decision", Capability.Decide),
+                ("Transcription", Capability.Transcribe),
             };
             foreach (Type type in ProviderTypes())
             {

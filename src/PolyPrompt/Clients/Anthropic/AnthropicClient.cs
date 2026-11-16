@@ -155,5 +155,10 @@ namespace PolyPrompt.Clients
         [Obsolete("Anthropic does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
 
+        /// <summary>Not supported by Anthropic; always null.</summary>
+        [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+        [Obsolete("Anthropic does not support transcription.", true)]
+        public new TranscriptionOptions? Transcription => null;
+
     }
 }

@@ -14,6 +14,7 @@ namespace PolyPrompt.Clients
     /// (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
     /// <c>extra_content.google.thought_signature</c>.</description></item>
     /// <item><description>Media input: ImageInput, AudioInput, and VideoInput (Chat Completions <c>image_url</c>, <c>input_audio</c>, and the vLLM <c>video_url</c>; what a server accepts depends on the server and model).</description></item>
+    /// <item><description>Speech to text: Transcribe (<c>/v1/audio/transcriptions</c>, for local Whisper servers such as faster-whisper, speaches, whisper.cpp, and vLLM; a server without the route returns its 404).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: optional API key; placement set by <see cref="OpenAiCompatibleClientOptions.AuthPlacement"/>
@@ -36,9 +37,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, VideoInput, and Transcribe.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.AudioInput | Capability.VideoInput;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.AudioInput | Capability.VideoInput | Capability.Transcribe;
 
         /// <inheritdoc />
         public override string ProviderName => "OpenAI-compatible server";
@@ -143,6 +144,12 @@ namespace PolyPrompt.Clients
         }
 
         /// <inheritdoc />
+        protected override Task<TranscriptionResponse> TranscribeCoreAsync(TranscriptionRequest request, string mediaType, string model, CancellationToken token)
+        {
+            return OpenAiTranscribeAsync(BuildApiUrl("audio/transcriptions", model), request, mediaType, model, token);
+        }
+
+        /// <inheritdoc />
         protected override Task<EmbeddingResponse> EmbedCoreAsync(List<string> inputs, string? model, EmbeddingOptions? options, CancellationToken token)
         {
             return OpenAiEmbedAsync(BuildApiUrl("embeddings", model), inputs, model, options, token);
@@ -203,6 +210,11 @@ namespace PolyPrompt.Clients
         [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
         [Obsolete("OpenAiCompatibleClient does not support decisions.", true)]
         public new DecisionOptions? Decision => null;
+
+        /// <summary>
+        /// Transcription defaults. No default model: models are server-specific (for example <c>Systran/faster-whisper-large-v3</c> on speaches), so set <c>Model</c>.
+        /// </summary>
+        public override TranscriptionOptions Transcription { get; } = new TranscriptionOptions();
 
     }
 }
