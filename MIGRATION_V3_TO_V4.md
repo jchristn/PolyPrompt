@@ -1,5 +1,7 @@
 # Migrating from PolyPrompt 3.x to 4.0
 
+> **Superseded names (5.0):** this document uses 4.x names. In 5.0, `ToolChatAsync` and `ToolChatRequest` are `ChatAsync` and `ChatRequest`, `Capability.ToolChat` is `Capability.ToolCalling`, and `ChatMessage.Content` is a list of parts (use `Text` for plain text). See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md).
+
 4.0 goes back to **one client per provider**. In 3.x each provider had one client per capability (`OpenAiCompletionClient`, `OpenAiEmbeddingClient`, `OpenAiModelClient`), so using one provider for chat, embeddings, and model listing meant three objects, three copies of the key and `HttpClient`, and three `Defaults`. In 4.0 you construct `OpenAiClient` once and call any operation on it. Every provider client has every operation; an operation the provider does not support throws `CapabilityNotSupportedException` before any request, and `client.Supports(Capability.X)` lets you check first. The README capability matrix is checked against the code by tests.
 
 The second change is OpenAI: **`OpenAiClient` now speaks the Responses API** (`/v1/responses`). Chat Completions moved to `OpenAiCompatibleClient`, for vLLM, Ollama `/v1`, LM Studio, gateways, and OpenAI itself when you want Chat Completions.

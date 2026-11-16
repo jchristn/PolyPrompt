@@ -12,7 +12,7 @@ One .NET client per LLM provider, with the same methods on every client: chat, t
 - **Agent harnesses:** Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode, run as local child processes. See [Agent harnesses](#agent-harnesses).
 - **No provider SDKs.** Targets .NET 8 and .NET 10, and is Native AOT and trimming compatible.
 
-> **Upgrading from 4.x?** See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md): tool chat is now part of `ChatAsync`, and `ChatMessage.Content` is a list of parts. From 3.x, read [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md) first. What changed is in the [CHANGELOG](CHANGELOG.md).
+> **Upgrading from 4.x?** Tool chat is now part of `ChatAsync`, and `ChatMessage.Content` is a list of parts. See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md). Older versions: [Upgrading](#upgrading).
 
 ## Installation
 
@@ -489,7 +489,15 @@ Embedding defaults stay the same across releases while the model is live, becaus
 - [TELEMETRY.md](TELEMETRY.md): metrics and traces
 - [AOT.md](AOT.md): Native AOT and source-generated JSON
 - [DEVELOPMENT.md](DEVELOPMENT.md): project structure, building, testing, and the console samples
-- [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md), [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md), and [CHANGELOG.md](CHANGELOG.md)
+- [CHANGELOG.md](CHANGELOG.md): every release
+
+### Upgrading
+
+Apply the guides in order, starting from the version you are on:
+
+- [MIGRATION_V2_TO_V3.md](MIGRATION_V2_TO_V3.md): 2.x to 3.0
+- [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md): 3.x to 4.0 (one client per provider; `OpenAiClient` on the Responses API)
+- [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md): 4.x to 5.0 (tool chat merged into `ChatAsync`; `ChatMessage.Content` as parts)
 
 ## Building
 
