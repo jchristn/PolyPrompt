@@ -1,6 +1,6 @@
 # PolyPrompt
 
-> PolyPrompt 4.0 is a .NET 8/10 library with one client per LLM provider (OpenAiClient, OpenAiCompatibleClient, AzureOpenAiClient, XAiClient, AnthropicClient, GeminiClient, VertexAiClient, BedrockClient, OllamaClient, OllamaCloudClient, CohereClient, VoyageAiClient, TeiClient, TypeSafeClient). Every client exposes every operation through ProviderClientBase; unsupported operations throw CapabilityNotSupportedException, so check client.Supports(Capability.X) first. It also drives local agent harness CLIs (ClaudeCodeClient, CodexClient, GeminiCliClient, CursorClient, MuxClient, PiClient, OpenCodeClient).
+> PolyPrompt 5.0 is a .NET 8/10 library with one client per LLM provider (OpenAiClient, OpenAiCompatibleClient, AzureOpenAiClient, XAiClient, AnthropicClient, GeminiClient, VertexAiClient, BedrockClient, OllamaClient, OllamaCloudClient, CohereClient, VoyageAiClient, TeiClient, TypeSafeClient). Every client exposes every operation through ProviderClientBase (chat with tools and image, audio, and video input, transcription, generation, embeddings, rerank, classification, decisions, model listing); unsupported operations throw CapabilityNotSupportedException, so check client.Supports(Capability.X) first. It also drives local agent harness CLIs (ClaudeCodeClient, CodexClient, GeminiCliClient, CursorClient, MuxClient, PiClient, OpenCodeClient).
 
 Read these first:
 
@@ -8,6 +8,7 @@ Read these first:
 - [Capability matrix](https://github.com/jchristn/Polyprompt#capability-matrix): which client supports which capability (machine-checked against the code).
 - [Which OpenAI client?](https://github.com/jchristn/Polyprompt#which-openai-client): OpenAiClient (Responses API) versus OpenAiCompatibleClient (Chat Completions: vLLM, Ollama /v1, LM Studio, gateways).
 - [Default models](https://github.com/jchristn/Polyprompt#default-models): per client and defaults section; "none" means set Defaults.<Section>.Model.
+- [MIGRATION_V4_TO_V5.md](https://github.com/jchristn/Polyprompt/blob/main/MIGRATION_V4_TO_V5.md): tool chat merged into ChatAsync, ChatMessage.Content as parts, and a checklist.
 - [MIGRATION_V3_TO_V4.md](https://github.com/jchristn/Polyprompt/blob/main/MIGRATION_V3_TO_V4.md): every 3.x to 4.0 rename in one table, behavior changes, and a checklist.
 
 Key rules:
@@ -15,10 +16,13 @@ Key rules:
 - Set models with client.Defaults.Completion.Model (also .Embedding, .Rerank, .Classification, .Decision, .SparseEmbedding) or per call; there is no client.Model.
 - Pass the base options type (CompletionOptions, EmbeddingOptions, ...) or the client's own options type; another provider's options type throws ArgumentException.
 - HTTP errors return Success = false with StatusCode and Error; they do not throw. Enumerate streams fully and require State == StreamingState.Completed.
-- After a tool-chat turn, append response.ToAssistantMessage() unchanged (it carries ProviderState), then ChatMessage.ToolResult(call.Id, call.Name, result) per call.
+- Chat with tools is ChatAsync(new ChatRequest { Messages, Tools }); there is no ToolChatAsync. After a turn with tool calls, append response.ToAssistantMessage() unchanged (it carries ProviderState), then ChatMessage.ToolResult(call.Id, call.Name, result) per call.
+- ChatMessage.Content is List<ContentPart>; use message.Text for plain text. Attach media with ChatMessage.User(text, ContentPart.Image/ImageUrl/Audio/Video/VideoUrl/FileReferenceOf/FromFile(...)), on user messages only, after checking client.Supports(Capability.ImageInput | AudioInput | VideoInput).
+- Transcribe with client.TranscribeAsync(new TranscriptionRequest { Audio = bytes }) on OpenAiClient (whisper-1), AzureOpenAiClient, and OpenAiCompatibleClient; segments need TranscriptionFormat.VerboseJson.
 
 Optional:
 
+- [MULTIMEDIA.md](https://github.com/jchristn/Polyprompt/blob/main/MULTIMEDIA.md): content parts, per-provider media shapes and limits, Gemini and OpenAI file uploads, transcription formats, redaction.
 - [PROVIDERS.md](https://github.com/jchristn/Polyprompt/blob/main/PROVIDERS.md): constructors, auth, per-provider behavior, Responses API, Gemini tool calling, reasoning-effort mapping, citations, options classes.
 - [HARNESSES.md](https://github.com/jchristn/Polyprompt/blob/main/HARNESSES.md): agent harness setup, permissions, requests and results.
 - [STREAMING.md](https://github.com/jchristn/Polyprompt/blob/main/STREAMING.md): streaming lifecycle and Responses API events.

@@ -25,6 +25,59 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateResponse"
+              },
+              "examples": {
+                "imageInput": {
+                  "summary": "A user message with inline image bytes (PolyPrompt 5.0 ContentPart.Image)",
+                  "value": {
+                    "model": "test-model",
+                    "stream": false,
+                    "store": false,
+                    "max_output_tokens": 256,
+                    "include": [
+                      "reasoning.encrypted_content"
+                    ],
+                    "input": [
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "What is in this image?"
+                          },
+                          {
+                            "type": "input_image",
+                            "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+                            "detail": "high"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "imageFileId": {
+                  "summary": "An image uploaded to /v1/files and sent by file_id",
+                  "value": {
+                    "model": "test-model",
+                    "stream": false,
+                    "store": false,
+                    "input": [
+                      {
+                        "role": "user",
+                        "content": [
+                          {
+                            "type": "input_text",
+                            "text": "Describe it."
+                          },
+                          {
+                            "type": "input_image",
+                            "file_id": "file-abc123"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
               }
             }
           }
@@ -538,6 +591,149 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/transcriptions": {
+      "post": {
+        "operationId": "createTranscription",
+        "description": "Speech to text (PolyPrompt TranscribeAsync). verbose_json and timestamp_granularities[] are supported by whisper-1 only; gpt-4o transcription models return json.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "model"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "model": {
+                    "type": "string",
+                    "example": "whisper-1"
+                  },
+                  "response_format": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "text",
+                      "verbose_json",
+                      "srt",
+                      "vtt",
+                      "diarized_json"
+                    ],
+                    "default": "json"
+                  },
+                  "language": {
+                    "type": "string",
+                    "example": "en"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "timestamp_granularities[]": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "segment",
+                        "word"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A transcript",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "examples": {
+                  "json": {
+                    "value": {
+                      "text": "hello world",
+                      "usage": {
+                        "type": "tokens",
+                        "input_tokens": 12,
+                        "output_tokens": 3,
+                        "total_tokens": 15
+                      }
+                    }
+                  },
+                  "verbose_json": {
+                    "value": {
+                      "task": "transcribe",
+                      "language": "english",
+                      "duration": 2.5,
+                      "text": "hello world",
+                      "segments": [
+                        {
+                          "id": 0,
+                          "start": 0.0,
+                          "end": 0.6,
+                          "text": " hello",
+                          "avg_logprob": -0.21,
+                          "no_speech_prob": 0.01
+                        },
+                        {
+                          "id": 1,
+                          "start": 0.7,
+                          "end": 1.4,
+                          "text": " world",
+                          "avg_logprob": -0.3,
+                          "no_speech_prob": 0.02
+                        }
+                      ],
+                      "words": [
+                        {
+                          "word": "hello",
+                          "start": 0.0,
+                          "end": 0.6
+                        },
+                        {
+                          "word": "world",
+                          "start": 0.7,
+                          "end": 1.4
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "hello world\n"
+              }
+            }
+          },
+          "400": {
+            "description": "Missing file or model",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
                 }
               }
             }

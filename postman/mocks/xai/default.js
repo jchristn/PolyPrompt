@@ -36,6 +36,9 @@ const server = http.createServer(async (req, res) => {
     if (body.previous_response_id && !saved.has(body.previous_response_id)) return send(404, { error: { message: 'Unknown previous_response_id' } });
     const input = Array.isArray(body.input) ? body.input : [{ role: 'user', content: body.input }];
     const results = input.filter(i => i.type === 'function_call_output');
+    const images = input.flatMap(i => Array.isArray(i.content) ? i.content : []).filter(c => c.type === 'input_image');
+    if (images.some(c => !/^(data:image\/[a-z+.-]+;base64,|https?:\/\/)/.test(c.image_url || '')))
+      return send(400, { error: { message: 'input_image needs a data URL or an http(s) URL' } });
     const functions = (body.tools || []).filter(t => t.type === 'function');
     const smoke = JSON.stringify(input).includes('xai-console-smoke');
     if (smoke && results.length > 0 && !input.some(i => i.type === 'reasoning' && i.encrypted_content === 'fixture-reasoning'))
@@ -46,7 +49,7 @@ const server = http.createServer(async (req, res) => {
       const name = round === 0 ? 'list_directory' : 'read_file';
       output.push({ type: 'function_call', id: 'fc-' + round, call_id: 'call-' + round, name, arguments: JSON.stringify(round === 0 ? { path: '.' } : { file_path: '.console-smoke.txt' }), status: 'completed' });
     } else {
-      const text = smoke && round > 1 ? 'Actual file: ' + results[1].output : 'Hello from the Responses fixture.';
+      const text = smoke && round > 1 ? 'Actual file: ' + results[1].output : images.length ? 'I see ' + images.length + ' image(s).' : 'Hello from the Responses fixture.';
       output.push({ type: 'message', id: 'msg-' + sequence, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] });
     }
     const response = { id: 'resp-' + (++sequence), object: 'response', model: body.model, created_at: 1700000000, status: 'completed', output, store: body.store ?? true,

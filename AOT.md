@@ -176,6 +176,14 @@ The hermetic test suite (`Test.Automated`, `Test.Xunit`, `Test.Nunit`) includes 
 
 `Test.Aot` covers OpenAI Responses tool chat (streaming and not) with encrypted-state replay, a native create with citations and extensible values, JSON round trips of the new types, and `CapabilityNotSupportedException`, on the JIT and as a native binary.
 
+## PolyPrompt 5.0
+
+- **Content parts** are one sealed `ContentPart` type with a `ContentPartType` discriminator, so they need no polymorphic metadata. `ChatMessage.Content` uses `ContentPartListJsonConverter`, which reads 4.x string content and arrays through `PolyPromptJsonContext` metadata only.
+- **Registered types:** `ContentPart`, `List<ContentPart>`, `ContentPartType`, `ImageDetail`, `VideoClip`, `ModalityTokens`, `List<ContentPartType>`, the transcription request, options, response, segment, word, format, and granularity types, and the Gemini and OpenAI file and delete response types. `ToolChatRequest`, `ToolChatResponse`, and the tool-chat streaming types are gone with the merge.
+- **Media on the wire** is written by PolyPrompt's serializer with `Utf8JsonWriter.WriteRawValue`, which is AOT safe; multipart bodies use `MultipartFormDataContent`.
+
+`Test.Aot` runs image chat on every image client, Gemini video, upload, and wait, transcription, OpenAI `file_id` images, and media JSON round trips against a second fixture server, and reports a separate media digest (normalized for multipart boundaries and upload IDs). `verify-aot.sh` requires both digests to match between the JIT and native runs; the text-only request digest is unchanged from 4.0.0.
+
 ## Streaming lifecycle
 
 The shared `StreamingState`/`IStreamingResponse` contract uses ordinary typed properties and async iterators, without runtime reflection. It applies to generic completion streams and native Responses events in Native AOT. Continuation checks assert completed lifecycle state on the JIT and native builds. See [STREAMING.md](STREAMING.md) for final-state gating and cancellation behavior.

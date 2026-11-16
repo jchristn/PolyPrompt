@@ -471,11 +471,11 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - [x] Tests: `LocalMultimodalTelemetryCases`
 
 ### Phase 6: Documentation and release preparation
-- [ ] MIGRATION_V4_TO_V5, README, MULTIMEDIA, PROVIDERS, STREAMING, TELEMETRY, AOT, DEVELOPMENT, HARNESSES, llms.txt
-- [ ] Postman updates for the three existing targets
-- [ ] Live tests against at least one provider per modality (OpenAI or Anthropic for images, Gemini for video and audio, an OpenAI-compatible Whisper server and OpenAI `whisper-1` for transcription)
-- [ ] CHANGELOG `v5.0.0` entry
-- [ ] Full test matrix (Automated, Xunit, Nunit, Aot on all three OSes, Docs, Console)
+- [x] MIGRATION_V4_TO_V5, README, MULTIMEDIA, PROVIDERS, STREAMING, TELEMETRY, AOT, DEVELOPMENT, HARNESSES, llms.txt
+- [x] Postman updates for the three existing targets
+- [~] Live tests written (`image_chat`, `video_chat`, `transcription`, gated by `POLYPROMPT_TEST_IMAGE`, `POLYPROMPT_TEST_VIDEO`, and `POLYPROMPT_TEST_TRANSCRIPTION_MODEL`) with media fixtures; not yet run against real providers, which needs the owner's keys
+- [x] CHANGELOG `v5.0.0 (unreleased)` entry; csproj version 5.0.0 and release notes
+- [x] Full test matrix (Automated, Xunit, Nunit, Aot on all three OSes, Docs, Console)
 
 ---
 
@@ -489,3 +489,4 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - **2026-11-16**: Phase 3 done. `TranscribeAsync` on OpenAI, Azure (deployment as model, `/openai/v1/audio/transcriptions`), and OpenAI-compatible, through one shared multipart path that sends exactly the bytes it signs and records a field summary. OpenAI and Azure reject `text`, `verbose_json`, and granularities for `gpt-4o` transcription models before sending (the diarizing model accepts `text`). The fixture server now keeps raw request bytes, and `LocalTranscriptionRoutes` parses multipart bodies. 7 transcription cases; local suite 874 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.
 - **2026-11-16**: Phase 4 done. Gemini File API (two-step resumable upload, get, wait for ACTIVE with FAILED, timeout, and cancellation, delete, paged list) and OpenAI `/v1/files` (multipart upload, delete), with uploaded files used as content parts. `HttpClientBase` gained a header-aware POST and `ExecuteSendAsync` for multi-step calls. 5 file cases; local suite 879 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.
 - **2026-11-16**: Phase 5 done. Media span attributes, the media counter and bytes histogram, and token usage by modality; 3 telemetry cases. `Test.Aot` adds 14 media checks with a separate media digest that matches between JIT and native on both frameworks, while the request digest is still the 4.0.0 digest. Consoles gained `attach`, `transcribe`, and `transcription-model`, with 2 new console tests. Local suite 882 passed on both frameworks; Docs and Console green.
+- **2026-11-16**: Phase 6 done except live runs. MULTIMEDIA.md and MIGRATION_V4_TO_V5.md written and compiled by Test.Docs (39 snippets); README, PROVIDERS, STREAMING, TELEMETRY, AOT, DEVELOPMENT, HARNESSES, and llms.txt updated; Postman mocks validate media and serve transcription (checked with curl); CHANGELOG and version 5.0.0. Full matrix green: Automated 882 passed on net8.0 and net10.0, Xunit 882 and Nunit 882 on both, Docs 39, Console 82, AOT 147 checks with the 4.0.0 request digest unchanged and matching media digests.

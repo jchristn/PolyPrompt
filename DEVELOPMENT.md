@@ -18,7 +18,7 @@ PolyPrompt/
 |   |   `-- Options/             # Provider-specific options
 |   |-- *Console/                # Provider and harness consoles
 |   |-- Console.Shared/, Console.Tools/, AgentConsole.Shared/
-|   |-- Test.Shared/             # Test descriptors and the local fixture server
+|   |-- Test.Shared/             # Test descriptors, the local fixture server, and Fixtures/ (4.0 wire bodies, media)
 |   |-- Test.Automated/, Test.Xunit/, Test.Nunit/   # Runners over Test.Shared
 |   |-- Test.Console/            # Console end-to-end tests
 |   |-- Test.Docs/               # Compiles every C# snippet in the docs
@@ -70,6 +70,23 @@ dotnet run --project src/Test.Automated -- --bedrock-region us-east-1 --bedrock-
 ```
 
 The same settings can come from `POLYPROMPT_TEST_*` environment variables (for example `POLYPROMPT_TEST_OPENAI_API_KEY` and `POLYPROMPT_TEST_OPENAI_MODEL`); run `Test.Automated --help` for the list. Harness live suites are opt-in: `POLYPROMPT_TEST_CODEX=1`, `POLYPROMPT_TEST_CLAUDE_CODE=1`, and so on.
+
+## Adding a capability
+
+A capability is a `Capability` flag, one public operation on `ProviderClientBase`, and a core hook each provider overrides. `Transcribe` (5.0) is a complete example:
+
+1. **Flag.** Add it to `Models/Capability.cs` with an XML summary naming the method.
+2. **Operation.** Add a partial `Clients/Base/ProviderClientBase.<Name>.cs` with the public method. It calls `RequireCapability`, validates arguments, resolves the model from options and `Defaults`, and wraps `InstrumentAsync` around a `protected virtual ...CoreAsync` that throws `NotSupported` by default.
+3. **Defaults.** If the operation takes a model, add a section to `ClientDefaults`, a supported section on each implementing provider's defaults type, and a hidden `[Obsolete(..., true)]` member on every other defaults type. `contract_defaults_sections` checks this.
+4. **Providers.** Override the core hook, add the flag to `Capabilities`, and name the capability in the client's XML summary between `Supported:` and `Not supported` (`contract_xml_docs` checks it).
+5. **Telemetry.** Add an operation constant to `PolyPromptTelemetryNames` and a capability label in `PolyPromptTelemetry.ResolveCapability`; update TELEMETRY.md.
+6. **Contracts.** Add the README matrix column (`contract_readme_matrix` parses it), default-model rows, the operation in `LocalArchitectureCases` with its overload count, and an unsupported-call row in `LocalV4Cases`.
+7. **Fixtures and tests.** Add a route to the local fixture server (`LocalTranscriptionRoutes` is the pattern), a `Local<Name>Cases.cs` registered in `LocalBehaviorSuite`, AOT checks in `Test.Aot` (link any new fixture files in its csproj), and JSON registrations in `PolyPromptJsonContext`.
+8. **Docs.** README, PROVIDERS.md, llms.txt, and the CHANGELOG. Every `csharp` block must compile under `Test.Docs`.
+
+**Wire identity.** `LocalWireIdentityCases` replays 160 text-only requests and compares their bytes, path, and `Content-Type` with `Fixtures/V4Bodies`, captured from 4.0.0. An intended change goes in `Fixtures/V5Changes` under the same name with a `# reason:` first line, and in the migration guide. To capture fixtures, run the suite with `POLYPROMPT_CAPTURE_WIRE_FIXTURES=<dir>`.
+
+**Media fixtures.** `src/Test.Shared/Fixtures/Media` holds a 64x64 red PNG, a one-second 440 Hz WAV, and a one-second blue MP4 (about 18 KB in all), embedded in Test.Shared. With the usual provider variables set, `POLYPROMPT_TEST_IMAGE=1` runs the live image case (needs a vision model), `POLYPROMPT_TEST_VIDEO=1` the live video case (Gemini, Vertex AI, or Amazon Nova), and `POLYPROMPT_TEST_TRANSCRIPTION_MODEL=<model>` live transcription.
 
 ## Console samples
 

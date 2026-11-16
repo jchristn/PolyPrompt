@@ -6,13 +6,13 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/PolyPrompt.svg?style=flat)](https://www.nuget.org/packages/PolyPrompt/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 
-One .NET client per LLM provider, with the same methods on every client: chat, tool calling, streaming, text generation, embeddings, reranking, classification, decision models, and model listing.
+One .NET client per LLM provider, with the same methods on every client: chat, tool calling, streaming, images, audio, and video input, transcription, text generation, embeddings, reranking, classification, decision models, and model listing.
 
 - **Providers:** OpenAI, OpenAI-compatible servers (vLLM, LM Studio, Ollama `/v1`, gateways), Azure OpenAI, xAI Grok, Anthropic, Google Gemini, Vertex AI, AWS Bedrock, Ollama, Ollama Cloud, Cohere, VoyageAI, Hugging Face TEI, and TypeSafe.
 - **Agent harnesses:** Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode, run as local child processes. See [Agent harnesses](#agent-harnesses).
 - **No provider SDKs.** Targets .NET 8 and .NET 10, and is Native AOT and trimming compatible.
 
-> **Upgrading from 3.x?** See [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md). What changed in 4.0 is in the [CHANGELOG](CHANGELOG.md).
+> **Upgrading from 4.x?** See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md): tool chat is now part of `ChatAsync`, and `ChatMessage.Content` is a list of parts. From 3.x, read [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md) first. What changed is in the [CHANGELOG](CHANGELOG.md).
 
 ## Installation
 
@@ -267,6 +267,67 @@ Console.WriteLine(turn.Text);
 
 Add the message from `ToAssistantMessage()` as is. It carries provider state such as encrypted reasoning and Gemini thought signatures, which some providers require on the next turn.
 
+### Images, audio, and video
+
+Attach media to a user message. The text goes first, then the parts in order:
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using AnthropicClient claude = new AnthropicClient(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")!);
+
+ChatResponse described = await claude.ChatAsync(ChatMessage.User("What is in this photo?", ContentPart.FromFile("photo.jpg")));
+Console.WriteLine(described.Text);
+```
+
+A part can be inline bytes, a URL the provider fetches, or a file the provider already holds:
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using GeminiClient gemini = new GeminiClient(Environment.GetEnvironmentVariable("GEMINI_API_KEY")!);
+
+byte[] frame = File.ReadAllBytes("frame-0042.png");
+ContentPart inline = ContentPart.Image(frame, MediaTypes.ImagePng, ImageDetail.High);
+ContentPart youtube = ContentPart.VideoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ", new VideoClip { StartOffsetMs = 30_000, EndOffsetMs = 45_000 });
+
+GeminiFileResponse upload = await gemini.UploadFileAsync(File.ReadAllBytes("scene.mp4"), MediaTypes.VideoMp4, "scene");
+GeminiFileResponse ready = await gemini.WaitForFileActiveAsync(upload.File!.Name, TimeSpan.FromMinutes(2));
+ContentPart uploaded = ContentPart.FileReferenceOf(ContentPartType.Video, ready.File!.Uri!, MediaTypes.VideoMp4);
+
+if (gemini.Supports(Capability.VideoInput))
+{
+    ChatResponse summary = await gemini.ChatAsync(ChatMessage.User("Summarize each clip.", inline, youtube, uploaded));
+    Console.WriteLine(summary.Text);
+}
+```
+
+Check `Supports(Capability.ImageInput)` (or `AudioInput`, `VideoInput`) first. An unsupported modality throws `CapabilityNotSupportedException`, and a malformed part, media on a non-user message, a URL the provider cannot fetch, or inline media over `MaxInlineMediaBytes` throws `ArgumentException`. All of these happen before anything is sent. Recorded call details replace large inline media with a `<base64 N bytes type sha256=...>` placeholder. [MULTIMEDIA.md](MULTIMEDIA.md) has the per-provider shapes and limits.
+
+### Transcription
+
+```csharp
+using PolyPrompt.Clients;
+using PolyPrompt.Models;
+
+using OpenAiClient openai = new OpenAiClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+
+TranscriptionResponse transcript = await openai.TranscribeAsync(new TranscriptionRequest
+{
+    Audio = File.ReadAllBytes("interview.flac"),
+    Language = "en",
+    Format = TranscriptionFormat.VerboseJson,
+    TimestampGranularities = { TranscriptionTimestampGranularity.Segment },
+});
+
+foreach (TranscriptionSegment segment in transcript.Segments)
+    Console.WriteLine(segment.StartSeconds + "-" + segment.EndSeconds + ": " + segment.Text);
+```
+
+`TranscribeAsync` is on `OpenAiClient` (default `whisper-1`), `AzureOpenAiClient` (the deployment name is the model), and `OpenAiCompatibleClient` (local Whisper servers such as faster-whisper, speaches, whisper.cpp, and vLLM). Segments and timestamps need `whisper-1` on OpenAI. The `gpt-4o` transcription models return JSON text only, and PolyPrompt rejects other formats for them before sending.
+
 ### Reasoning effort
 
 One setting works across providers. Each provider maps it to its nearest supported value:
@@ -364,14 +425,16 @@ Sign in with each CLI first; PolyPrompt never takes a harness API key. Harnesses
 A compact, exact reference. Read the [capability matrix](#capability-matrix) and [Which OpenAI client?](#which-openai-client) too.
 
 - **Construct one client per provider:** `new OpenAiClient(key)`, `new OpenAiCompatibleClient(endpoint, key?)`, `new AzureOpenAiClient(endpoint, key | ICredentialProvider)`, `new XAiClient(key)`, `new AnthropicClient(key)`, `new GeminiClient(key)`, `new VertexAiClient(project, region, credential)`, `new BedrockClient(region, awsCredential)`, `new OllamaClient(endpoint?)`, `new OllamaCloudClient(key)`, `new CohereClient(key)`, `new VoyageAiClient(key)`, `new TeiClient(endpoint)`, `new TypeSafeClient(key)`. Optional last arguments: `endpoint`, then `ClientOptions`. Dispose clients.
-- **Operations** (all on `ProviderClientBase`): `ChatAsync` and `ChatStreamingAsync` (from a prompt, a `ChatMessage`, a conversation, or a `ChatRequest` with tools), `GenerateAsync`, `GenerateStreamingAsync`, `EmbedAsync(string | List<string>, options?)`, `EmbedSparseAsync`, `RerankAsync(query, documents, options?)`, `ClassifyAsync`, `DecideAsync(DecisionRequest | List<DecisionRequest>)`, `ListModelsAsync`, `ModelExistsAsync`, `GetModelInformationAsync`, `ValidateConnectivityAsync`.
+- **Operations** (all on `ProviderClientBase`): `ChatAsync` and `ChatStreamingAsync`, each with four overloads: `(string prompt, options?)`, `(ChatMessage, options?)`, `(IEnumerable<ChatMessage>, options?)`, and `(ChatRequest)` for tools. Also `GenerateAsync`, `GenerateStreamingAsync`, `EmbedAsync(string | List<string>, options?)`, `EmbedSparseAsync`, `RerankAsync(query, documents, options?)`, `ClassifyAsync`, `DecideAsync(DecisionRequest | List<DecisionRequest>)`, `TranscribeAsync(TranscriptionRequest, TranscriptionOptions?)`, `ListModelsAsync`, `ModelExistsAsync`, `GetModelInformationAsync`, and `ValidateConnectivityAsync`. There is no `ToolChatAsync` in 5.0.
+- **Messages and media:** `ChatMessage.Content` is a `List<ContentPart>`; read or set plain text with `message.Text`. Attach media with `ChatMessage.User(text, ContentPart.Image(...) | ImageUrl(...) | Audio(...) | Video(...) | VideoUrl(...) | FileReferenceOf(...) | FromFile(path))`. Media goes on `user` messages only. Check `Supports(Capability.ImageInput | AudioInput | VideoInput)` first.
+- **Provider files:** `GeminiClient.UploadFileAsync` then `WaitForFileActiveAsync` (send `file.Uri`); `OpenAiClient.UploadFileAsync` (send `file.Id`); Vertex takes `gs://` and Bedrock `s3://` URIs as file references.
 - **Capability rule:** call `client.Supports(Capability.X)` before an operation you are not sure of; otherwise it throws `CapabilityNotSupportedException` synchronously.
-- **Models:** set `client.Defaults.Completion.Model` (or `.Embedding`, `.Rerank`, `.Classification`, `.Decision`, `.SparseEmbedding`), or pass `Model` in the per-call options. There is no `client.Model`. See [Default models](#default-models).
+- **Models:** set `client.Defaults.Completion.Model` (or `.Embedding`, `.Rerank`, `.Classification`, `.Decision`, `.SparseEmbedding`, `.Transcription`), or pass `Model` in the per-call options. There is no `client.Model`. See [Default models](#default-models).
 - **Options rule:** pass the base options type (`CompletionOptions`, `EmbeddingOptions`, ...) or the client's own type (`OpenAiCompletionOptions` for `OpenAiClient`/`AzureOpenAiClient`, `OpenAiCompatibleCompletionOptions` for `OpenAiCompatibleClient`, `GeminiCompletionOptions` for Gemini and Vertex, `<Provider>CompletionOptions` otherwise). Another provider's type throws `ArgumentException`.
 - **Errors:** HTTP failures return `Success = false` with `StatusCode` and `Error`; they do not throw. Streams: enumerate fully, then check `State == StreamingState.Completed`.
-- **Continuation state:** after a tool-chat turn, append `response.ToAssistantMessage()` unchanged, then one `ChatMessage.ToolResult(call.Id, call.Name, result)` per call. `ProviderState` carries reasoning and signatures.
+- **Continuation state:** after a turn with tool calls, append `response.ToAssistantMessage()` unchanged, then one `ChatMessage.ToolResult(call.Id, call.Name, result)` per call. `ProviderState` carries reasoning and signatures.
 - **Results:** `Text`, `Reasoning`, `ToolCalls`, `Usage`, `FinishReason`, `Citations` (never null), `RawResponse`, `AppliedReasoningEffort`.
-- **Details:** [PROVIDERS.md](PROVIDERS.md) (per-provider behavior), [HARNESSES.md](HARNESSES.md), [STREAMING.md](STREAMING.md).
+- **Details:** [PROVIDERS.md](PROVIDERS.md) (per-provider behavior), [MULTIMEDIA.md](MULTIMEDIA.md), [HARNESSES.md](HARNESSES.md), [STREAMING.md](STREAMING.md), [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md).
 
 ## Default models
 
@@ -420,12 +483,13 @@ Embedding defaults stay the same across releases while the model is live, becaus
 ## More documentation
 
 - [PROVIDERS.md](PROVIDERS.md): constructors, authentication, per-provider notes, the Responses API, Gemini tool calling, reasoning-effort mapping, citations, and options classes
+- [MULTIMEDIA.md](MULTIMEDIA.md): images, audio, and video input, provider file uploads, transcription, limits, and redaction
 - [HARNESSES.md](HARNESSES.md): agent harness setup, streaming, permissions, and consoles
 - [STREAMING.md](STREAMING.md): the streaming lifecycle, tool-call deltas, and Responses events
 - [TELEMETRY.md](TELEMETRY.md): metrics and traces
 - [AOT.md](AOT.md): Native AOT and source-generated JSON
 - [DEVELOPMENT.md](DEVELOPMENT.md): project structure, building, testing, and the console samples
-- [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md) and [CHANGELOG.md](CHANGELOG.md)
+- [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md), [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md), and [CHANGELOG.md](CHANGELOG.md)
 
 ## Building
 

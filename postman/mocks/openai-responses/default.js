@@ -9,6 +9,19 @@ const server = http.createServer(async (req, res) => {
   const send = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
   if (!req.headers.authorization?.startsWith('Bearer ')) return send(401, { error: { message: 'Bearer authentication required' } });
   try {
+    if (req.method === 'POST' && url.pathname === '/v1/audio/transcriptions') {
+      // Multipart speech to text (PolyPrompt TranscribeAsync). Fields are read loosely; the audio bytes are not decoded.
+      const chunks = []; for await (const chunk of req) chunks.push(chunk);
+      const form = Buffer.concat(chunks).toString('latin1');
+      const field = name => { const m = form.match(new RegExp('name="' + name.replace(/[[\]]/g, '\\$&') + '"\\r\\n\\r\\n([^\\r]*)')); return m ? m[1] : undefined; };
+      if (!/name="file"; filename=/.test(form) || !field('model')) return send(400, { error: { message: 'file and model are required' } });
+      const format = field('response_format') || 'json';
+      if (format === 'text') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('hello world\n'); }
+      if (format === 'verbose_json') return send(200, { task: 'transcribe', language: field('language') || 'english', duration: 2.5, text: 'hello world',
+        segments: [{ id: 0, start: 0, end: 0.6, text: ' hello', avg_logprob: -0.21, no_speech_prob: 0.01 }, { id: 1, start: 0.7, end: 1.4, text: ' world', avg_logprob: -0.3, no_speech_prob: 0.02 }],
+        ...(form.includes('word') ? { words: [{ word: 'hello', start: 0, end: 0.6 }, { word: 'world', start: 0.7, end: 1.4 }] } : {}) });
+      return send(200, { text: 'hello world', usage: { type: 'tokens', input_tokens: 12, output_tokens: 3, total_tokens: 15 } });
+    }
     let data = ''; for await (const chunk of req) data += chunk;
     const intercepted = req.body;
     const body = intercepted && typeof intercepted === 'object' ? intercepted : typeof intercepted === 'string' ? JSON.parse(intercepted) : data ? JSON.parse(data) : {};
@@ -41,6 +54,9 @@ const server = http.createServer(async (req, res) => {
     if (body.previous_response_id && !saved.has(body.previous_response_id)) return send(404, { error: { message: 'Unknown previous_response_id' } });
     const input = Array.isArray(body.input) ? body.input : [{ role: 'user', content: body.input }];
     const results = input.filter(i => i.type === 'function_call_output');
+    const images = input.flatMap(i => Array.isArray(i.content) ? i.content : []).filter(c => c.type === 'input_image');
+    if (images.some(c => !(c.file_id || /^(data:image\/[a-z+.-]+;base64,|https?:\/\/)/.test(c.image_url || ''))))
+      return send(400, { error: { message: 'input_image needs a data URL, an http(s) URL, or a file_id' } });
     const functions = (body.tools || []).filter(t => t.type === 'function');
     const smoke = JSON.stringify(input).includes('openai-console-smoke');
     if (smoke && results.length > 0 && !input.some(i => i.type === 'reasoning' && i.encrypted_content === 'fixture-reasoning'))
@@ -51,7 +67,7 @@ const server = http.createServer(async (req, res) => {
       const name = round === 0 ? 'list_directory' : 'read_file';
       output.push({ type: 'function_call', id: 'fc-' + round, call_id: 'call-' + round, name, arguments: JSON.stringify(round === 0 ? { path: '.' } : { file_path: '.console-smoke.txt' }), status: 'completed' });
     } else {
-      const text = smoke && round > 1 ? 'Actual file: ' + results[1].output : 'Hello from the Responses fixture.';
+      const text = smoke && round > 1 ? 'Actual file: ' + results[1].output : images.length ? 'I see ' + images.length + ' image(s).' : 'Hello from the Responses fixture.';
       output.push({ type: 'message', id: 'msg-' + sequence, role: 'assistant', status: 'completed', content: [{ type: 'output_text', text, annotations: [] }] });
     }
     const response = { id: 'resp-' + (++sequence), object: 'response', model: body.model, created_at: 1700000000, status: 'completed', output, store: body.store,

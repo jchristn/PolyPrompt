@@ -36,6 +36,11 @@ const server = http.createServer((req, res) => {
         return res.end(payloads[fault]);
       }
       const messages = request.messages || [];
+      const images = messages.flatMap(m => Array.isArray(m.images) ? m.images : []);
+      if (images.some(i => typeof i !== 'string' || i.startsWith('data:'))) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'images must be raw base64 strings' }));
+      }
       const smoke = messages.some(m => (m.content || '').includes('console-smoke'));
       const results = messages.filter(m => m.role === 'tool');
       // Ollama requires the complete assistant thinking/tool turn on each follow-up.
@@ -48,7 +53,7 @@ const server = http.createServer((req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'native tool_name missing' }));
       }
-      let message = { role: 'assistant', content: 'pong' };
+      let message = { role: 'assistant', content: images.length ? 'I see ' + images.length + ' image(s).' : 'pong' };
       if (smoke && results.length < 2) {
         const name = results.length === 0 ? 'list_directory' : 'read_file';
         const args = results.length === 0 ? { path: '.' } : { file_path: '.console-smoke.txt' };

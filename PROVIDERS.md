@@ -60,27 +60,27 @@ azureChat.Defaults.Completion.Model = "my-deployment";
 
 ## Provider notes
 
-**`OpenAiClient`**: bearer key. Responses API; also `CancelResponseAsync` and `CountInputTokensAsync`. If it gets a 404 or 405 from `/responses`, the `Error` suggests `OpenAiCompatibleClient`.
+**`OpenAiClient`**: bearer key. Responses API; also `CancelResponseAsync` and `CountInputTokensAsync`. If it gets a 404 or 405 from `/responses`, the `Error` suggests `OpenAiCompatibleClient`. Images go as `input_image` (data URL, remote URL, or `file_id`; `ImageDetail` maps to `detail`). `UploadFileAsync` and `DeleteFileAsync` manage `/v1/files`. `TranscribeAsync` uses `/v1/audio/transcriptions`, default `whisper-1`; `gpt-4o` transcription models accept `Json` only (the diarizing model also `Text`), and other formats throw before sending. No audio input on the Responses API.
 
-**`OpenAiCompatibleClient`**: optional key; `AuthPlacement` can be bearer, header, or query. Reads the `reasoning_content` and `reasoning` extensions, replays Gemini thought signatures in `extra_content.google.thought_signature`, and generates with legacy `/v1/completions`.
+**`OpenAiCompatibleClient`**: optional key; `AuthPlacement` can be bearer, header, or query. Reads the `reasoning_content` and `reasoning` extensions, replays Gemini thought signatures in `extra_content.google.thought_signature`, and generates with legacy `/v1/completions`. Media goes in the content array: `image_url`, `input_audio`, and the vLLM `video_url`; what a server accepts depends on the server and model. `ImageUrlStyle.RemoteUrlOnly` (on `OpenAiCompatibleClientOptions` or the client) rejects inline images for servers that refuse data URLs. `TranscribeAsync` posts `/v1/audio/transcriptions` for local Whisper servers (faster-whisper, speaches, whisper.cpp, vLLM); there is no default model, and formats pass through unchecked. A chat without tools sends no `tool_choice`.
 
-**`AzureOpenAiClient`**: `api-key` or Entra ID. v1 API with no `api-version`; deployment names are models.
+**`AzureOpenAiClient`**: `api-key` or Entra ID. v1 API with no `api-version`; deployment names are models. Images as on OpenAI. `TranscribeAsync` posts `/openai/v1/audio/transcriptions` with the transcription deployment as the model (no default).
 
-**`XAiClient`**: bearer key. Responses API; also `ListLanguageModelsAsync`, `ListImageGenerationModelsAsync`, `ListVideoGenerationModelsAsync`, and `GetCatalogModelInformationAsync`. At most 1000 tools; reasoning effort `low` to `xhigh`. xAI no longer offers embedding models.
+**`XAiClient`**: bearer key. Responses API; also `ListLanguageModelsAsync`, `ListImageGenerationModelsAsync`, `ListVideoGenerationModelsAsync`, and `GetCatalogModelInformationAsync`. At most 1000 tools; reasoning effort `low` to `xhigh`. xAI no longer offers embedding models. Images go as `input_image`; catalog entries report `InputModalities`.
 
-**`AnthropicClient`**: `x-api-key`. `AnthropicVersion`, `WorkspaceId` (identity-linked keys), `PageSize`. `max_tokens` is always sent. Citations on documents cannot be combined with `output_config.format`.
+**`AnthropicClient`**: `x-api-key`. `AnthropicVersion`, `WorkspaceId` (identity-linked keys), `PageSize`. `max_tokens` is always sent. Citations on documents cannot be combined with `output_config.format`. Images go as `image` blocks from bytes (`base64` source) or a URL (`url` source); `ImageDetail` is ignored.
 
-**`GeminiClient`**: `x-goog-api-key`. See [Gemini tool calling](#gemini-tool-calling).
+**`GeminiClient`**: `x-goog-api-key`. See [Gemini tool calling](#gemini-tool-calling). Images, audio, and video go as `inlineData`, or as `fileData` for File API URIs and YouTube links, with `VideoClip` as `videoMetadata`. The File API: `UploadFileAsync` (resumable), `GetFileAsync`, `WaitForFileActiveAsync`, `DeleteFileAsync`, `ListFilesAsync`. Usage reports `InputByModality` from `promptTokensDetails`.
 
-**`VertexAiClient`**: OAuth from an `ICredentialProvider` (ADC, service account, static token). Same generateContent schema as Gemini; embeddings through `:predict`; connectivity uses `:countTokens`.
+**`VertexAiClient`**: OAuth from an `ICredentialProvider` (ADC, service account, static token). Same generateContent schema as Gemini, including media; large media goes as `gs://` file references (there is no upload API). Embeddings through `:predict`; connectivity uses `:countTokens`.
 
-**`BedrockClient`**: SigV4 from an `IAwsCredentialProvider`. Converse API for completion, InvokeModel for embeddings (Titan, Cohere) and rerank, control-plane model listing. No default completion model, because IDs and inference profiles vary by region and account.
+**`BedrockClient`**: SigV4 from an `IAwsCredentialProvider`. Converse API for completion, InvokeModel for embeddings (Titan, Cohere) and rerank, control-plane model listing. No default completion model, because IDs and inference profiles vary by region and account. Images and video go as Converse `image` and `video` blocks from bytes or `s3://` references (`S3BucketOwner` sets `bucketOwner`); video depends on the model (Amazon Nova). Image formats `png`, `jpeg`, `gif`, `webp`; others throw before sending.
 
-**`OllamaClient`**: no auth, or a bearer token behind a proxy. `PullModelAsync`, `DeleteModelAsync`, `LoadModelAsync`, `UnloadModelAsync`, `PullTimeout`; `KeepAlive` on completion and embedding options.
+**`OllamaClient`**: no auth, or a bearer token behind a proxy. `PullModelAsync`, `DeleteModelAsync`, `LoadModelAsync`, `UnloadModelAsync`, `PullTimeout`; `KeepAlive` on completion and embedding options. Images go as `images` (raw base64) on vision models; `GetModelInformationAsync` reports `InputModalities` from `capabilities`. URLs and other media throw.
 
 **`OllamaCloudClient`**: bearer key. Same operations as `OllamaClient` at `https://ollama.com`. No default models, because the hosted catalog changes, and the catalog may not include embedding models.
 
-**`CohereClient`**: bearer key. v2 chat, embed, and rerank; v1 classify; `PageSize` for model listing. Tool choice accepts only `REQUIRED` and `NONE`. Cohere recommends classifying with Embed models, but `/v1/classify` is still available.
+**`CohereClient`**: bearer key. v2 chat, embed, and rerank; v1 classify; `PageSize` for model listing. Tool choice accepts only `REQUIRED` and `NONE`. Cohere recommends classifying with Embed models, but `/v1/classify` is still available. Images go as `image_url` (data URL or https URL) for vision models such as Command A Vision.
 
 **`VoyageAiClient`**: bearer key. Embed (`InputType`, `OutputDimension`, `OutputDtype`) and rerank; connectivity embeds a probe word.
 
@@ -350,6 +350,9 @@ Each operation accepts the shared base options type, the client's own derived ty
 - **Rerank**: `RerankOptions`. Provider types: `BedrockRerankOptions`, `CohereRerankOptions`, `VoyageAiRerankOptions`, `TeiRerankOptions`.
 - **Classification**: `ClassificationOptions`. Provider types: `CohereClassificationOptions`, `TeiClassificationOptions`.
 - **Decision**: `DecisionOptions`.
+- **Transcription**: `TranscriptionOptions` (the model; also the `Defaults.Transcription` section).
+
+**Media settings** on every client, also settable through `ClientOptions`: `MaxInlineMediaBytes` (default 20 MB), `RedactMediaInCallDetails` (default true), `MediaRedactionThresholdBytes` (default 1024), and `EscapeMediaInJson` (default false). See [MULTIMEDIA.md](MULTIMEDIA.md).
 
 **Output limit.** When nothing sets `MaxTokens`, 4096 (`ProviderClientBase.DefaultMaxTokens`) is sent. Ollama and Ollama Cloud are the exception: they send no limit, so reasoning models can finish. Set `SendDefaultMaxTokens = false` to send no limit. Anthropic, and Anthropic models on Bedrock, require a limit and always send 4096.
 

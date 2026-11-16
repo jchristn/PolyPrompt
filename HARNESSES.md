@@ -112,7 +112,7 @@ The flags each mode passes:
 
 `CliAgentRequest` takes:
 
-- `Prompt` (sent on standard input), `SystemPrompt`, `History`, `SessionId`, `Model`
+- `Prompt` (sent on standard input), `SystemPrompt`, `History` (text only: harnesses read `message.Text`, and a message with media throws `ArgumentException`), `SessionId`, `Model`
 - `WorkingDirectory`, `PermissionMode`, `TimeoutMs`, `Environment`, `ExtraArguments`, `MaxOutputCharacters`
 
 `CliAgentResult` carries:

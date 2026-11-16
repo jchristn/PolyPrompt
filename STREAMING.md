@@ -1,4 +1,6 @@
-# Streaming in PolyPrompt 4.0
+# Streaming in PolyPrompt 5.0
+
+In 5.0 there is one chat stream type: `ChatStreamingAsync` with a prompt, a message, a conversation, or a `ChatRequest` with tools always returns `ChatStreamingResponse`, which accumulates `Text`, `Reasoning`, and `ToolCalls`, and whose chunks carry `ToolCallDeltas`. Media in the request does not change how the stream is read.
 
 `ChatStreamingResponse`, `GenerationStreamingResponse`, and the native `ResponsesApiStreamingResponse` (OpenAI, Azure OpenAI, and xAI) derive from `StreamingResponseBase` and implement `IStreamingResponse`. Their lifecycle is the same on every provider client and works without telemetry listeners. Every streaming operation is declared on `ProviderClientBase`; a client without the capability throws `CapabilityNotSupportedException` before opening a stream.
 

@@ -54,6 +54,12 @@ namespace Test.Shared
                     Case(c, "chat_streaming", "Streaming chat succeeds", t => RunChatStreamingTestsAsync(c, t), "completion"),
                     Case(c, "tool_chat", "Tool chat completes a two-step tool loop or reports an unsupported model", t => RunToolChatTestsAsync(c, t), "completion"),
                     Case(c, "tool_chat_streaming", "Streaming tool chat completes a two-step tool loop or reports an unsupported model", t => RunToolChatStreamingTestsAsync(c, t), "completion"),
+                    Case(c, "image_chat", "A vision model names the color of a small image", t => RunImageChatTestsAsync(c, t), "completion",
+                        extraSkip: Environment.GetEnvironmentVariable("POLYPROMPT_TEST_IMAGE") != "1", extraReason: "Set POLYPROMPT_TEST_IMAGE=1 with a vision-capable model."),
+                    Case(c, "video_chat", "A video model describes a short clip", t => RunVideoChatTestsAsync(c, t), "completion",
+                        extraSkip: Environment.GetEnvironmentVariable("POLYPROMPT_TEST_VIDEO") != "1", extraReason: "Set POLYPROMPT_TEST_VIDEO=1 with a video-capable model (Gemini, Vertex AI, Amazon Nova)."),
+                    Case(c, "transcription", "TranscribeAsync returns a transcript", t => RunTranscriptionTestsAsync(c, t), "completion",
+                        extraSkip: string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("POLYPROMPT_TEST_TRANSCRIPTION_MODEL")), extraReason: "Set POLYPROMPT_TEST_TRANSCRIPTION_MODEL on a provider with Transcribe."),
                     Case(c, "tool_result_shapes", "Tool results that are arrays or plain text complete a tool loop", t => RunToolResultShapesAsync(c, t), "completion"),
                     Case(c, "generate", "Text generation succeeds", t => RunGenerationTestsAsync(c, t), "completion", extraSkip: noLegacyCompletions, extraReason: "OpenAI chat models do not support the legacy completions API."),
                     Case(c, "generate_streaming", "Streaming text generation succeeds", t => RunGenerationStreamingTestsAsync(c, t), "completion", extraSkip: noLegacyCompletions, extraReason: "OpenAI chat models do not support the legacy completions API."),
@@ -216,6 +222,51 @@ namespace Test.Shared
                     SharedAssert.True(ollama.ContextLength == null, "Ollama ContextLength should be nullable.");
                 }
             }
+        }
+
+        private static byte[] MediaFixture(string name)
+        {
+            using Stream stream = typeof(ProviderLiveSuite).Assembly.GetManifestResourceStream("Media/" + name)
+                ?? throw new TestFailureException("Missing media fixture " + name);
+            using MemoryStream copy = new MemoryStream();
+            stream.CopyTo(copy);
+            return copy.ToArray();
+        }
+
+        private static async Task RunImageChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ProviderClientBase client = provider.Completion!;
+            if (!client.Supports(Capability.ImageInput)) throw new TestFailureException(client.ProviderName + " does not claim ImageInput.");
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256);
+            ChatMessage message = ChatMessage.User("What color is this square? Answer with one word.", ContentPart.Image(MediaFixture("red-square.png"), MediaTypes.ImagePng));
+            ChatResponse response = await client.ChatAsync(message, null, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Image chat should succeed. " + response.Error);
+            SharedAssert.True((response.Text ?? "").Contains("red", StringComparison.OrdinalIgnoreCase), "The model should see a red square: " + response.Text);
+        }
+
+        private static async Task RunVideoChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ProviderClientBase client = provider.Completion!;
+            if (!client.Supports(Capability.VideoInput)) throw new TestFailureException(client.ProviderName + " does not claim VideoInput.");
+            client.Defaults.Completion.MaxTokens = ResolveLiveMaxTokens(configuration.ProviderType, 256);
+            ChatMessage message = ChatMessage.User("What color fills this video? Answer with one word.", ContentPart.Video(MediaFixture("blue-clip.mp4"), MediaTypes.VideoMp4));
+            ChatResponse response = await client.ChatAsync(message, null, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Video chat should succeed. " + response.Error);
+            SharedAssert.True((response.Text ?? "").Contains("blue", StringComparison.OrdinalIgnoreCase), "The model should see a blue clip: " + response.Text);
+        }
+
+        private static async Task RunTranscriptionTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
+        {
+            using LiveProvider provider = LiveProvider.Create(configuration);
+            ProviderClientBase client = provider.Completion!;
+            if (!client.Supports(Capability.Transcribe)) throw new TestFailureException(client.ProviderName + " does not claim Transcribe.");
+            string model = Environment.GetEnvironmentVariable("POLYPROMPT_TEST_TRANSCRIPTION_MODEL")!;
+            // The fixture is a one-second tone: the assertion is that the round trip works, not what the text says.
+            TranscriptionResponse response = await client.TranscribeAsync(new TranscriptionRequest { Audio = MediaFixture("tone.wav") }, new TranscriptionOptions { Model = model }, token).ConfigureAwait(false);
+            SharedAssert.True(response.Success, "Transcription should succeed. " + response.Error);
+            SharedAssert.True(response.Text != null, "Transcription should return text, even if empty.");
         }
 
         private static async Task RunChatTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)

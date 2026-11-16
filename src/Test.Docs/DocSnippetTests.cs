@@ -15,7 +15,7 @@ using NUnit.Framework;
 [TestFixture]
 public sealed class DocSnippetTests
 {
-    private static readonly string[] _Documents = { "README.md", "PROVIDERS.md", "HARNESSES.md", "STREAMING.md" };
+    private static readonly string[] _Documents = { "README.md", "PROVIDERS.md", "HARNESSES.md", "STREAMING.md", "MULTIMEDIA.md", "MIGRATION_V4_TO_V5.md" };
 
     private static readonly string[] _DefaultUsings =
     {

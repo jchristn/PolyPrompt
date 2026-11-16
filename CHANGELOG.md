@@ -1,5 +1,46 @@
 # Changelog
 
+## v5.0.0 (unreleased)
+
+5.0 adds image, audio, and video input to chat, speech-to-text transcription, and provider file uploads. To make media fit, tool chat merges into chat and `ChatMessage.Content` becomes a list of parts. Text-only requests are unchanged on the wire: every text-only body is byte-identical to 4.0.0 except one OpenAI-compatible fix below. See [MIGRATION_V4_TO_V5.md](MIGRATION_V4_TO_V5.md) for the mapping and a checklist, and [MULTIMEDIA.md](MULTIMEDIA.md) for the media reference.
+
+### Breaking
+
+- **Tool chat is part of chat.** `ToolChatAsync` and `ToolChatStreamingAsync` are removed. `ChatAsync` and `ChatStreamingAsync` have four overloads: `(string prompt, options?)`, `(ChatMessage, options?)`, `(IEnumerable<ChatMessage>, options?)`, and `(ChatRequest)`. Fix: call `ChatAsync(request)`.
+- **Types merged.** `ToolChatRequest`, `ToolChatResponse`, `ToolChatStreamingResponse`, and `ToolChatStreamingChunk` are now `ChatRequest`, `ChatResponse` (with `ToolCalls` and `ToAssistantMessage()`), `ChatStreamingResponse` (with `Text`, `ToolCalls`, `ToolCallDeltaCount`), and `ChatStreamingChunk` (with `ToolCallDeltas`). Fix: rename.
+- **`Capability.ToolChat` is `Capability.ToolCalling`** (same bit), and it is required only when a request has tools. The README matrix column is renamed. Fix: rename.
+- **`ChatMessage.Content` is `List<ContentPart>`.** `message.Text` reads the text parts and sets a single text part. Fix: use `Text` where you treated `Content` as a string, including object initializers. 4.x JSON with string `Content` still deserializes; 5.0 writes an array.
+- **Telemetry operations `tool_chat` and `tool_chat_stream` are folded into `chat` and `chat_stream`.** `polyprompt.tool.definitions` tells calls with tools apart. Fix: update dashboards and alerts.
+- **Custom clients:** the core hooks are `ChatCoreAsync(ChatRequest, List<ChatMessage>, ResolvedCompletion, CancellationToken)` and `ChatStreamingCoreAsync`; `WrapToolChatChunksWithTiming` is `WrapChunksWithTiming`; `PostAndRecordAsync` takes `(url, byte[] wireBody, string contentType, string? recordedBody, token)` and `PostStreamingAsync` takes `(url, byte[] wireBody, string contentType, token)`.
+- **OpenAI-compatible chats without tools no longer send `"tool_choice": "auto"`**, which some servers reject. Chats with tools are unchanged.
+- **`ChatAsync(null)`** with a bare `null` literal is ambiguous and no longer compiles (it threw in 4.x).
+
+### Added
+
+- **Images, audio, and video input.** `ContentPart` (text, inline bytes, URL, or provider file reference), `ContentPartType`, `ImageDetail`, `VideoClip`, `MediaTypes`, `ContentPart.FromFile` with magic-byte detection, and `ChatMessage.User(text, params ContentPart[])`. Capability flags `ImageInput`, `AudioInput`, and `VideoInput`: images on OpenAI, Azure OpenAI, xAI, OpenAI-compatible, Anthropic, Gemini, Vertex AI, Bedrock, Ollama, Ollama Cloud, and Cohere; audio on OpenAI-compatible, Gemini, and Vertex AI; video on OpenAI-compatible, Gemini, Vertex AI, and Bedrock.
+- **Validation before the wire.** Unsupported modalities throw `CapabilityNotSupportedException`; malformed parts, media on non-user messages, mismatched magic bytes, URLs a provider cannot fetch, and unsupported formats throw `ArgumentException` naming the part.
+- **`MaxInlineMediaBytes`** (default 20 MB, counted as encoded on the wire), with each provider's large-media route in the error.
+- **Media redaction in call details.** `RedactMediaInCallDetails` (default true) and `MediaRedactionThresholdBytes` (default 1024) record large inline media as `<base64 N bytes type sha256=...>`; the bytes sent and signed never change.
+- **Unescaped media.** Base64 and data URLs are written raw, avoiding the 8% `\u002B` inflation; `EscapeMediaInJson` restores escaping.
+- **YouTube video** on Gemini and Vertex AI, **`gs://`** references on Vertex AI, and **`s3://`** references on Bedrock with `BedrockClient.S3BucketOwner`.
+- **`OpenAiCompatibleClientOptions.ImageUrlStyle`** (`DataUrl` or `RemoteUrlOnly`).
+- **Transcription.** `TranscribeAsync(TranscriptionRequest, TranscriptionOptions?)`, `Capability.Transcribe`, `Defaults.Transcription`, `TranscriptionResponse` with segments and words, and `TranscriptionFormat` and `TranscriptionTimestampGranularity`. On `OpenAiClient` (default `whisper-1`), `AzureOpenAiClient` (deployment as model), and `OpenAiCompatibleClient` (local Whisper servers). Formats the `gpt-4o` transcription models do not support throw before sending.
+- **Provider files.** `GeminiClient.UploadFileAsync` (resumable), `GetFileAsync`, `WaitForFileActiveAsync`, `DeleteFileAsync`, and `ListFilesAsync`; `OpenAiClient.UploadFileAsync` and `DeleteFileAsync`. Results are `GeminiFileResponse`, `GeminiFileListResponse`, `OpenAiFileResponse`, and `FileDeleteResponse`.
+- **`TokenUsage.InputByModality`** (Gemini, Vertex AI, Chat Completions) and **`ModelInformation.InputModalities`** (Ollama, xAI).
+- **Telemetry.** Operations `transcribe`, `file_upload`, `file_get`, `file_delete`, and `file_list`; capability labels `transcription` and `file`; span attributes `polyprompt.input.*` and `polyprompt.transcription.*`; metrics `polyprompt.client.input.media` and `polyprompt.client.input.media_bytes` labeled by `polyprompt.modality`; token types `input_text`, `input_image`, `input_audio`, and `input_video`.
+- **Consoles:** `attach PATH`, `transcribe PATH [language]`, and `transcription-model NAME`.
+- **Docs:** `MULTIMEDIA.md`, `MIGRATION_V4_TO_V5.md`, and an *Adding a capability* section in DEVELOPMENT.md. Postman: image examples for the three targets and a `/v1/audio/transcriptions` route on openai-responses.
+
+### Changed
+
+- Request bodies are serialized straight to UTF-8 and sent as `ByteArrayContent` with the same `application/json; charset=utf-8` header, removing two full-size copies per request.
+- `ChatAsync(string)` responses now carry `ResponseId`, `FinishReason`, `ToolCalls` (empty), and continuation state on every provider, because there is one response type.
+
+### Validation
+
+- Wire identity: 160 text-only request bodies (chat, streaming chat, tool chat, generate, and embed, on every provider) captured from 4.0.0 are compared byte for byte, with path and `Content-Type`; 156 match and the 4 OpenAI-compatible `tool_choice` changes are recorded as reviewed fixtures.
+- The Native AOT request digest over 222 text-only requests equals 4.0.0's; a separate media digest matches between the JIT and native builds on .NET 8 and .NET 10.
+
 ## v4.0.0 (2026-11-12)
 
 4.0 has one client per provider instead of one per capability, and `OpenAiClient` speaks the Responses API. See [MIGRATION_V3_TO_V4.md](MIGRATION_V3_TO_V4.md) for every rename and a checklist.

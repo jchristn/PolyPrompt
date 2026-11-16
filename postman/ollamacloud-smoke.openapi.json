@@ -81,7 +81,35 @@
               ]
             }
           }
-        ]
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "examples": {
+                "imageInput": {
+                  "summary": "A vision request (PolyPrompt 5.0 ContentPart.Image): raw base64 in images, no data URL prefix",
+                  "value": {
+                    "model": "test-model",
+                    "stream": false,
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "What is in this image?",
+                        "images": [
+                          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/generate": {
