@@ -11,6 +11,23 @@ namespace PolyPrompt.Clients
         /// Use <c>AuthPlacement.Header("api-key")</c> for Azure's v1 Chat Completions route.
         /// </summary>
         public AuthPlacement AuthPlacement { get; init; } = AuthPlacement.Bearer;
+
+        /// <summary>
+        /// How images are sent. Default: <see cref="ImageUrlStyle.DataUrl"/>.
+        /// </summary>
+        public ImageUrlStyle ImageUrlStyle { get; init; } = ImageUrlStyle.DataUrl;
+    }
+
+    /// <summary>
+    /// How <see cref="OpenAiCompatibleClient"/> sends images in <c>image_url</c>.
+    /// </summary>
+    public enum ImageUrlStyle
+    {
+        /// <summary>Inline bytes as a <c>data:</c> URL, and remote URLs as given.</summary>
+        DataUrl,
+
+        /// <summary>Remote URLs only, for servers that reject data URLs; inline image bytes throw before sending.</summary>
+        RemoteUrlOnly
     }
 
     /// <summary>

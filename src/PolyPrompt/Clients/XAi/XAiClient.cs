@@ -11,6 +11,7 @@ namespace PolyPrompt.Clients
     /// through <see cref="ResponseBase.ProviderState"/>), the native Responses operations on
     /// <see cref="ResponsesApiClientBase"/>, and Models (<c>/v1/models</c>, plus the language, embedding, image, and video
     /// catalogs).</description></item>
+    /// <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL or a remote URL).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Embed (xAI no longer offers
     /// embedding models), SparseEmbed, Rerank, Classify, Decide.</description></item>
     /// <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -49,9 +50,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Models, and ImageInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Models | Capability.ImageInput;
 
         /// <inheritdoc />
         public override string ProviderName => "xAI";

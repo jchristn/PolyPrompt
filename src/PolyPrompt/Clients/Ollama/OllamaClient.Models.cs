@@ -293,6 +293,13 @@ namespace PolyPrompt.Clients
                     capabilities = ParseStringList(capabilitiesJson);
                 }
 
+                if (capabilities != null)
+                {
+                    info.InputModalities = new List<ContentPartType>();
+                    if (capabilities.Contains("completion")) info.InputModalities.Add(ContentPartType.Text);
+                    if (capabilities.Contains("vision")) info.InputModalities.Add(ContentPartType.Image);
+                }
+
                 info.SupportsTools = DetectToolSupport(
                     capabilities,
                     info.Metadata.TryGetValue("template", out string? template) ? template : null,

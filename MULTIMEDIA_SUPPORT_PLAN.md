@@ -188,7 +188,7 @@ Large media must be uploaded first on some providers. Gemini needs this for vide
 
 - **`GeminiClient`** (new partial `GeminiClient.Files.cs`): `UploadFileAsync(byte[] data, string mediaType, string? displayName, CancellationToken)` using the resumable upload protocol. Also `GetFileAsync(string name, ...)`, `WaitForFileActiveAsync(string name, TimeSpan timeout, ...)` (video is processed asynchronously and must reach `ACTIVE`), `DeleteFileAsync`, and `ListFilesAsync`. Returns `GeminiFile` (`Name`, `Uri`, `MediaType`, `SizeBytes`, `State`, `ExpirationUtc`). The caller then uses `ContentPart.FileReferenceOf(ContentPartType.Video, file.Uri, file.MediaType)`.
 - **`VertexAiClient`**: no upload API. It takes `gs://` URIs through `FileReference`, documented in PROVIDERS.md.
-- **`BedrockClient`**: `s3://` URIs through `FileReference` for video on models that accept `s3Location`. Optional `bucketOwner` is set through `BedrockCompletionOptions`.
+- **`BedrockClient`**: `s3://` URIs through `FileReference` for images and video on models that accept `s3Location`. Optional `bucketOwner` comes from `BedrockClient.S3BucketOwner`.
 - **`OpenAiClient`**: `UploadFileAsync(byte[] data, string fileName, string purpose, ...)` for `purpose = "vision"` (or `"user_data"`), plus `DeleteFileAsync`. It reuses the multipart path built for transcription.
 
 ### 2.7 Usage detail by modality
@@ -203,12 +203,12 @@ Large media must be uploaded first on some providers. Gemini needs this for vide
 
 | Option | On | Default | Purpose |
 |---|---|---|---|
-| `MaxInlineMediaBytes` | each chat client's `ClientOptions` subclass | provider's documented limit, or 20 MB | Inline size check (section 3) |
+| `MaxInlineMediaBytes` | `ClientOptions` and `ProviderClientBase` | 20 MB (providers override `DefaultMaxInlineMediaBytes`) | Inline size check (section 3) |
 | `RedactMediaInCallDetails` | `ClientOptions` | `true` | Section 4.2 |
 | `MediaRedactionThresholdBytes` | `ClientOptions` | `1024` | Section 4.2 |
 | `EscapeMediaInJson` | `ClientOptions` | `false` | Section 4.3 |
 | `ImageUrlStyle` | `OpenAiCompatibleClientOptions` | `DataUrl` | `RemoteUrlOnly` for servers that reject data URLs |
-| `bucketOwner` | `BedrockCompletionOptions` | null | S3 video references |
+| `S3BucketOwner` | `BedrockClient` property | null | `bucketOwner` on S3 references (there is no `BedrockCompletionOptions` type, so this is a client setting) |
 
 ---
 
@@ -218,17 +218,17 @@ The table is the intended capability set. Each cell marked *verify* must be conf
 
 | Client | ImageInput | AudioInput | VideoInput | Transcribe | Wire mapping |
 |---|---|---|---|---|---|
-| `OpenAiClient` | Yes | *verify* | No | Yes | Responses `input_image` (`image_url` data URL, remote URL, or `file_id`), `input_audio` if confirmed. Transcription `POST /audio/transcriptions` multipart |
-| `AzureOpenAiClient` | Yes | *verify* | No | Yes | Same as OpenAI through the Azure v1 surface. Transcription uses a deployment name as the model |
+| `OpenAiClient` | Yes | No (unconfirmed on the Responses API; section 9) | No | Yes | Responses `input_image` (`image_url` data URL, remote URL, or `file_id`), `input_audio` if confirmed. Transcription `POST /audio/transcriptions` multipart |
+| `AzureOpenAiClient` | Yes | No (as OpenAI) | No | Yes | Same as OpenAI through the Azure v1 surface. Transcription uses a deployment name as the model |
 | `XAiClient` | Yes | No | No | No | Responses `input_image` |
 | `OpenAiCompatibleClient` | Yes | Yes | Yes (*server dependent*) | Yes (*server dependent*) | Chat Completions content array: `{type:"text"}`, `{type:"image_url", image_url:{url, detail}}`, `{type:"input_audio", input_audio:{data, format}}`, `{type:"video_url", video_url:{url}}` (the vLLM convention). Transcription `POST /audio/transcriptions` serves local Whisper servers (faster-whisper, speaches, whisper.cpp server, vLLM) |
 | `AnthropicClient` | Yes | No | No | No | `{type:"image", source:{type:"base64", media_type, data}}` or `source:{type:"url", url}` |
 | `GeminiClient` | Yes | Yes | Yes | No | Parts `inlineData {mimeType, data}`, `fileData {mimeType, fileUri}` (File API URIs and YouTube URLs), `videoMetadata {startOffset, endOffset, fps}` |
-| `VertexAiClient` | Yes | Yes | Yes | No | Same generateContent schema; `fileData` with `gs://` URIs, and YouTube URLs (*verify*) |
+| `VertexAiClient` | Yes | Yes | Yes | No | Same generateContent schema; `fileData` with `gs://` URIs, and YouTube URLs (confirmed: public or owned videos, one per request) |
 | `BedrockClient` | Yes | No | Yes (*model dependent*) | No | Converse `image {format, source:{bytes}}`, `video {format, source:{bytes or s3Location}}`. Format derived from media type (`png`, `jpeg`, `gif`, `webp`; `mp4`, `mov`, `mkv`, `webm` and the rest) |
 | `OllamaClient` | Yes | No | No | No | Message `images: [base64, ...]` (raw base64, no data URL prefix). Non-image parts and URLs throw |
 | `OllamaCloudClient` | Yes | No | No | No | Inherits Ollama |
-| `CohereClient` | *verify* | No | No | No | v2 chat content array with `image_url` if confirmed for Command A Vision |
+| `CohereClient` | Yes (confirmed for Command A Vision) | No | No | No | v2 chat content array with `image_url` (`url` is a data URL or https URL). `detail` is not sent because its placement is not confirmed |
 | `VoyageAiClient`, `TeiClient`, `TypeSafeClient` | No | No | No | No | No chat surface |
 
 **Inline size.** Validation sums the **encoded** size of every inline part as it will appear on the wire (base64 length, plus the data URL prefix where used), because providers limit request size, not decoded bytes. Over `MaxInlineMediaBytes`, it throws `ArgumentException` that names the provider and the limit, and recommends the provider's large-media route: `UploadFileAsync` on Gemini, `gs://` on Vertex, `s3://` on Bedrock, a URL or `file_id` on OpenAI.
@@ -331,7 +331,7 @@ All tests are Touchstone descriptors in `src/Test.Shared`, so every runner (`Tes
 
 `LocalOpenAiTestServer` and its route files gain:
 
-- **Request DTOs** in `LocalRequestParser` that accept both shapes. `LocalOpenAiChatMessage.Content` becomes a custom-parsed value that is either a string or a list of `LocalOpenAiContentPart`. `LocalGeminiPart` gains `InlineData`, `FileData`, and `VideoMetadata`. `LocalAnthropicContentBlock` gains image blocks. The Ollama chat DTO gains `Images`. The Bedrock DTO gains image and video blocks. The Responses DTO gains `input_image` and `input_audio`.
+- **Request DTOs** (not needed in the end: the server parses bodies loosely, and the media cases assert on the recorded raw bodies with `JsonDocument`). The original idea was DTOs in `LocalRequestParser` that accept both shapes. `LocalOpenAiChatMessage.Content` becomes a custom-parsed value that is either a string or a list of `LocalOpenAiContentPart`. `LocalGeminiPart` gains `InlineData`, `FileData`, and `VideoMetadata`. `LocalAnthropicContentBlock` gains image blocks. The Ollama chat DTO gains `Images`. The Bedrock DTO gains image and video blocks. The Responses DTO gains `input_image` and `input_audio`.
 - **Transcription route** `POST /v1/audio/transcriptions` that parses multipart form data (a minimal boundary parser in the test project), records the fields, and returns `json`, `text`, or `verbose_json` with segments and words depending on `response_format`.
 - **Gemini file routes**: resumable upload start (`X-Goog-Upload-Protocol: resumable`), upload and finalize, `files/{name}` GET returning `PROCESSING` and then `ACTIVE`, DELETE, and list.
 - **OpenAI files route**: `POST /v1/files` multipart and `DELETE /v1/files/{id}`.
@@ -415,6 +415,7 @@ Mocks and simulations for other providers are not part of this release.
 - Multimodal embeddings (Voyage multimodal, Cohere embed v4 images, Vertex multimodal embeddings) as an `EmbedMultimodal` capability.
 - Agent harness attachments. `CliAgentRequest` has no attachment field. A later release could write attachments into the working directory and reference their paths in the prompt for harnesses whose CLIs can read images.
 - Realtime and streaming audio input (OpenAI Realtime, Gemini Live).
+- Audio input on `OpenAiClient` and `AzureOpenAiClient`. OpenAI's audio guide routes audio input through Chat Completions, and `input_audio` on the Responses API could not be confirmed in November 2026. `OpenAiCompatibleClient` pointed at OpenAI's Chat Completions accepts audio today.
 - Mocks and simulations for providers beyond the three in `postman/`.
 - Any provider cell marked *verify* in sections 2.5 and 3 that could not be confirmed.
 
@@ -438,18 +439,18 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - [x] Tests: `LocalWireIdentityCases` green against Phase 0 fixtures; `LocalChatModelCases` (overloads, same-body, content, JSON, part validation, `FromFile`, harness history)
 
 ### Phase 2: Media on the wire
-- [ ] `MediaValue`, the serializer wire and record modes, raw media writing, `EscapeMediaInJson`
-- [ ] Call detail redaction and its options
-- [ ] Capability flags, `ModalityTokens`, `ModelInformation.InputModalities`, `PolyPromptJsonContext` registrations
-- [ ] Responses API builder (OpenAI, Azure, xAI) with dialect part flags
-- [ ] OpenAI-compatible content arrays, `ImageUrlStyle`
-- [ ] Anthropic image blocks
-- [ ] Gemini and Vertex `inlineData`, `fileData` (including YouTube), `videoMetadata`
-- [ ] Bedrock image and video blocks
-- [ ] Ollama `images`
-- [ ] Cohere (only if verified)
-- [ ] `Capabilities` constants, `MaxInlineMediaBytes` with encoded-size checks
-- [ ] Tests: `LocalMultimodalCases`, `LocalMultimodalValidationCases`, `LocalCallDetailRedactionCases` (JSON parts), fixture server DTO updates, capability contract rows
+- [x] `MediaValue`, the serializer wire and record modes, raw media writing, `EscapeMediaInJson`
+- [x] Call detail redaction and its options
+- [x] Capability flags, `ModalityTokens`, `ModelInformation.InputModalities`, `PolyPromptJsonContext` registrations
+- [x] Responses API builder (OpenAI, Azure, xAI) with dialect part flags
+- [x] OpenAI-compatible content arrays, `ImageUrlStyle`
+- [x] Anthropic image blocks
+- [x] Gemini and Vertex `inlineData`, `fileData` (including YouTube), `videoMetadata`
+- [x] Bedrock image and video blocks
+- [x] Ollama `images`
+- [x] Cohere (only if verified)
+- [x] `Capabilities` constants, `MaxInlineMediaBytes` with encoded-size checks
+- [x] Tests: `LocalMultimodalCases` (13 cases: shapes per provider, URLs, detail, escaping, tools, audio and video, Gemini and Bedrock specifics, streaming, validation, inline limit, redaction, usage and modalities) and capability contract rows
 
 ### Phase 3: Transcription
 - [ ] Multipart helper and summary recording
@@ -483,3 +484,4 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - **2026-11-15**: Revised after review. The owner approved a major version, so the plan became 5.0.0. Changes: `ChatMessage.Content` becomes parts, with a converter for 4.x JSON. Tool chat merges into chat, with four `ChatAsync` overloads; `ChatAsync(string, IEnumerable<ContentPart>)` was dropped because it made `ChatAsync(x, null)` ambiguous. The wire body and recorded body are separated so redaction cannot break SigV4. Media is written raw to avoid `+` inflation, with `EscapeMediaInJson` to opt out. Validation moved out of setters. Transcription format checks are per model. YouTube URLs are allowed on Gemini and Vertex. Postman scope is limited to the three existing targets. Serialization writes UTF-8 bytes without an intermediate string. Redaction moved to the media phase. Phase 0 captures the 4.0 wire fixtures. No code changes yet.
 - **2026-11-15**: Phase 0 done (`b159ef3`): 160 wire fixtures captured from 4.0.0, deterministic across two runs and both frameworks.
 - **2026-11-16**: Phase 1 done. Chat and tool chat merged; `ChatMessage.Content` is parts. Wire identity: 156 of 160 bodies are byte-identical, including `Content-Type`; the 4 differences are the intended OpenAI-compatible fix (no `tool_choice` without tools), recorded in `V5Changes`. The Native AOT request digest over 222 requests equals the 4.0.0 digest. Local suite 854 passed on net8.0 and net10.0; Xunit, Nunit, Docs, Console, and AOT green. `MIGRATION_V3_TO_V4.md` is no longer compiled by `Test.Docs` because its snippets target 4.0; `MIGRATION_V4_TO_V5.md` replaces it in Phase 6.
+- **2026-11-16**: Phase 2 done. Checked the *verify* cells against provider docs: OpenAI and Azure audio input ship off; Cohere vision and Vertex YouTube are confirmed; only `whisper-1` has `verbose_json` and timestamps. Media is written raw through `MediaValue`; recorded bodies use placeholders. Ten local clients send images (plus Ollama Cloud), with audio and video on OpenAI-compatible, Gemini, Vertex, and Bedrock (video). Local suite 867 passed on net8.0 and net10.0; Docs, Console, and AOT green; the AOT request digest is still the 4.0.0 digest. Deviations: `S3BucketOwner` is a `BedrockClient` property; `MaxInlineMediaBytes` lives on `ClientOptions`; no fixture-server media DTOs.

@@ -89,22 +89,22 @@ Every constructor signature, and how each provider authenticates, is in [PROVIDE
 Every client has every method, but not every provider supports every capability. Call `client.Supports(Capability.Embed)` to check. An unsupported call throws `CapabilityNotSupportedException` before any request is sent.
 
 <!-- capability-matrix:start -->
-| Client | Chat | ToolCalling | Generate | Embed | SparseEmbed | Rerank | Classify | Decide | Models |
-|---|---|---|---|---|---|---|---|---|---|
-| `OpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `OpenAiCompatibleClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `AzureOpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `XAiClient` | ✅ | ✅ | ✅ | | | | | | ✅ |
-| `AnthropicClient` | ✅ | ✅ | ✅ | | | | | | ✅ |
-| `GeminiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `VertexAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | |
-| `BedrockClient` | ✅ | ✅ | ✅ | ✅ | | ✅ | | | ✅ |
-| `OllamaClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `OllamaCloudClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
-| `CohereClient` | ✅ | ✅ | ✅ | ✅ | | ✅ | ✅ | | ✅ |
-| `VoyageAiClient` | | | | ✅ | | ✅ | | | |
-| `TeiClient` | | | | ✅ | ✅ | ✅ | ✅ | | ✅ |
-| `TypeSafeClient` | | | | | | | | ✅ | |
+| Client | Chat | ToolCalling | Generate | Embed | SparseEmbed | Rerank | Classify | Decide | Models | ImageInput | AudioInput | VideoInput | Transcribe |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `OpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
+| `OpenAiCompatibleClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | ✅ | ✅ | |
+| `AzureOpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
+| `XAiClient` | ✅ | ✅ | ✅ | | | | | | ✅ | ✅ | | | |
+| `AnthropicClient` | ✅ | ✅ | ✅ | | | | | | ✅ | ✅ | | | |
+| `GeminiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | ✅ | ✅ | |
+| `VertexAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | | ✅ | ✅ | ✅ | |
+| `BedrockClient` | ✅ | ✅ | ✅ | ✅ | | ✅ | | | ✅ | ✅ | | ✅ | |
+| `OllamaClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
+| `OllamaCloudClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ | ✅ | | | |
+| `CohereClient` | ✅ | ✅ | ✅ | ✅ | | ✅ | ✅ | | ✅ | ✅ | | | |
+| `VoyageAiClient` | | | | ✅ | | ✅ | | | | | | | |
+| `TeiClient` | | | | ✅ | ✅ | ✅ | ✅ | | ✅ | | | | |
+| `TypeSafeClient` | | | | | | | | ✅ | | | | | |
 <!-- capability-matrix:end -->
 
 | Capability | Methods |
@@ -118,8 +118,10 @@ Every client has every method, but not every provider supports every capability.
 | `Classify` | `ClassifyAsync` |
 | `Decide` | `DecideAsync` |
 | `Models` | `ListModelsAsync`, `ModelExistsAsync`, `GetModelInformationAsync` |
+| `ImageInput`, `AudioInput`, `VideoInput` | `ChatAsync` and `ChatStreamingAsync` with image, audio, or video parts in a user message |
+| `Transcribe` | `TranscribeAsync` |
 
-`ValidateConnectivityAsync` is on every client. A specific model can still lack a feature the provider supports, such as tool calling on a small Ollama model.
+`ValidateConnectivityAsync` is on every client. A specific model can still lack a feature the provider supports, such as tool calling on a small Ollama model, vision on a text-only Ollama model, or video on a Bedrock model other than Amazon Nova. For `OpenAiCompatibleClient`, audio and video input depend on the server (vLLM accepts `input_audio` and `video_url`).
 
 ## Which OpenAI client?
 

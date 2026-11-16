@@ -306,8 +306,71 @@ namespace PolyPrompt.Clients
                 return parts;
             }
 
+            if (message.HasMedia)
+            {
+                foreach (ContentPart part in message.Content) parts.Add(BuildMediaPart(part));
+                return parts;
+            }
+
             parts.Add(new Dictionary<string, object> { { "text", message.Text ?? string.Empty } });
             return parts;
+        }
+
+        /// <summary>
+        /// One content part as a generateContent part: <c>text</c>, <c>inlineData</c>, or <c>fileData</c> (a provider file
+        /// URI or a YouTube link), with <c>videoMetadata</c> beside it for a video clip.
+        /// </summary>
+        private Dictionary<string, object> BuildMediaPart(ContentPart part)
+        {
+            if (part.Type == ContentPartType.Text) return new Dictionary<string, object> { { "text", part.Text! } };
+
+            Dictionary<string, object> result;
+            if (part.Data != null)
+            {
+                result = new Dictionary<string, object>
+                {
+                    { "inlineData", new Dictionary<string, object> { { "mimeType", part.MediaType! }, { "data", MediaValue.Base64(part.Data, part.MediaType!) } } }
+                };
+            }
+            else if (part.FileReference != null)
+            {
+                result = new Dictionary<string, object>
+                {
+                    { "fileData", new Dictionary<string, object> { { "mimeType", part.MediaType! }, { "fileUri", part.FileReference } } }
+                };
+            }
+            else
+            {
+                if (part.Type != ContentPartType.Video || !IsYouTube(part.Url!))
+                    throw new ArgumentException(ProviderName + " fetches YouTube video links only. Send other media as bytes or as a file reference (" + LargeMediaHint + ")");
+                result = new Dictionary<string, object>
+                {
+                    { "fileData", new Dictionary<string, object> { { "mimeType", part.MediaType ?? "video/mp4" }, { "fileUri", part.Url! } } }
+                };
+            }
+
+            if (part.Clip != null)
+            {
+                Dictionary<string, object> metadata = new Dictionary<string, object>();
+                if (part.Clip.StartOffsetMs.HasValue) metadata["startOffset"] = Seconds(part.Clip.StartOffsetMs.Value);
+                if (part.Clip.EndOffsetMs.HasValue) metadata["endOffset"] = Seconds(part.Clip.EndOffsetMs.Value);
+                if (part.Clip.FramesPerSecond.HasValue) metadata["fps"] = part.Clip.FramesPerSecond.Value;
+                if (metadata.Count > 0) result["videoMetadata"] = metadata;
+            }
+
+            return result;
+        }
+
+        private static string Seconds(long milliseconds)
+        {
+            return (milliseconds / 1000m).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) + "s";
+        }
+
+        private static bool IsYouTube(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri)) return false;
+            string host = uri.Host.ToLowerInvariant();
+            return host == "youtu.be" || host == "youtube.com" || host.EndsWith(".youtube.com", StringComparison.Ordinal);
         }
 
         private static string ResolveToolResultName(ChatMessage message, int messageIndex, Dictionary<string, string> callNames)
@@ -555,7 +618,29 @@ namespace PolyPrompt.Clients
             // billed thinking-token count. Both are absent unless the request enabled caching / thinking.
             usage.CachedPromptTokens = TryGetInt(usageObj, "cachedContentTokenCount");
             usage.ReasoningTokens = TryGetInt(usageObj, "thoughtsTokenCount");
+            usage.InputByModality = ParseModalityTokens(usageObj);
             return usage;
+        }
+
+        private ModalityTokens? ParseModalityTokens(Dictionary<string, object> usageObj)
+        {
+            List<Dictionary<string, object>>? details = ParseNestedList(usageObj, "promptTokensDetails");
+            if (details == null || details.Count == 0) return null;
+
+            ModalityTokens tokens = new ModalityTokens();
+            foreach (Dictionary<string, object> detail in details)
+            {
+                string? modality = detail.ContainsKey("modality") ? detail["modality"]?.ToString() : null;
+                long? count = TryGetInt(detail, "tokenCount");
+                switch (modality)
+                {
+                    case "TEXT": tokens.Text = count; break;
+                    case "IMAGE": tokens.Image = count; break;
+                    case "AUDIO": tokens.Audio = count; break;
+                    case "VIDEO": tokens.Video = count; break;
+                }
+            }
+            return tokens;
         }
 
         private async IAsyncEnumerable<Dictionary<string, object>> ReadEvents(HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token, ResponseBase? result = null)

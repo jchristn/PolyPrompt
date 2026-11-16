@@ -11,6 +11,7 @@ namespace PolyPrompt.Clients
     /// <c>converse-stream</c>), Embed (<c>InvokeModel</c> with Titan or Cohere embedding models), Rerank
     /// (<c>InvokeModel</c> with Cohere or Amazon rerank models), and Models (control-plane
     /// <c>/foundation-models</c>).</description></item>
+    /// <item><description>Media input: ImageInput and VideoInput (Converse <c>image</c> and <c>video</c> blocks from inline bytes or <c>s3://</c> locations; video depends on the model).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Classify,
     /// Decide.</description></item>
     /// <item><description>Auth: AWS credentials from <see cref="IAwsCredentialProvider"/>; the client's region is used for
@@ -34,9 +35,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Models, ImageInput, and VideoInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Models | Capability.ImageInput | Capability.VideoInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Bedrock";
@@ -54,6 +55,12 @@ namespace PolyPrompt.Clients
         {
             get { return _Region; }
         }
+
+        /// <summary>
+        /// The AWS account that owns the S3 buckets in <c>s3://</c> file references, sent as <c>bucketOwner</c>. Null
+        /// when the buckets belong to the calling account. Default: null.
+        /// </summary>
+        public string? S3BucketOwner { get; set; } = null;
 
         #endregion
 
@@ -96,6 +103,9 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Protected-Methods
+
+        /// <inheritdoc />
+        protected override string LargeMediaHint => "Put it in S3 and send ContentPart.FileReferenceOf(type, \"s3://bucket/key\", mediaType); set S3BucketOwner when the bucket belongs to another account.";
 
         /// <inheritdoc />
         protected override string? ModelCatalogUrl => "https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html";

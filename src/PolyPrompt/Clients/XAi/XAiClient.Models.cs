@@ -62,6 +62,20 @@ namespace PolyPrompt.Clients
             ModelInformation model = new() { Name = ResponsesApiJson.String(item, "id") ?? "", OwnedBy = ResponsesApiJson.String(item, "owned_by") };
             if (ResponsesApiJson.Property(item, "created") is JsonElement created && created.TryGetInt64(out long seconds)) model.CreatedUtc = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
             foreach (JsonProperty property in item.EnumerateObject()) model.Metadata[property.Name] = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : property.Value.GetRawText();
+            if (ResponsesApiJson.Property(item, "input_modalities") is JsonElement modalities && modalities.ValueKind == JsonValueKind.Array)
+            {
+                model.InputModalities = new List<ContentPartType>();
+                foreach (JsonElement modality in modalities.EnumerateArray())
+                {
+                    switch (modality.ValueKind == JsonValueKind.String ? modality.GetString() : null)
+                    {
+                        case "text": model.InputModalities.Add(ContentPartType.Text); break;
+                        case "image": model.InputModalities.Add(ContentPartType.Image); break;
+                        case "audio": model.InputModalities.Add(ContentPartType.Audio); break;
+                        case "video": model.InputModalities.Add(ContentPartType.Video); break;
+                    }
+                }
+            }
             return model;
         }
     }

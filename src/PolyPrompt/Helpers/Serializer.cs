@@ -117,11 +117,22 @@ namespace PolyPrompt.Helpers
         /// <exception cref="JsonException">Thrown when the graph is deeper than <see cref="MaxDepth"/>.</exception>
         public byte[] SerializeJsonUtf8(object? obj)
         {
+            return SerializeJsonUtf8(obj, null);
+        }
+
+        /// <summary>
+        /// Serialize to compact UTF-8 JSON, writing inline media as the context says and counting it.
+        /// </summary>
+        /// <param name="obj">Object to serialize.</param>
+        /// <param name="media">Media settings and statistics, or null to write media raw.</param>
+        /// <returns>UTF-8 JSON bytes.</returns>
+        internal byte[] SerializeJsonUtf8(object? obj, MediaWriteContext? media)
+        {
             JsonSerializerOptions options = Volatile.Read(ref _Compact);
             ArrayBufferWriter<byte> buffer = new ArrayBufferWriter<byte>();
             using (Utf8JsonWriter writer = new Utf8JsonWriter(buffer, WriterOptions(options)))
             {
-                WriteValue(writer, obj, options, 0);
+                WriteValue(writer, obj, options, 0, media);
             }
 
             return buffer.WrittenSpan.ToArray();
@@ -241,7 +252,7 @@ namespace PolyPrompt.Helpers
             }
         }
 
-        private static void WriteValue(Utf8JsonWriter writer, object? value, JsonSerializerOptions options, int depth)
+        private static void WriteValue(Utf8JsonWriter writer, object? value, JsonSerializerOptions options, int depth, MediaWriteContext? media = null)
         {
             if (depth > MaxDepth)
                 throw new JsonException("The object graph is nested more than " + MaxDepth + " levels deep. It may contain a cycle.");
@@ -253,6 +264,9 @@ namespace PolyPrompt.Helpers
                     return;
                 case string text:
                     writer.WriteStringValue(text);
+                    return;
+                case MediaValue mediaValue:
+                    (media ?? new MediaWriteContext(MediaWriteMode.Raw, 0)).Write(writer, mediaValue);
                     return;
                 case bool flag:
                     writer.WriteBooleanValue(flag);
@@ -323,13 +337,13 @@ namespace PolyPrompt.Helpers
                     foreach (DictionaryEntry entry in dictionary)
                     {
                         writer.WritePropertyName(KeyToString(entry.Key));
-                        WriteValue(writer, entry.Value, options, depth + 1);
+                        WriteValue(writer, entry.Value, options, depth + 1, media);
                     }
                     writer.WriteEndObject();
                     return;
                 case IEnumerable sequence:
                     writer.WriteStartArray();
-                    foreach (object? item in sequence) WriteValue(writer, item, options, depth + 1);
+                    foreach (object? item in sequence) WriteValue(writer, item, options, depth + 1, media);
                     writer.WriteEndArray();
                     return;
                 default:

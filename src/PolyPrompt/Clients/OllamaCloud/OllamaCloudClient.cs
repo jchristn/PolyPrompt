@@ -8,6 +8,7 @@ namespace PolyPrompt.Clients
     /// <list type="bullet">
     /// <item><description>Supported: Chat, ToolCalling, Generate, Embed, and Models (the API supports embeddings; the hosted
     /// catalog may not include embedding models).</description></item>
+    /// <item><description>Media input: ImageInput (<c>images</c> on user messages, for vision-capable models).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: required bearer API key.</description></item>

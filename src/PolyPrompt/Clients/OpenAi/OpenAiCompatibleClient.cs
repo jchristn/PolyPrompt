@@ -13,6 +13,7 @@ namespace PolyPrompt.Clients
     /// legacy <c>/v1/completions</c>), Embed (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>). Reasoning extensions
     /// (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
     /// <c>extra_content.google.thought_signature</c>.</description></item>
+    /// <item><description>Media input: ImageInput, AudioInput, and VideoInput (Chat Completions <c>image_url</c>, <c>input_audio</c>, and the vLLM <c>video_url</c>; what a server accepts depends on the server and model).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: optional API key; placement set by <see cref="OpenAiCompatibleClientOptions.AuthPlacement"/>
@@ -35,9 +36,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.AudioInput | Capability.VideoInput;
 
         /// <inheritdoc />
         public override string ProviderName => "OpenAI-compatible server";
@@ -72,8 +73,18 @@ namespace PolyPrompt.Clients
             : base(ClientArguments.Endpoint(endpoint, nameof(endpoint)), ClientArguments.OptionalKey(apiKey, nameof(apiKey)), options)
         {
             _AuthPlacement = (options as OpenAiCompatibleClientOptions)?.AuthPlacement ?? AuthPlacement.Bearer;
+            ImageUrlStyle = (options as OpenAiCompatibleClientOptions)?.ImageUrlStyle ?? ImageUrlStyle.DataUrl;
             _Header = OpenAiProtocol.Header;
         }
+
+        #endregion
+
+        #region Public-Members
+
+        /// <summary>
+        /// How images are sent (<see cref="OpenAiCompatibleClientOptions.ImageUrlStyle"/>). Default: <see cref="ImageUrlStyle.DataUrl"/>.
+        /// </summary>
+        public ImageUrlStyle ImageUrlStyle { get; set; } = ImageUrlStyle.DataUrl;
 
         #endregion
 

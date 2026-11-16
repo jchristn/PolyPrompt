@@ -50,6 +50,7 @@ namespace Test.Shared
             cases.AddRange(LocalOpenCodeAgentCases.Create(SuiteId));
             cases.AddRange(LocalWireIdentityCases.Create(SuiteId));
             cases.AddRange(LocalChatModelCases.Create(SuiteId));
+            cases.AddRange(LocalMultimodalCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

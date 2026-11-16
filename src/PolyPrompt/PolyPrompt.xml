@@ -287,6 +287,7 @@
             <list type="bullet">
             <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v1/messages</c>, generation sent as one user turn,
             streaming as typed SSE events), and Models (<c>/v1/models</c>, following pagination).</description></item>
+            <item><description>Media input: ImageInput (<c>image</c> blocks from inline bytes or a URL).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Embed, SparseEmbed, Rerank,
             Classify, Decide. For embeddings with Claude, pair it with <see cref="T:PolyPrompt.Clients.VoyageAiClient"/>.</description></item>
             <item><description>Auth: required API key, sent as <c>x-api-key</c>, plus <c>anthropic-version</c> and an optional
@@ -322,9 +323,14 @@
             null or <see cref="F:PolyPrompt.Models.ReasoningEffortLevel.None"/> leaves the request unchanged.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.AnthropicClient.BuildContentBlocks(PolyPrompt.Models.ChatMessage)">
+            <summary>
+            A user message with images as content blocks: <c>text</c>, and <c>image</c> with a base64 or URL source.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Clients.AnthropicClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.AnthropicClient.ProviderName">
@@ -1124,6 +1130,30 @@
             Default: true.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Clients.ClientOptions.RedactMediaInCallDetails">
+            <summary>
+            Whether inline media in recorded request bodies is replaced with a placeholder
+            (<see cref="P:PolyPrompt.Clients.HttpClientBase.RedactMediaInCallDetails"/>). Default: true.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClientOptions.MediaRedactionThresholdBytes">
+            <summary>
+            Inline media at or below this many decoded bytes is recorded in full
+            (<see cref="P:PolyPrompt.Clients.HttpClientBase.MediaRedactionThresholdBytes"/>). Default: 1024.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClientOptions.EscapeMediaInJson">
+            <summary>
+            Whether inline media is written with the normal JSON string escaping instead of raw
+            (<see cref="P:PolyPrompt.Clients.HttpClientBase.EscapeMediaInJson"/>). Default: false.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ClientOptions.MaxInlineMediaBytes">
+            <summary>
+            The most inline media one chat request may carry, in bytes as encoded on the wire
+            (<see cref="P:PolyPrompt.Clients.ProviderClientBase.MaxInlineMediaBytes"/>). Default: the provider's limit.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.CliInvocation">
             <summary>
             How an agent harness client starts its CLI for one run: the argument list and what to write to standard input.
@@ -1359,6 +1389,27 @@
         <member name="F:PolyPrompt.Clients.HttpClientBase._HttpClient">
             <summary>
             HTTP client for API requests.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.RedactMediaInCallDetails">
+            <summary>
+            Whether inline media (base64 images, audio, and video) in recorded request bodies is replaced with a placeholder
+            such as <c>&lt;base64 184211 bytes image/jpeg sha256=ab12cd34&gt;</c>. Applies to <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>
+            and logs when bodies are captured (<see cref="F:PolyPrompt.Models.CallDetailCapture.Full"/>). The bytes sent are never changed.
+            Default: true.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.MediaRedactionThresholdBytes">
+            <summary>
+            Inline media at or below this many decoded bytes is recorded in full even when
+            <see cref="P:PolyPrompt.Clients.HttpClientBase.RedactMediaInCallDetails"/> is true. Default: 1024.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.HttpClientBase.EscapeMediaInJson">
+            <summary>
+            Whether inline media is written with the normal JSON string escaping (which writes each <c>+</c> in base64 as
+            <c>\u002B</c>, about 8% larger). False writes base64 and data URLs unescaped, which is valid JSON because they
+            contain no characters JSON requires escaping. Text is always escaped the same way. Default: false.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.HttpClientBase.Endpoint">
@@ -1641,6 +1692,22 @@
             Use <c>AuthPlacement.Header("api-key")</c> for Azure's v1 Chat Completions route.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Clients.OpenAiCompatibleClientOptions.ImageUrlStyle">
+            <summary>
+            How images are sent. Default: <see cref="F:PolyPrompt.Clients.ImageUrlStyle.DataUrl"/>.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Clients.ImageUrlStyle">
+            <summary>
+            How <see cref="T:PolyPrompt.Clients.OpenAiCompatibleClient"/> sends images in <c>image_url</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.ImageUrlStyle.DataUrl">
+            <summary>Inline bytes as a <c>data:</c> URL, and remote URLs as given.</summary>
+        </member>
+        <member name="F:PolyPrompt.Clients.ImageUrlStyle.RemoteUrlOnly">
+            <summary>Remote URLs only, for servers that reject data URLs; inline image bytes throw before sending.</summary>
+        </member>
         <member name="T:PolyPrompt.Clients.AuthPlacement">
             <summary>
             Where an <see cref="T:PolyPrompt.Clients.OpenAiCompatibleClient"/> sends its API key.
@@ -1771,6 +1838,14 @@
             limit; for most hosted APIs, the model's maximum). Providers whose API requires a limit (Anthropic, and
             Anthropic models on Bedrock) still send <see cref="F:PolyPrompt.Clients.ProviderClientBase.DefaultMaxTokens"/>. An explicit <c>MaxTokens</c> is always
             sent. Default: true, except on <c>OllamaClient</c> and <c>OllamaCloudClient</c>, where it is false.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ProviderClientBase.MaxInlineMediaBytes">
+            <summary>
+            The most inline media (<see cref="P:PolyPrompt.Models.ContentPart.Data"/>) one chat request may carry, counted as encoded on the
+            wire (base64, plus the data URL prefix where the provider uses one). A larger request throws
+            <see cref="T:System.ArgumentException"/> before it is sent, naming the provider's route for large media. Default: the
+            provider's documented request limit, or 20 MB where none is documented.
             </summary>
         </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(System.String,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
@@ -1936,6 +2011,25 @@
             <param name="settings">Merged settings.</param>
             <param name="token">Cancellation token.</param>
             <returns>The streaming generation response.</returns>
+        </member>
+        <member name="P:PolyPrompt.Clients.ProviderClientBase.DefaultMaxInlineMediaBytes">
+            <summary>
+            The provider's default for <see cref="P:PolyPrompt.Clients.ProviderClientBase.MaxInlineMediaBytes"/>. Default: 20 MB.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.ProviderClientBase.LargeMediaHint">
+            <summary>
+            The provider's route for media too large to send inline, used in the size error. Default: send it by URL or
+            as a provider file reference.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.InlineMediaOverhead(PolyPrompt.Models.ContentPart)">
+            <summary>
+            Extra characters the provider's wire form adds to an inline part beyond its base64 (for example a data URL
+            prefix). Default: 0.
+            </summary>
+            <param name="part">An inline part.</param>
+            <returns>The extra length.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.RequiresMaxTokens(System.String)">
             <summary>
@@ -2434,6 +2528,7 @@
             <c>converse-stream</c>), Embed (<c>InvokeModel</c> with Titan or Cohere embedding models), Rerank
             (<c>InvokeModel</c> with Cohere or Amazon rerank models), and Models (control-plane
             <c>/foundation-models</c>).</description></item>
+            <item><description>Media input: ImageInput and VideoInput (Converse <c>image</c> and <c>video</c> blocks from inline bytes or <c>s3://</c> locations; video depends on the model).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Classify,
             Decide.</description></item>
             <item><description>Auth: AWS credentials from <see cref="T:PolyPrompt.Auth.IAwsCredentialProvider"/>; the client's region is used for
@@ -2461,9 +2556,15 @@
         <member name="M:PolyPrompt.Clients.BedrockClient.GenerateStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.BedrockClient.BuildMediaBlock(PolyPrompt.Models.ContentPart)">
+            <summary>
+            One content part as a Converse block: <c>text</c>, or <c>image</c> or <c>video</c> with a format and a source of
+            inline bytes or an S3 location.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Clients.BedrockClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Models, ImageInput, and VideoInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.BedrockClient.ProviderName">
@@ -2478,6 +2579,12 @@
         <member name="P:PolyPrompt.Clients.BedrockClient.Region">
             <summary>
             The AWS region used for routing and signing.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Clients.BedrockClient.S3BucketOwner">
+            <summary>
+            The AWS account that owns the S3 buckets in <c>s3://</c> file references, sent as <c>bucketOwner</c>. Null
+            when the buckets belong to the calling account. Default: null.
             </summary>
         </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.#ctor(System.String,PolyPrompt.Auth.IAwsCredentialProvider,System.String,PolyPrompt.Clients.ClientOptions)">
@@ -2499,6 +2606,9 @@
             </summary>
             <param name="token">Cancellation token.</param>
             <returns>True when the request was accepted.</returns>
+        </member>
+        <member name="P:PolyPrompt.Clients.BedrockClient.LargeMediaHint">
+            <inheritdoc />
         </member>
         <member name="P:PolyPrompt.Clients.BedrockClient.ModelCatalogUrl">
             <inheritdoc />
@@ -2771,6 +2881,7 @@
             <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
             (<c>/v2/embed</c>), Rerank (<c>/v2/rerank</c>), Classify (<c>/v1/classify</c>), and Models
             (<c>/v1/models</c>).</description></item>
+            <item><description>Media input: ImageInput (v2 chat <c>image_url</c>, for vision models such as Command A Vision).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed,
             Decide.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -2804,9 +2915,17 @@
             request unchanged.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.BuildContent(PolyPrompt.Models.ChatMessage)">
+            <summary>
+            A user message with images as a v2 content array: <c>text</c> and <c>image_url</c> (a data URL or a remote URL).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.CohereClient.InlineMediaOverhead(PolyPrompt.Models.ContentPart)">
+            <inheritdoc />
+        </member>
         <member name="P:PolyPrompt.Clients.CohereClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.CohereClient.ProviderName">
@@ -3063,6 +3182,7 @@
             <item><description>Supported: Chat, ToolCalling, and Generate (<c>generateContent</c> and
             <c>streamGenerateContent</c>), Embed (<c>:embedContent</c> and <c>:batchEmbedContents</c>), and Models
             (<c>/v1beta/models</c>, following pagination).</description></item>
+            <item><description>Media input: ImageInput, AudioInput, and VideoInput (<c>inlineData</c>, File API URIs and YouTube links as <c>fileData</c>, and <c>videoMetadata</c> clips).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: required API key, sent as <c>x-goog-api-key</c>.</description></item>
@@ -3075,7 +3195,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.GeminiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.GeminiClient.ProviderName">
@@ -3102,6 +3222,9 @@
             </summary>
             <param name="token">Cancellation token.</param>
             <returns>True when the provider accepted the credentials.</returns>
+        </member>
+        <member name="P:PolyPrompt.Clients.GeminiClient.LargeMediaHint">
+            <inheritdoc />
         </member>
         <member name="P:PolyPrompt.Clients.GeminiClient.ModelCatalogUrl">
             <inheritdoc />
@@ -3226,6 +3349,12 @@
         <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ExtractCitations(System.Text.Json.JsonElement)">
             <inheritdoc />
         </member>
+        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.BuildMediaPart(PolyPrompt.Models.ContentPart)">
+            <summary>
+            One content part as a generateContent part: <c>text</c>, <c>inlineData</c>, or <c>fileData</c> (a provider file
+            URI or a YouTube link), with <c>videoMetadata</c> beside it for a video clip.
+            </summary>
+        </member>
         <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ReadParts(System.Collections.Generic.Dictionary{System.String,System.Object},PolyPrompt.Models.ResponseBase,System.Collections.Generic.Dictionary{System.String,System.Object}@)">
             <summary>
             Read the first candidate's parts. Returns null and sets the response error when the response has no candidates.
@@ -3244,6 +3373,7 @@
             <item><description>Supported: Chat, ToolCalling, and Generate (the same <c>generateContent</c> schema as
             <see cref="T:PolyPrompt.Clients.GeminiClient"/>, routed through the project, region, and publisher path), and Embed (<c>:predict</c>).
             </description></item>
+            <item><description>Media input: ImageInput, AudioInput, and VideoInput (<c>inlineData</c>, <c>gs://</c> URIs and YouTube links as <c>fileData</c>, and <c>videoMetadata</c> clips).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide, Models (Vertex has no per-project model listing for publisher models).</description></item>
             <item><description>Auth: an OAuth bearer token from <see cref="T:PolyPrompt.Auth.ICredentialProvider"/> (ADC or a service account),
@@ -3255,7 +3385,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, and Embed.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, ImageInput, AudioInput, and VideoInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiClient.ProviderName">
@@ -3286,6 +3416,9 @@
             </summary>
             <param name="token">Cancellation token.</param>
             <returns>True when the request succeeded.</returns>
+        </member>
+        <member name="P:PolyPrompt.Clients.VertexAiClient.LargeMediaHint">
+            <inheritdoc />
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiClient.ModelCatalogUrl">
             <inheritdoc />
@@ -3556,6 +3689,7 @@
             newline-delimited JSON), Embed (<c>/api/embed</c>), and Models (<c>/api/tags</c>, <c>/api/show</c>), plus the
             Ollama-only <see cref="M:PolyPrompt.Clients.OllamaClient.PullModelAsync(System.String,System.Func{PolyPrompt.Models.ModelPullProgress,System.Threading.Tasks.Task},System.Threading.CancellationToken)"/>, <see cref="M:PolyPrompt.Clients.OllamaClient.DeleteModelAsync(System.String,System.Threading.CancellationToken)"/>, <see cref="M:PolyPrompt.Clients.OllamaClient.LoadModelAsync(System.String,System.Nullable{System.TimeSpan},System.Threading.CancellationToken)"/>, and
             <see cref="M:PolyPrompt.Clients.OllamaClient.UnloadModelAsync(System.String,System.Threading.CancellationToken)"/>.</description></item>
+            <item><description>Media input: ImageInput (<c>images</c> on user messages, for vision-capable models).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: none by default; an optional bearer token for servers behind an authenticating
@@ -3584,9 +3718,15 @@
             Adds the Ollama <c>think</c> field for a reasoning effort; null leaves the request unchanged.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.OllamaClient.BuildImages(PolyPrompt.Models.ChatMessage)">
+            <summary>
+            The image parts of a user message as Ollama <c>images</c>: raw base64, no data URL prefix. Text parts become the
+            message content; other media and URLs throw.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Clients.OllamaClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OllamaClient.ProviderName">
@@ -3767,6 +3907,7 @@
             <list type="bullet">
             <item><description>Supported: Chat, ToolCalling, Generate, Embed, and Models (the API supports embeddings; the hosted
             catalog may not include embedding models).</description></item>
+            <item><description>Media input: ImageInput (<c>images</c> on user messages, for vision-capable models).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: required bearer API key.</description></item>
@@ -3801,6 +3942,7 @@
             <item><description>Supported: Chat, ToolCalling, and Generate (<c>/openai/v1/responses</c>), Embed
             (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and <see cref="M:PolyPrompt.Clients.AzureOpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/>.</description></item>
+            <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: an <c>api-key</c> header, or an Entra ID bearer token (scope
@@ -3817,7 +3959,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.ProviderName">
@@ -3933,6 +4075,7 @@
             (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>), plus the native operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and the OpenAI-only <see cref="M:PolyPrompt.Clients.OpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/> and
             <see cref="M:PolyPrompt.Clients.OpenAiClient.CountInputTokensAsync(System.Text.Json.JsonElement,PolyPrompt.Options.OpenAiCompletionOptions,System.Threading.CancellationToken)"/>.</description></item>
+            <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -3944,7 +4087,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.ProviderName">
@@ -4055,6 +4198,7 @@
             legacy <c>/v1/completions</c>), Embed (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>). Reasoning extensions
             (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
             <c>extra_content.google.thought_signature</c>.</description></item>
+            <item><description>Media input: ImageInput, AudioInput, and VideoInput (Chat Completions <c>image_url</c>, <c>input_audio</c>, and the vLLM <c>video_url</c>; what a server accepts depends on the server and model).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
             <item><description>Auth: optional API key; placement set by <see cref="P:PolyPrompt.Clients.OpenAiCompatibleClientOptions.AuthPlacement"/>
@@ -4084,9 +4228,18 @@
             <see cref="F:PolyPrompt.Models.ReasoningEffortLevel.None"/> leaves the request unchanged.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.BuildContent(PolyPrompt.Models.ChatMessage)">
+            <summary>
+            A user message with media as a Chat Completions content array: <c>text</c>, <c>image_url</c>,
+            <c>input_audio</c>, and <c>video_url</c> (the vLLM convention).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.InlineMediaOverhead(PolyPrompt.Models.ContentPart)">
+            <inheritdoc />
+        </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.ProviderName">
@@ -4112,6 +4265,11 @@
             <param name="options">Optional construction settings; pass <see cref="T:PolyPrompt.Clients.OpenAiCompatibleClientOptions"/> to choose
             where the key is placed.</param>
             <exception cref="T:System.ArgumentException">Thrown when endpoint is not an absolute http(s) URL, or apiKey contains whitespace or looks like a URL.</exception>
+        </member>
+        <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.ImageUrlStyle">
+            <summary>
+            How images are sent (<see cref="P:PolyPrompt.Clients.OpenAiCompatibleClientOptions.ImageUrlStyle"/>). Default: <see cref="F:PolyPrompt.Clients.ImageUrlStyle.DataUrl"/>.
+            </summary>
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ValidateConnectivityAsync(System.Threading.CancellationToken)">
             <summary>
@@ -4697,6 +4855,15 @@
             the system prompt as <c>instructions</c>. Every other request sends the messages as an input list.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.BuildContent(PolyPrompt.Models.ChatMessage)">
+            <summary>
+            A user message with media as Responses content items: <c>input_text</c> and <c>input_image</c> (a data URL, a
+            remote URL, or a <c>file_id</c>).
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.InlineMediaOverhead(PolyPrompt.Models.ContentPart)">
+            <inheritdoc />
+        </member>
         <member name="T:PolyPrompt.Clients.ResponsesApiDialect">
             <summary>
             Per-provider data for the shared Responses API engine. The engine never names a provider; every vendor-specific
@@ -5076,6 +5243,7 @@
             through <see cref="P:PolyPrompt.Models.ResponseBase.ProviderState"/>), the native Responses operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/>, and Models (<c>/v1/models</c>, plus the language, embedding, image, and video
             catalogs).</description></item>
+            <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL or a remote URL).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Embed (xAI no longer offers
             embedding models), SparseEmbed, Rerank, Classify, Decide.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -5087,7 +5255,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.XAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolCalling, Generate, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Models, and ImageInput.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.XAiClient.ProviderName">
@@ -5265,6 +5433,89 @@
             <param name="detected">The detected media type.</param>
             <param name="declared">The declared media type.</param>
             <returns>True when they agree.</returns>
+        </member>
+        <member name="T:PolyPrompt.Helpers.MediaValue">
+            <summary>
+            An inline media value in a wire body: the exact string the provider needs (raw base64 or a data URL). The
+            serializer writes it unescaped, escaped, or as a placeholder (see <see cref="T:PolyPrompt.Helpers.MediaWriteMode"/>), so builders never
+            put a raw base64 string into a body and nothing ever searches serialized JSON for media.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaValue.Encoded">
+            <summary>The string sent on the wire: raw base64, or a <c>data:</c> URL.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaValue.MediaType">
+            <summary>The media type.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaValue.ByteCount">
+            <summary>The decoded byte count.</summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaValue.Base64(System.Byte[],System.String)">
+            <summary>
+            Raw base64 (Gemini, Vertex AI, Anthropic, Bedrock, Ollama, and OpenAI <c>input_audio</c>).
+            </summary>
+            <param name="data">The bytes.</param>
+            <param name="mediaType">The media type.</param>
+            <returns>The value.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaValue.DataUrl(System.Byte[],System.String)">
+            <summary>
+            A <c>data:</c> URL (OpenAI Responses and Chat Completions images).
+            </summary>
+            <param name="data">The bytes.</param>
+            <param name="mediaType">The media type.</param>
+            <returns>The value.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaValue.Placeholder">
+            <summary>
+            The recorded placeholder, for example <c>&lt;base64 184211 bytes image/jpeg sha256=ab12cd34&gt;</c>.
+            </summary>
+            <returns>The placeholder text.</returns>
+        </member>
+        <member name="T:PolyPrompt.Helpers.MediaWriteMode">
+            <summary>
+            How the serializer writes a <see cref="T:PolyPrompt.Helpers.MediaValue"/>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Helpers.MediaWriteMode.Raw">
+            <summary>The encoded string, unescaped (valid JSON: base64 and data URLs need no escaping).</summary>
+        </member>
+        <member name="F:PolyPrompt.Helpers.MediaWriteMode.Escaped">
+            <summary>The encoded string with the writer's normal escaping.</summary>
+        </member>
+        <member name="F:PolyPrompt.Helpers.MediaWriteMode.Placeholder">
+            <summary>A placeholder for values above the threshold, and the raw value for the rest.</summary>
+        </member>
+        <member name="T:PolyPrompt.Helpers.MediaWriteContext">
+            <summary>
+            Per-serialization media settings and statistics.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaWriteContext.#ctor(PolyPrompt.Helpers.MediaWriteMode,System.Int32)">
+            <summary>
+            Initialize the context.
+            </summary>
+            <param name="mode">How media is written.</param>
+            <param name="placeholderThresholdBytes">In placeholder mode, values at or below this many bytes are written in full.</param>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaWriteContext.Mode">
+            <summary>How media is written.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaWriteContext.PlaceholderThresholdBytes">
+            <summary>In placeholder mode, values at or below this many bytes are written in full.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaWriteContext.Count">
+            <summary>Media values written.</summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.MediaWriteContext.MaxByteCount">
+            <summary>The largest decoded byte count written.</summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaWriteContext.Write(System.Text.Json.Utf8JsonWriter,PolyPrompt.Helpers.MediaValue)">
+            <summary>
+            Write one media value and update the statistics.
+            </summary>
+            <param name="writer">The JSON writer.</param>
+            <param name="value">The value.</param>
         </member>
         <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
             <summary>
@@ -5470,6 +5721,11 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ModalityTokens">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ModelInformation">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -5661,6 +5917,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListContentPart">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListContentPartType">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -6080,6 +6341,14 @@
             <exception cref="T:System.NotSupportedException">Thrown when the graph contains a type with no available metadata
             (see the remarks on <see cref="T:PolyPrompt.Helpers.Serializer"/>).</exception>
             <exception cref="T:System.Text.Json.JsonException">Thrown when the graph is deeper than <see cref="F:PolyPrompt.Helpers.Serializer.MaxDepth"/>.</exception>
+        </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.SerializeJsonUtf8(System.Object,PolyPrompt.Helpers.MediaWriteContext)">
+            <summary>
+            Serialize to compact UTF-8 JSON, writing inline media as the context says and counting it.
+            </summary>
+            <param name="obj">Object to serialize.</param>
+            <param name="media">Media settings and statistics, or null to write media raw.</param>
+            <returns>UTF-8 JSON bytes.</returns>
         </member>
         <member name="M:PolyPrompt.Helpers.Serializer.SerializeJson``1(``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Boolean)">
             <summary>
@@ -8113,6 +8382,24 @@
             <param name="mediaType">A media type.</param>
             <returns>The content part type, or null.</returns>
         </member>
+        <member name="T:PolyPrompt.Models.ModalityTokens">
+            <summary>
+            Input tokens split by modality, where the provider reports the split (Gemini and Vertex AI
+            <c>promptTokensDetails</c>; Chat Completions <c>prompt_tokens_details.audio_tokens</c>).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModalityTokens.Text">
+            <summary>Text tokens, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModalityTokens.Image">
+            <summary>Image tokens, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModalityTokens.Audio">
+            <summary>Audio tokens, when reported.</summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModalityTokens.Video">
+            <summary>Video tokens, when reported.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.ModelInformation">
             <summary>
             Normalized model information returned by ListModelsAsync across all providers.
@@ -8177,6 +8464,13 @@
             Provider-specific metadata as key-value pairs. Contains fields such as parameter_size,
             quantization_level, family, format, digest (Ollama), object type (OpenAI),
             or supportedGenerationMethods (Gemini).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ModelInformation.InputModalities">
+            <summary>
+            The input modalities the model accepts, where the provider's model API reports them (Ollama
+            <c>capabilities</c>, the xAI catalog's <c>input_modalities</c>). Null when not reported. Use it when the
+            provider-level <see cref="T:PolyPrompt.Models.Capability"/> flag is not specific enough. Default: null.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ModelPullProgress">
@@ -9339,6 +9633,11 @@
         <member name="P:PolyPrompt.Models.TokenUsage.EvalDurationNs">
             <summary>
             Token generation duration in nanoseconds (Ollama only).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.TokenUsage.InputByModality">
+            <summary>
+            Input tokens by modality (text, image, audio, video). Null when the provider does not report the split.
             </summary>
         </member>
         <member name="T:PolyPrompt.Models.ToolCall">

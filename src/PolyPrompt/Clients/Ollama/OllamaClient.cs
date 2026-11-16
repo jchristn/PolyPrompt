@@ -10,6 +10,7 @@ namespace PolyPrompt.Clients
     /// newline-delimited JSON), Embed (<c>/api/embed</c>), and Models (<c>/api/tags</c>, <c>/api/show</c>), plus the
     /// Ollama-only <see cref="PullModelAsync"/>, <see cref="DeleteModelAsync"/>, <see cref="LoadModelAsync"/>, and
     /// <see cref="UnloadModelAsync"/>.</description></item>
+    /// <item><description>Media input: ImageInput (<c>images</c> on user messages, for vision-capable models).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: none by default; an optional bearer token for servers behind an authenticating
@@ -25,9 +26,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Ollama";

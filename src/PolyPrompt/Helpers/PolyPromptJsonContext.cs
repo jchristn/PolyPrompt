@@ -73,6 +73,8 @@ namespace PolyPrompt.Helpers
     [JsonSerializable(typeof(ContentPartType))]
     [JsonSerializable(typeof(ImageDetail))]
     [JsonSerializable(typeof(VideoClip))]
+    [JsonSerializable(typeof(ModalityTokens))]
+    [JsonSerializable(typeof(List<ContentPartType>))]
     [JsonSerializable(typeof(ToolCall))]
     [JsonSerializable(typeof(List<ToolCall>))]
     [JsonSerializable(typeof(ToolDefinition))]

@@ -142,6 +142,8 @@ namespace PolyPrompt.Clients
                     { "content", message.Text ?? string.Empty }
                 };
 
+                if (message.HasMedia) item["images"] = BuildImages(message);
+
                 if (NormalizeRole(message.Role) == "tool" && !string.IsNullOrEmpty(message.ToolName)) item["tool_name"] = message.ToolName;
 
                 if (message.ToolCalls != null && message.ToolCalls.Count > 0)
@@ -156,6 +158,23 @@ namespace PolyPrompt.Clients
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// The image parts of a user message as Ollama <c>images</c>: raw base64, no data URL prefix. Text parts become the
+        /// message content; other media and URLs throw.
+        /// </summary>
+        private List<object> BuildImages(ChatMessage message)
+        {
+            List<object> images = new List<object>();
+            foreach (ContentPart part in message.Content)
+            {
+                if (part.Type == ContentPartType.Text) continue;
+                if (part.Type != ContentPartType.Image) throw new ArgumentException(ProviderName + " accepts image parts only, not " + part.Type + ".");
+                if (part.Data == null) throw new ArgumentException(ProviderName + " accepts images as inline bytes only; it does not fetch URLs or file references.");
+                images.Add(MediaValue.Base64(part.Data, part.MediaType!));
+            }
+            return images;
         }
 
         private static List<Dictionary<string, object>> BuildTools(List<ToolDefinition> tools)

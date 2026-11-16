@@ -9,6 +9,7 @@ namespace PolyPrompt.Clients
     /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>generateContent</c> and
     /// <c>streamGenerateContent</c>), Embed (<c>:embedContent</c> and <c>:batchEmbedContents</c>), and Models
     /// (<c>/v1beta/models</c>, following pagination).</description></item>
+    /// <item><description>Media input: ImageInput, AudioInput, and VideoInput (<c>inlineData</c>, File API URIs and YouTube links as <c>fileData</c>, and <c>videoMetadata</c> clips).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: required API key, sent as <c>x-goog-api-key</c>.</description></item>
@@ -23,9 +24,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, ImageInput, AudioInput, and VideoInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput | Capability.AudioInput | Capability.VideoInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Gemini";
@@ -70,6 +71,9 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Protected-Methods
+
+        /// <inheritdoc />
+        protected override string LargeMediaHint => "Upload it with GeminiClient.UploadFileAsync, wait with WaitForFileActiveAsync, and send ContentPart.FileReferenceOf(type, file.Uri, file.MediaType).";
 
         /// <inheritdoc />
         protected override string? ModelCatalogUrl => "https://aistudio.google.com/docs/models";

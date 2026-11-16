@@ -13,6 +13,7 @@ namespace PolyPrompt.Clients
     /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/openai/v1/responses</c>), Embed
     /// (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
     /// <see cref="ResponsesApiClientBase"/> and <see cref="CancelResponseAsync"/>.</description></item>
+    /// <item><description>Media input: ImageInput (Responses <c>input_image</c>: inline bytes as a data URL, a remote URL, or a <c>file_id</c>).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>
     /// <item><description>Auth: an <c>api-key</c> header, or an Entra ID bearer token (scope
@@ -41,9 +42,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Models, and ImageInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models | Capability.ImageInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Azure OpenAI";

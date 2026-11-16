@@ -242,6 +242,10 @@ namespace PolyPrompt.Clients
                         });
                     }
                 }
+                else if (message.HasMedia)
+                {
+                    foreach (ContentPart part in message.Content) content.Add(BuildMediaBlock(part));
+                }
                 else
                 {
                     content.Add(new Dictionary<string, object> { { "text", message.Text ?? string.Empty } });
@@ -259,6 +263,58 @@ namespace PolyPrompt.Clients
 
             FlushToolResults(result, ref pendingToolResults);
             return result;
+        }
+
+        /// <summary>
+        /// One content part as a Converse block: <c>text</c>, or <c>image</c> or <c>video</c> with a format and a source of
+        /// inline bytes or an S3 location.
+        /// </summary>
+        private Dictionary<string, object> BuildMediaBlock(ContentPart part)
+        {
+            if (part.Type == ContentPartType.Text) return new Dictionary<string, object> { { "text", part.Text! } };
+            if (part.Url != null) throw new ArgumentException("Bedrock does not fetch URLs; send the bytes or an s3:// file reference.");
+
+            Dictionary<string, object> source;
+            if (part.Data != null)
+            {
+                source = new Dictionary<string, object> { { "bytes", MediaValue.Base64(part.Data, part.MediaType!) } };
+            }
+            else
+            {
+                if (!part.FileReference!.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Bedrock file references must be s3:// URIs.");
+                Dictionary<string, object> location = new Dictionary<string, object> { { "uri", part.FileReference } };
+                if (!string.IsNullOrWhiteSpace(S3BucketOwner)) location["bucketOwner"] = S3BucketOwner;
+                source = new Dictionary<string, object> { { "s3Location", location } };
+            }
+
+            string key = part.Type == ContentPartType.Image ? "image" : part.Type == ContentPartType.Video ? "video" : throw new ArgumentException("Bedrock accepts image and video parts only, not " + part.Type + ".");
+            return new Dictionary<string, object>
+            {
+                { key, new Dictionary<string, object> { { "format", MediaFormat(part) }, { "source", source } } }
+            };
+        }
+
+        private static string MediaFormat(ContentPart part)
+        {
+            string subtype = part.MediaType!.Substring(part.MediaType.IndexOf('/') + 1).ToLowerInvariant();
+            string format = subtype switch
+            {
+                "jpg" or "pjpeg" => "jpeg",
+                "quicktime" => "mov",
+                "x-matroska" => "mkv",
+                "x-flv" => "flv",
+                "x-ms-wmv" => "wmv",
+                "3gpp" => "three_gp",
+                _ => subtype
+            };
+
+            string[] allowed = part.Type == ContentPartType.Image
+                ? new[] { "png", "jpeg", "gif", "webp" }
+                : new[] { "mkv", "mov", "mp4", "webm", "flv", "mpeg", "mpg", "wmv", "three_gp" };
+            if (Array.IndexOf(allowed, format) < 0)
+                throw new ArgumentException("Bedrock does not accept " + part.MediaType + " " + part.Type.ToString().ToLowerInvariant() + "; use " + string.Join(", ", allowed) + ".");
+            return format;
         }
 
         private static void FlushToolResults(List<Dictionary<string, object>> result, ref List<object>? pendingToolResults)

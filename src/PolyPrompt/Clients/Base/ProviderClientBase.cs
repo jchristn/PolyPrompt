@@ -56,6 +56,10 @@ namespace PolyPrompt.Clients
                 if (options.TimeoutMs.HasValue) TimeoutMs = options.TimeoutMs.Value;
                 if (options.CallDetailCapture.HasValue) CallDetailCapture = options.CallDetailCapture.Value;
                 if (options.RedactCredentials.HasValue) RedactCredentials = options.RedactCredentials.Value;
+                if (options.RedactMediaInCallDetails.HasValue) RedactMediaInCallDetails = options.RedactMediaInCallDetails.Value;
+                if (options.MediaRedactionThresholdBytes.HasValue) MediaRedactionThresholdBytes = options.MediaRedactionThresholdBytes.Value;
+                if (options.EscapeMediaInJson.HasValue) EscapeMediaInJson = options.EscapeMediaInJson.Value;
+                if (options.MaxInlineMediaBytes.HasValue) MaxInlineMediaBytes = options.MaxInlineMediaBytes.Value;
             }
         }
 

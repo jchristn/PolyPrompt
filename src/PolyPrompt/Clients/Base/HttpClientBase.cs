@@ -24,6 +24,8 @@ namespace PolyPrompt.Clients
         /// </summary>
         private readonly bool _OwnsHttpClient;
 
+        private int _MediaRedactionThresholdBytes = 1024;
+
         #endregion
 
         #region Protected-Members
@@ -46,6 +48,35 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Public-Members
+
+        /// <summary>
+        /// Whether inline media (base64 images, audio, and video) in recorded request bodies is replaced with a placeholder
+        /// such as <c>&lt;base64 184211 bytes image/jpeg sha256=ab12cd34&gt;</c>. Applies to <see cref="ClientBase.CallDetails"/>
+        /// and logs when bodies are captured (<see cref="Models.CallDetailCapture.Full"/>). The bytes sent are never changed.
+        /// Default: true.
+        /// </summary>
+        public bool RedactMediaInCallDetails { get; set; } = true;
+
+        /// <summary>
+        /// Inline media at or below this many decoded bytes is recorded in full even when
+        /// <see cref="RedactMediaInCallDetails"/> is true. Default: 1024.
+        /// </summary>
+        public int MediaRedactionThresholdBytes
+        {
+            get => _MediaRedactionThresholdBytes;
+            set
+            {
+                if (value < 0) throw new ArgumentOutOfRangeException(nameof(MediaRedactionThresholdBytes), "MediaRedactionThresholdBytes must be at least 0.");
+                _MediaRedactionThresholdBytes = value;
+            }
+        }
+
+        /// <summary>
+        /// Whether inline media is written with the normal JSON string escaping (which writes each <c>+</c> in base64 as
+        /// <c>\u002B</c>, about 8% larger). False writes base64 and data URLs unescaped, which is valid JSON because they
+        /// contain no characters JSON requires escaping. Text is always escaped the same way. Default: false.
+        /// </summary>
+        public bool EscapeMediaInJson { get; set; } = false;
 
         /// <summary>
         /// The endpoint URL for this client (read-only, set in constructor).
@@ -471,7 +502,12 @@ namespace PolyPrompt.Clients
         /// <returns>An HttpCallResult containing the response and body.</returns>
         protected Task<HttpCallResult> PostJsonAsync(string url, object body, CancellationToken token)
         {
-            return PostAndRecordAsync(url, _Serializer.SerializeJsonUtf8(body), JsonContentType, null, token);
+            MediaWriteContext media = new MediaWriteContext(EscapeMediaInJson ? MediaWriteMode.Escaped : MediaWriteMode.Raw, 0);
+            byte[] wire = _Serializer.SerializeJsonUtf8(body, media);
+            string? recorded = null;
+            if (media.Count > 0 && RedactMediaInCallDetails && CallDetailCapture == CallDetailCapture.Full && media.MaxByteCount > MediaRedactionThresholdBytes)
+                recorded = Encoding.UTF8.GetString(_Serializer.SerializeJsonUtf8(body, new MediaWriteContext(MediaWriteMode.Placeholder, MediaRedactionThresholdBytes)));
+            return PostAndRecordAsync(url, wire, JsonContentType, recorded, token);
         }
 
         /// <summary>
@@ -530,7 +566,8 @@ namespace PolyPrompt.Clients
         /// <returns>The streaming result.</returns>
         protected Task<StreamingHttpResult> PostStreamingJsonAsync(string url, object body, CancellationToken token)
         {
-            return PostStreamingAsync(url, _Serializer.SerializeJsonUtf8(body), JsonContentType, token);
+            MediaWriteContext media = new MediaWriteContext(EscapeMediaInJson ? MediaWriteMode.Escaped : MediaWriteMode.Raw, 0);
+            return PostStreamingAsync(url, _Serializer.SerializeJsonUtf8(body, media), JsonContentType, token);
         }
 
         private string? RecordedBody(byte[] wireBody, string? recordedBody)

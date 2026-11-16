@@ -216,12 +216,37 @@ namespace PolyPrompt.Clients
                 result.Add(new Dictionary<string, object>
                 {
                     { "role", NormalizeRole(message.Role) },
-                    { "content", message.Text ?? string.Empty }
+                    { "content", message.HasMedia ? BuildContentBlocks(message) : message.Text ?? string.Empty }
                 });
             }
 
             FlushPendingToolResults(result, ref pendingToolResults);
             return result;
+        }
+
+        /// <summary>
+        /// A user message with images as content blocks: <c>text</c>, and <c>image</c> with a base64 or URL source.
+        /// </summary>
+        private List<Dictionary<string, object>> BuildContentBlocks(ChatMessage message)
+        {
+            List<Dictionary<string, object>> blocks = new List<Dictionary<string, object>>();
+            foreach (ContentPart part in message.Content)
+            {
+                if (part.Type == ContentPartType.Text)
+                {
+                    blocks.Add(new Dictionary<string, object> { { "type", TextBlockType }, { "text", part.Text! } });
+                    continue;
+                }
+
+                if (part.Type != ContentPartType.Image) throw new ArgumentException("Anthropic accepts image parts only, not " + part.Type + ".");
+                if (part.FileReference != null) throw new ArgumentException("Anthropic does not accept provider file references here; send the bytes or a URL.");
+
+                Dictionary<string, object> source = part.Data != null
+                    ? new Dictionary<string, object> { { "type", "base64" }, { "media_type", part.MediaType! }, { "data", MediaValue.Base64(part.Data, part.MediaType!) } }
+                    : new Dictionary<string, object> { { "type", "url" }, { "url", part.Url! } };
+                blocks.Add(new Dictionary<string, object> { { "type", "image" }, { "source", source } });
+            }
+            return blocks;
         }
 
         private static void FlushPendingToolResults(List<Dictionary<string, object>> result, ref List<Dictionary<string, object>>? pendingToolResults)

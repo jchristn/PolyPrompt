@@ -12,6 +12,7 @@ namespace PolyPrompt.Clients
     /// <item><description>Supported: Chat, ToolCalling, and Generate (the same <c>generateContent</c> schema as
     /// <see cref="GeminiClient"/>, routed through the project, region, and publisher path), and Embed (<c>:predict</c>).
     /// </description></item>
+    /// <item><description>Media input: ImageInput, AudioInput, and VideoInput (<c>inlineData</c>, <c>gs://</c> URIs and YouTube links as <c>fileData</c>, and <c>videoMetadata</c> clips).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide, Models (Vertex has no per-project model listing for publisher models).</description></item>
     /// <item><description>Auth: an OAuth bearer token from <see cref="ICredentialProvider"/> (ADC or a service account),
@@ -33,9 +34,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, and Embed.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, ImageInput, AudioInput, and VideoInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.ImageInput | Capability.AudioInput | Capability.VideoInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Vertex AI";
@@ -117,6 +118,9 @@ namespace PolyPrompt.Clients
         #endregion
 
         #region Protected-Methods
+
+        /// <inheritdoc />
+        protected override string LargeMediaHint => "Put it in Cloud Storage and send ContentPart.FileReferenceOf(type, \"gs://bucket/object\", mediaType).";
 
         /// <inheritdoc />
         protected override string? ModelCatalogUrl => "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models";

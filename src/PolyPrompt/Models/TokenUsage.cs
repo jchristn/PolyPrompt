@@ -63,5 +63,10 @@ namespace PolyPrompt.Models
         /// Token generation duration in nanoseconds (Ollama only).
         /// </summary>
         public long? EvalDurationNs { get; set; }
+
+        /// <summary>
+        /// Input tokens by modality (text, image, audio, video). Null when the provider does not report the split.
+        /// </summary>
+        public ModalityTokens? InputByModality { get; set; }
     }
 }

@@ -245,13 +245,41 @@ namespace PolyPrompt.Clients
                     : string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase) || string.Equals(role, "model", StringComparison.OrdinalIgnoreCase) ? "assistant"
                     : "user";
 
-                var item = new Dictionary<string, object> { { "role", normalized }, { "content", message.Text ?? string.Empty } };
+                var item = new Dictionary<string, object> { { "role", normalized }, { "content", message.HasMedia ? BuildContent(message) : message.Text ?? string.Empty } };
                 if (TryGetTurnState(message, "cohere", out var nativeState))
                     foreach (var field in nativeState.EnumerateObject()) item[field.Name] = field.Value;
                 result.Add(item);
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// A user message with images as a v2 content array: <c>text</c> and <c>image_url</c> (a data URL or a remote URL).
+        /// </summary>
+        private static List<object> BuildContent(ChatMessage message)
+        {
+            List<object> content = new List<object>();
+            foreach (ContentPart part in message.Content)
+            {
+                if (part.Type == ContentPartType.Text)
+                {
+                    content.Add(new Dictionary<string, object> { { "type", "text" }, { "text", part.Text! } });
+                    continue;
+                }
+
+                if (part.Type != ContentPartType.Image) throw new ArgumentException("Cohere accepts image parts only, not " + part.Type + ".");
+                if (part.FileReference != null) throw new ArgumentException("Cohere does not accept provider file references; send the bytes or a URL.");
+                object url = part.Data != null ? MediaValue.DataUrl(part.Data, part.MediaType!) : part.Url!;
+                content.Add(new Dictionary<string, object> { { "type", "image_url" }, { "image_url", new Dictionary<string, object> { { "url", url } } } });
+            }
+            return content;
+        }
+
+        /// <inheritdoc />
+        protected override int InlineMediaOverhead(ContentPart part)
+        {
+            return ("data:" + part.MediaType + ";base64,").Length;
         }
 
         private ChatResult ParseChat(string responseBody, ResponseBase response)

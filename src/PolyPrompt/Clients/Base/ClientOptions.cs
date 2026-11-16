@@ -37,5 +37,29 @@ namespace PolyPrompt.Clients
         /// Default: true.
         /// </summary>
         public bool? RedactCredentials { get; init; }
+
+        /// <summary>
+        /// Whether inline media in recorded request bodies is replaced with a placeholder
+        /// (<see cref="HttpClientBase.RedactMediaInCallDetails"/>). Default: true.
+        /// </summary>
+        public bool? RedactMediaInCallDetails { get; init; }
+
+        /// <summary>
+        /// Inline media at or below this many decoded bytes is recorded in full
+        /// (<see cref="HttpClientBase.MediaRedactionThresholdBytes"/>). Default: 1024.
+        /// </summary>
+        public int? MediaRedactionThresholdBytes { get; init; }
+
+        /// <summary>
+        /// Whether inline media is written with the normal JSON string escaping instead of raw
+        /// (<see cref="HttpClientBase.EscapeMediaInJson"/>). Default: false.
+        /// </summary>
+        public bool? EscapeMediaInJson { get; init; }
+
+        /// <summary>
+        /// The most inline media one chat request may carry, in bytes as encoded on the wire
+        /// (<see cref="ProviderClientBase.MaxInlineMediaBytes"/>). Default: the provider's limit.
+        /// </summary>
+        public long? MaxInlineMediaBytes { get; init; }
     }
 }

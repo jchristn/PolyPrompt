@@ -8,6 +8,7 @@ namespace PolyPrompt.Clients
     /// <list type="bullet">
     /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v1/messages</c>, generation sent as one user turn,
     /// streaming as typed SSE events), and Models (<c>/v1/models</c>, following pagination).</description></item>
+    /// <item><description>Media input: ImageInput (<c>image</c> blocks from inline bytes or a URL).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Embed, SparseEmbed, Rerank,
     /// Classify, Decide. For embeddings with Claude, pair it with <see cref="VoyageAiClient"/>.</description></item>
     /// <item><description>Auth: required API key, sent as <c>x-api-key</c>, plus <c>anthropic-version</c> and an optional
@@ -32,9 +33,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Models, and ImageInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Models | Capability.ImageInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Anthropic";

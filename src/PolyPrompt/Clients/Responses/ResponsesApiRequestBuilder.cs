@@ -152,6 +152,38 @@ namespace PolyPrompt.Clients
             return BuildBody(BuildInput(messages), settings, stream, true, request);
         }
 
+        /// <summary>
+        /// A user message with media as Responses content items: <c>input_text</c> and <c>input_image</c> (a data URL, a
+        /// remote URL, or a <c>file_id</c>).
+        /// </summary>
+        private List<object> BuildContent(ChatMessage message)
+        {
+            List<object> content = new();
+            foreach (ContentPart part in message.Content)
+            {
+                if (part.Type == ContentPartType.Text)
+                {
+                    content.Add(new Dictionary<string, object> { ["type"] = "input_text", ["text"] = part.Text! });
+                    continue;
+                }
+
+                if (part.Type != ContentPartType.Image) throw new ArgumentException(Dialect.Name + " accepts image parts only, not " + part.Type + ".");
+                Dictionary<string, object> image = new() { ["type"] = "input_image" };
+                if (part.Data != null) image["image_url"] = MediaValue.DataUrl(part.Data, part.MediaType!);
+                else if (part.Url != null) image["image_url"] = part.Url;
+                else image["file_id"] = part.FileReference!;
+                if (part.Detail.HasValue) image["detail"] = part.Detail.Value.ToString().ToLowerInvariant();
+                content.Add(image);
+            }
+            return content;
+        }
+
+        /// <inheritdoc />
+        protected override int InlineMediaOverhead(ContentPart part)
+        {
+            return ("data:" + part.MediaType + ";base64,").Length;
+        }
+
         private List<object> BuildInput(List<ChatMessage> messages)
         {
             ResponsesApiDialect dialect = Dialect;
@@ -188,7 +220,9 @@ namespace PolyPrompt.Clients
                     continue;
                 }
                 if (message.Role is not ("system" or "developer" or "user" or "assistant")) throw new ArgumentException("Unsupported " + dialect.Name + " message role: " + message.Role);
-                if (!string.IsNullOrEmpty(message.Text) || message.ToolCalls.Count == 0)
+                if (message.HasMedia)
+                    input.Add(new Dictionary<string, object> { ["role"] = message.Role, ["content"] = BuildContent(message) });
+                else if (!string.IsNullOrEmpty(message.Text) || message.ToolCalls.Count == 0)
                     input.Add(new Dictionary<string, object> { ["role"] = message.Role, ["content"] = message.Text ?? "" });
                 foreach (ToolCall call in message.ToolCalls)
                 {

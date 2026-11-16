@@ -9,6 +9,7 @@ namespace PolyPrompt.Clients
     /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
     /// (<c>/v2/embed</c>), Rerank (<c>/v2/rerank</c>), Classify (<c>/v1/classify</c>), and Models
     /// (<c>/v1/models</c>).</description></item>
+    /// <item><description>Media input: ImageInput (v2 chat <c>image_url</c>, for vision models such as Command A Vision).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed,
     /// Decide.</description></item>
     /// <item><description>Auth: required API key, sent as a bearer token.</description></item>
@@ -22,9 +23,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, Models, and ImageInput.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Classify | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Classify | Capability.Models | Capability.ImageInput;
 
         /// <inheritdoc />
         public override string ProviderName => "Cohere";

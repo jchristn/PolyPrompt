@@ -24,6 +24,24 @@ namespace PolyPrompt.Clients
         /// </summary>
         public bool SendDefaultMaxTokens { get; set; } = true;
 
+        /// <summary>
+        /// The most inline media (<see cref="ContentPart.Data"/>) one chat request may carry, counted as encoded on the
+        /// wire (base64, plus the data URL prefix where the provider uses one). A larger request throws
+        /// <see cref="ArgumentException"/> before it is sent, naming the provider's route for large media. Default: the
+        /// provider's documented request limit, or 20 MB where none is documented.
+        /// </summary>
+        public long MaxInlineMediaBytes
+        {
+            get => _MaxInlineMediaBytes ?? DefaultMaxInlineMediaBytes;
+            set
+            {
+                if (value <= 0) throw new ArgumentOutOfRangeException(nameof(MaxInlineMediaBytes), "MaxInlineMediaBytes must be greater than zero.");
+                _MaxInlineMediaBytes = value;
+            }
+        }
+
+        private long? _MaxInlineMediaBytes = null;
+
         #endregion
 
         #region Completion-Methods
@@ -266,6 +284,28 @@ namespace PolyPrompt.Clients
         protected virtual Task<GenerationStreamingResponse> GenerateStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
         {
             throw NotSupported(Capability.Generate, "GenerateStreamingAsync");
+        }
+
+        /// <summary>
+        /// The provider's default for <see cref="MaxInlineMediaBytes"/>. Default: 20 MB.
+        /// </summary>
+        protected virtual long DefaultMaxInlineMediaBytes => 20L * 1024 * 1024;
+
+        /// <summary>
+        /// The provider's route for media too large to send inline, used in the size error. Default: send it by URL or
+        /// as a provider file reference.
+        /// </summary>
+        protected virtual string LargeMediaHint => "Send it by URL (ContentPart.ImageUrl or VideoUrl) or as a provider file (ContentPart.FileReferenceOf) instead.";
+
+        /// <summary>
+        /// Extra characters the provider's wire form adds to an inline part beyond its base64 (for example a data URL
+        /// prefix). Default: 0.
+        /// </summary>
+        /// <param name="part">An inline part.</param>
+        /// <returns>The extra length.</returns>
+        protected virtual int InlineMediaOverhead(ContentPart part)
+        {
+            return 0;
         }
 
         /// <summary>
@@ -547,6 +587,24 @@ namespace PolyPrompt.Clients
             }
         }
 
+        private void CheckInlineMediaSize(List<ChatMessage> messages)
+        {
+            long total = 0;
+            foreach (ChatMessage message in messages)
+            {
+                foreach (ContentPart part in message.Content)
+                {
+                    if (part.Data == null) continue;
+                    long encoded = 4L * ((part.Data.Length + 2) / 3);
+                    if (EscapeMediaInJson) encoded += 5L * Convert.ToBase64String(part.Data).Count(c => c == '+');
+                    total += encoded + InlineMediaOverhead(part);
+                }
+            }
+
+            if (total > MaxInlineMediaBytes)
+                throw new ArgumentException(ProviderName + " accepts at most " + MaxInlineMediaBytes + " bytes of inline media per request (MaxInlineMediaBytes); this request carries " + total + ". " + LargeMediaHint);
+        }
+
         private ResolvedCompletion ResolveChat(ChatRequest request, out List<ChatMessage> messages)
         {
             ArgumentNullException.ThrowIfNull(request);
@@ -572,6 +630,7 @@ namespace PolyPrompt.Clients
                 }
             }
 
+            CheckInlineMediaSize(request.Messages);
             ResolvedCompletion settings = Resolve(request.Options);
 
             bool hasSystem = request.Messages.Any(m => string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase));

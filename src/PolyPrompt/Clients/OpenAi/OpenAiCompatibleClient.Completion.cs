@@ -147,7 +147,7 @@ namespace PolyPrompt.Clients
                 Dictionary<string, object> item = new Dictionary<string, object>
                 {
                     { "role", NormalizeRole(message.Role) },
-                    { "content", message.Text ?? string.Empty }
+                    { "content", message.HasMedia ? BuildContent(message) : message.Text ?? string.Empty }
                 };
 
                 if (!string.IsNullOrEmpty(message.ToolCallId))
@@ -167,6 +167,66 @@ namespace PolyPrompt.Clients
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// A user message with media as a Chat Completions content array: <c>text</c>, <c>image_url</c>,
+        /// <c>input_audio</c>, and <c>video_url</c> (the vLLM convention).
+        /// </summary>
+        private List<object> BuildContent(ChatMessage message)
+        {
+            List<object> content = new List<object>();
+            foreach (ContentPart part in message.Content)
+            {
+                if (part.FileReference != null)
+                    throw new ArgumentException(ProviderName + " does not accept provider file references; send the bytes or a URL.");
+
+                switch (part.Type)
+                {
+                    case ContentPartType.Text:
+                        content.Add(new Dictionary<string, object> { { "type", "text" }, { "text", part.Text! } });
+                        break;
+                    case ContentPartType.Image:
+                        if (part.Data != null && ImageUrlStyle == ImageUrlStyle.RemoteUrlOnly)
+                            throw new ArgumentException(ProviderName + " is set to ImageUrlStyle.RemoteUrlOnly; send images by URL.");
+                        Dictionary<string, object> image = new Dictionary<string, object> { { "url", part.Data != null ? MediaValue.DataUrl(part.Data, part.MediaType!) : part.Url! } };
+                        if (part.Detail.HasValue) image["detail"] = part.Detail.Value.ToString().ToLowerInvariant();
+                        content.Add(new Dictionary<string, object> { { "type", "image_url" }, { "image_url", image } });
+                        break;
+                    case ContentPartType.Audio:
+                        if (part.Data == null) throw new ArgumentException(ProviderName + " accepts audio as inline bytes only.");
+                        content.Add(new Dictionary<string, object>
+                        {
+                            { "type", "input_audio" },
+                            { "input_audio", new Dictionary<string, object> { { "data", MediaValue.Base64(part.Data, part.MediaType!) }, { "format", AudioFormat(part.MediaType!) } } }
+                        });
+                        break;
+                    case ContentPartType.Video:
+                        object url = part.Data != null ? MediaValue.DataUrl(part.Data, part.MediaType!) : part.Url!;
+                        content.Add(new Dictionary<string, object> { { "type", "video_url" }, { "video_url", new Dictionary<string, object> { { "url", url } } } });
+                        break;
+                }
+            }
+            return content;
+        }
+
+        private static string AudioFormat(string mediaType)
+        {
+            string subtype = mediaType.Substring(mediaType.IndexOf('/') + 1).ToLowerInvariant();
+            return subtype switch
+            {
+                "mpeg" or "mp3" => "mp3",
+                "wav" or "x-wav" or "wave" or "vnd.wave" => "wav",
+                "x-flac" => "flac",
+                "mp4" or "x-m4a" => "m4a",
+                _ => subtype
+            };
+        }
+
+        /// <inheritdoc />
+        protected override int InlineMediaOverhead(ContentPart part)
+        {
+            return part.Type == ContentPartType.Audio ? 0 : ("data:" + part.MediaType + ";base64,").Length;
         }
 
         private static List<Dictionary<string, object>> BuildTools(List<ToolDefinition> tools)
@@ -378,7 +438,13 @@ namespace PolyPrompt.Clients
             usage.TotalTokens = TryGetInt(usageObj, "total_tokens");
 
             Dictionary<string, object>? promptDetails = ParseNestedObject(usageObj, "prompt_tokens_details");
-            if (promptDetails != null) usage.CachedPromptTokens = TryGetInt(promptDetails, "cached_tokens");
+            if (promptDetails != null)
+            {
+                usage.CachedPromptTokens = TryGetInt(promptDetails, "cached_tokens");
+                int? audio = TryGetInt(promptDetails, "audio_tokens");
+                int? image = TryGetInt(promptDetails, "image_tokens");
+                if (audio.HasValue || image.HasValue) usage.InputByModality = new ModalityTokens { Audio = audio, Image = image };
+            }
 
             Dictionary<string, object>? completionDetails = ParseNestedObject(usageObj, "completion_tokens_details");
             if (completionDetails != null) usage.ReasoningTokens = TryGetInt(completionDetails, "reasoning_tokens");
