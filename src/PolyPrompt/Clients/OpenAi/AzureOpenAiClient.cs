@@ -10,7 +10,7 @@ namespace PolyPrompt.Clients
     /// <c>api-version</c>. Chat, tool chat, and generation use the Responses API with the deployment name sent as
     /// <c>model</c>; request options and behavior match <see cref="OpenAiClient"/>.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (<c>/openai/v1/responses</c>), Embed
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/openai/v1/responses</c>), Embed
     /// (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
     /// <see cref="ResponsesApiClientBase"/> and <see cref="CancelResponseAsync"/>.</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -41,9 +41,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "Azure OpenAI";

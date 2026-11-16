@@ -1,6 +1,6 @@
 # Streaming in PolyPrompt 4.0
 
-`ChatStreamingResponse`, `ToolChatStreamingResponse`, `GenerationStreamingResponse`, and the native `ResponsesApiStreamingResponse` (OpenAI, Azure OpenAI, and xAI) derive from `StreamingResponseBase` and implement `IStreamingResponse`. Their lifecycle is the same on every provider client and works without telemetry listeners. Every streaming operation is declared on `ProviderClientBase`; a client without the capability throws `CapabilityNotSupportedException` before opening a stream.
+`ChatStreamingResponse`, `GenerationStreamingResponse`, and the native `ResponsesApiStreamingResponse` (OpenAI, Azure OpenAI, and xAI) derive from `StreamingResponseBase` and implement `IStreamingResponse`. Their lifecycle is the same on every provider client and works without telemetry listeners. Every streaming operation is declared on `ProviderClientBase`; a client without the capability throws `CapabilityNotSupportedException` before opening a stream.
 
 ## State contract
 
@@ -28,14 +28,14 @@ using PolyPrompt.Models;
 
 CancellationToken token = CancellationToken.None;
 using OpenAiClient client = new OpenAiClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
-ToolChatRequest request = new ToolChatRequest
+ChatRequest request = new ChatRequest
 {
     Messages = { ChatMessage.User("List the files in the repository.") },
     Tools = { ToolDefinition.Function("list_directory", "List a directory.", new Dictionary<string, object> { { "type", "object" } }) }
 };
 
-ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token);
-await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token))
+ChatStreamingResponse response = await client.ChatStreamingAsync(request, token);
+await foreach (ChatStreamingChunk chunk in response.Chunks.WithCancellation(token))
 {
     // Display partial text or thinking here. Do not execute deltas.
 }
@@ -140,7 +140,7 @@ The seven agent harness clients (`ClaudeCodeClient`, `CodexClient`, `GeminiCliCl
 
 - Depending on the CLI, a `TextDelta` is a partial delta (Claude Code with `--include-partial-messages`, Cursor with `--stream-partial-output`, Pi `text_delta`) or a whole assistant message (Codex `agent_message` items). Boundaries change between runs, models, and CLI versions; never parse meaning from them.
 - Several assistant messages can appear in one run (for example a preamble before a tool call). `Completed.Text` and `CliAgentResult.Text` carry the harness's final response, which is not necessarily the concatenation of every `TextDelta`.
-- Tool events are observations. The harness has already executed (or been denied) the tool; PolyPrompt never executes harness tools and never returns them for the caller to run. Do not combine harness events with `ToolChatAsync` loops.
+- Tool events are observations. The harness has already executed (or been denied) the tool; PolyPrompt never executes harness tools and never returns them for the caller to run. Do not combine harness events with `ChatAsync` loops.
 - Usage and cost arrive once, on the terminal event, exactly as the harness reported them; they stay null when the harness does not report them.
 
 Lifecycle rules:

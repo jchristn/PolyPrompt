@@ -107,6 +107,27 @@ namespace PolyPrompt.Helpers
         }
 
         /// <summary>
+        /// Serialize an object to compact JSON as UTF-8 bytes, without an intermediate string. The bytes are identical to
+        /// <c>Encoding.UTF8.GetBytes(SerializeJson(obj, false))</c>.
+        /// </summary>
+        /// <param name="obj">Object to serialize. A null object serializes to the JSON literal null.</param>
+        /// <returns>UTF-8 JSON bytes.</returns>
+        /// <exception cref="NotSupportedException">Thrown when the graph contains a type with no available metadata
+        /// (see the remarks on <see cref="Serializer"/>).</exception>
+        /// <exception cref="JsonException">Thrown when the graph is deeper than <see cref="MaxDepth"/>.</exception>
+        public byte[] SerializeJsonUtf8(object? obj)
+        {
+            JsonSerializerOptions options = Volatile.Read(ref _Compact);
+            ArrayBufferWriter<byte> buffer = new ArrayBufferWriter<byte>();
+            using (Utf8JsonWriter writer = new Utf8JsonWriter(buffer, WriterOptions(options)))
+            {
+                WriteValue(writer, obj, options, 0);
+            }
+
+            return buffer.WrittenSpan.ToArray();
+        }
+
+        /// <summary>
         /// Serialize a value to JSON with explicit type metadata, for example from a source-generated
         /// <see cref="JsonSerializerContext"/>. The metadata's own options control naming and null handling.
         /// </summary>

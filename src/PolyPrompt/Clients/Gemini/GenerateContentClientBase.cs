@@ -60,36 +60,20 @@ namespace PolyPrompt.Clients
         protected abstract string BuildModelUrl(string model);
 
         /// <inheritdoc />
-        protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+        protected override Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
+            Dictionary<string, object> body = BuildChatBody(request, messages, settings);
             ChatResponse response = new ChatResponse { Model = settings.Model };
-            return ExecutePostAsync(response, "chat", ContentUrl(settings.Model, false), BuildPromptBody(prompt, settings, true), ParseChat, token);
+            return ExecutePostAsync(response, "chat", ContentUrl(settings.Model, false), body, ParseChat, token);
         }
 
         /// <inheritdoc />
-        protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+        protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
+            Dictionary<string, object> body = BuildChatBody(request, messages, settings);
             ChatStreamingResponse response = new ChatStreamingResponse { Model = settings.Model };
-            return ExecuteStreamingAsync(response, "chat", ContentUrl(settings.Model, true), BuildPromptBody(prompt, settings, true),
+            return ExecuteStreamingAsync(response, "chat", ContentUrl(settings.Model, true), body,
                 (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
-                token);
-        }
-
-        /// <inheritdoc />
-        protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-        {
-            Dictionary<string, object> body = BuildToolChatBody(request, messages, settings);
-            ToolChatResponse response = new ToolChatResponse { Model = settings.Model };
-            return ExecutePostAsync(response, "tool chat", ContentUrl(settings.Model, false), body, ParseToolChat, token);
-        }
-
-        /// <inheritdoc />
-        protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-        {
-            Dictionary<string, object> body = BuildToolChatBody(request, messages, settings);
-            ToolChatStreamingResponse response = new ToolChatStreamingResponse { Model = settings.Model };
-            return ExecuteStreamingAsync(response, "tool chat", ContentUrl(settings.Model, true), body,
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream),
                 token);
         }
 
@@ -183,7 +167,7 @@ namespace PolyPrompt.Clients
             };
         }
 
-        private Dictionary<string, object> BuildToolChatBody(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings)
+        private Dictionary<string, object> BuildChatBody(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings)
         {
             Dictionary<string, object> body = new Dictionary<string, object>
             {
@@ -255,9 +239,9 @@ namespace PolyPrompt.Clients
 
             foreach (ChatMessage message in messages)
             {
-                if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(message.Content))
+                if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(message.Text))
                 {
-                    parts.Add(new Dictionary<string, object> { { "text", message.Content } });
+                    parts.Add(new Dictionary<string, object> { { "text", message.Text } });
                 }
             }
 
@@ -273,9 +257,9 @@ namespace PolyPrompt.Clients
 
             if (message.ToolCalls != null && message.ToolCalls.Count > 0)
             {
-                if (!string.IsNullOrEmpty(message.Content))
+                if (!string.IsNullOrEmpty(message.Text))
                 {
-                    parts.Add(new Dictionary<string, object> { { "text", message.Content } });
+                    parts.Add(new Dictionary<string, object> { { "text", message.Text } });
                 }
 
                 // Gemini 3 validates the thought signature on replayed function calls. History that did not come
@@ -313,7 +297,7 @@ namespace PolyPrompt.Clients
                 Dictionary<string, object> functionResponse = new Dictionary<string, object>
                 {
                     { "name", ResolveToolResultName(message, messageIndex, callNames) },
-                    { "response", ToFunctionResponse(message.Content) }
+                    { "response", ToFunctionResponse(message.Text) }
                 };
 
                 if (IsProviderCallId(message.ToolCallId)) functionResponse["id"] = message.ToolCallId!;
@@ -322,7 +306,7 @@ namespace PolyPrompt.Clients
                 return parts;
             }
 
-            parts.Add(new Dictionary<string, object> { { "text", message.Content ?? string.Empty } });
+            parts.Add(new Dictionary<string, object> { { "text", message.Text ?? string.Empty } });
             return parts;
         }
 
@@ -501,19 +485,6 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private void ParseChat(string responseBody, ChatResponse response)
-        {
-            Dictionary<string, object>? responseObj = TryDeserializeObject(responseBody);
-            List<Dictionary<string, object>>? parts = ReadParts(responseObj, response, out _);
-            if (parts == null) return;
-
-            SplitText(parts, false, out string? text, out string? reasoning);
-            response.Text = text;
-            response.Reasoning = reasoning;
-            response.Usage = ParseUsage(responseObj!);
-            if (responseObj!.ContainsKey("modelVersion")) response.Model = responseObj["modelVersion"]?.ToString() ?? response.Model;
-        }
-
         private void ParseGenerate(string responseBody, GenerationResponse response)
         {
             Dictionary<string, object>? responseObj = TryDeserializeObject(responseBody);
@@ -524,7 +495,7 @@ namespace PolyPrompt.Clients
             response.Text = text;
         }
 
-        private void ParseToolChat(string responseBody, ToolChatResponse response)
+        private void ParseChat(string responseBody, ChatResponse response)
         {
             Dictionary<string, object>? responseObj = TryDeserializeObject(responseBody);
             if (responseObj != null)
@@ -643,42 +614,14 @@ namespace PolyPrompt.Clients
             return content == null ? null : ParseNestedList(content, "parts");
         }
 
-        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ResponseBase result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
-        {
-            await foreach (Dictionary<string, object> chunk in ReadEvents(response, token, result).ConfigureAwait(false))
-            {
-                ChatStreamingChunk streamChunk = new ChatStreamingChunk();
-                streamChunk.ResponseId = chunk.ContainsKey("responseId") ? chunk["responseId"]?.ToString() : null;
-                streamChunk.Model = chunk.ContainsKey("modelVersion") ? chunk["modelVersion"]?.ToString() : null;
-                streamChunk.CreatedUtc = DateTime.UtcNow;
-
-                List<Dictionary<string, object>>? parts = ReadChunkParts(chunk, out string? finishReason);
-                if (finishReason != null)
-                {
-                    streamChunk.FinishReason = finishReason;
-                    streamChunk.Done = true;
-                }
-
-                if (parts != null)
-                {
-                    SplitText(parts, true, out string? text, out string? reasoning);
-                    streamChunk.Text = text;
-                    streamChunk.ReasoningText = reasoning;
-                }
-
-                streamChunk.Usage = ParseUsage(chunk);
-                yield return streamChunk;
-            }
-        }
-
-        private async IAsyncEnumerable<ToolChatStreamingChunk> ReadToolChatChunks(ToolChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
+        private async IAsyncEnumerable<ChatStreamingChunk> ReadChatChunks(ChatStreamingResponse result, HttpResponseMessage response, [EnumeratorCancellation] CancellationToken token)
         {
             var nativeParts = new List<Dictionary<string, object>>();
             int nextToolCallIndex = 0;
 
             await foreach (Dictionary<string, object> chunk in ReadEvents(response, token, result).ConfigureAwait(false))
             {
-                ToolChatStreamingChunk streamChunk = new ToolChatStreamingChunk();
+                ChatStreamingChunk streamChunk = new ChatStreamingChunk();
                 streamChunk.ResponseId = chunk.ContainsKey("responseId") ? chunk["responseId"]?.ToString() : null;
                 streamChunk.Model = chunk.ContainsKey("modelVersion") ? chunk["modelVersion"]?.ToString() : null;
                 streamChunk.CreatedUtc = DateTime.UtcNow;

@@ -49,6 +49,7 @@ namespace Test.Shared
             cases.AddRange(LocalPiAgentCases.Create(SuiteId));
             cases.AddRange(LocalOpenCodeAgentCases.Create(SuiteId));
             cases.AddRange(LocalWireIdentityCases.Create(SuiteId));
+            cases.AddRange(LocalChatModelCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 
@@ -532,11 +533,11 @@ namespace Test.Shared
             SharedAssert.True(chat.Success, "OpenAI-compatible ChatAsync should accept a /v1 endpoint base.");
             SharedAssert.Equal("pong", chat.Text, "OpenAI-compatible ChatAsync should receive the local response.");
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
-            SharedAssert.True(stream.Success, "OpenAI-compatible ToolChatStreamingAsync should accept a /v1 endpoint base.");
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            SharedAssert.True(stream.Success, "OpenAI-compatible ChatStreamingAsync should accept a /v1 endpoint base.");
 
             int toolDeltaCount = 0;
-            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
             {
                 toolDeltaCount += chunk.ToolCallDeltas.Count;
             }
@@ -546,7 +547,7 @@ namespace Test.Shared
 
             List<string> paths = server.RequestPaths;
             SharedAssert.Equal("/v1/chat/completions", paths[0], "OpenAI-compatible ChatAsync should not double-prefix /v1.");
-            SharedAssert.Equal("/v1/chat/completions", paths[1], "OpenAI-compatible ToolChatStreamingAsync should not double-prefix /v1.");
+            SharedAssert.Equal("/v1/chat/completions", paths[1], "OpenAI-compatible ChatStreamingAsync should not double-prefix /v1.");
             SharedAssert.False(paths.Any(path => path.Contains("/v1/v1/", StringComparison.OrdinalIgnoreCase)), "OpenAI-compatible versioned endpoint requests should never contain /v1/v1/.");
         }
 
@@ -554,19 +555,19 @@ namespace Test.Shared
         {
             token.ThrowIfCancellationRequested();
 
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             (request.Options ??= new CompletionOptions()).MaxTokens = -10;
             (request.Options ??= new CompletionOptions()).Temperature = 9;
             (request.Options ??= new CompletionOptions()).TopP = -1;
 
-            SharedAssert.Equal(1, request.Options!.MaxTokens, "ToolChatRequest MaxTokens should clamp to minimum.");
-            SharedAssert.Equal(2.0, request.Options!.Temperature, "ToolChatRequest Temperature should clamp to maximum.");
-            SharedAssert.Equal(0.0, request.Options!.TopP, "ToolChatRequest TopP should clamp to minimum.");
+            SharedAssert.Equal(1, request.Options!.MaxTokens, "ChatRequest MaxTokens should clamp to minimum.");
+            SharedAssert.Equal(2.0, request.Options!.Temperature, "ChatRequest Temperature should clamp to maximum.");
+            SharedAssert.Equal(0.0, request.Options!.TopP, "ChatRequest TopP should clamp to minimum.");
 
             await SharedAssert.ThrowsAsync<ArgumentNullException>(
                 () =>
                 {
-                    ChatMessage.User(null!);
+                    ChatMessage.User((string)null!);
                     return Task.CompletedTask;
                 },
                 "ChatMessage.User should reject null content.").ConfigureAwait(false);
@@ -590,7 +591,7 @@ namespace Test.Shared
             SharedAssert.NotNull(args, "ToolCall arguments should deserialize.");
             SharedAssert.Equal("Seattle", args!["city"], "ToolCall argument city should deserialize.");
 
-            ToolChatResponse response = new ToolChatResponse();
+            ChatResponse response = new ChatResponse();
             response.ToolCalls.Add(toolCall);
             ChatMessage assistant = response.ToAssistantMessage();
             SharedAssert.Equal("assistant", assistant.Role, "Tool response should convert to assistant message.");
@@ -600,8 +601,8 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = CreateClient(server);
 
             await SharedAssert.ThrowsAsync<ArgumentException>(
-                () => client.ToolChatAsync(new ToolChatRequest(), token),
-                "ToolChatAsync should reject empty message lists.").ConfigureAwait(false);
+                () => client.ChatAsync(new ChatRequest(), token),
+                "ChatAsync should reject empty message lists.").ConfigureAwait(false);
         }
 
         private static async Task RunToolChatStreamingModelsAndValidationAsync(CancellationToken token)
@@ -615,29 +616,29 @@ namespace Test.Shared
                 ArgumentsJson = "{\"city\":\"Seattle\",\"unit\":\"fahrenheit\"}"
             };
 
-            ToolChatStreamingResponse response = new ToolChatStreamingResponse();
+            ChatStreamingResponse response = new ChatStreamingResponse();
             response.ToolCalls.Add(toolCall);
             ChatMessage assistant = response.ToAssistantMessage();
             SharedAssert.Equal("assistant", assistant.Role, "Streaming tool response should convert to assistant message.");
             SharedAssert.Equal(1, assistant.ToolCalls.Count, "Streaming assistant message should include tool calls.");
 
-            ToolChatStreamingResponse textResponse = new ToolChatStreamingResponse();
+            ChatStreamingResponse textResponse = new ChatStreamingResponse();
             textResponse.Text = "hello";
             ChatMessage textAssistant = textResponse.ToAssistantMessage();
-            SharedAssert.Equal("hello", textAssistant.Content, "Streaming text response should convert to assistant text message.");
+            SharedAssert.Equal("hello", textAssistant.Text, "Streaming text response should convert to assistant text message.");
 
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
             await SharedAssert.ThrowsAsync<ArgumentException>(
-                () => client.ToolChatStreamingAsync(new ToolChatRequest(), token),
-                "ToolChatStreamingAsync should reject empty message lists.").ConfigureAwait(false);
+                () => client.ChatStreamingAsync(new ChatRequest(), token),
+                "ChatStreamingAsync should reject empty message lists.").ConfigureAwait(false);
 
             using OpenAiCompatibleClient missingClient = new OpenAiCompatibleClient(server.Endpoint + "/missing", "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
             missingClient.Defaults.Completion.Model = "test-model";
             missingClient.TimeoutMs = 500;
 
-            ToolChatStreamingResponse failed = await missingClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse failed = await missingClient.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.False(failed.Success, "Streaming tool chat HTTP errors should produce unsuccessful responses.");
             SharedAssert.True(failed.StatusCode == 404, "Streaming tool chat HTTP errors should preserve status code.");
             SharedAssert.NotEmpty(failed.Error, "Streaming tool chat HTTP errors should surface an error message.");
@@ -779,30 +780,30 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
             using OpenAiCompatibleClient openAiClient = CreateClient(server);
-            ToolChatRequest openAiRequired = CreateWeatherToolRequest();
+            ChatRequest openAiRequired = CreateWeatherToolRequest();
             openAiRequired.ToolChoice = "required";
-            ToolChatResponse openAiRequiredResponse = await openAiClient.ToolChatAsync(openAiRequired, token).ConfigureAwait(false);
+            ChatResponse openAiRequiredResponse = await openAiClient.ChatAsync(openAiRequired, token).ConfigureAwait(false);
             SharedAssert.True(openAiRequiredResponse.Success, "OpenAI-compatible required tool-choice request should succeed.");
 
-            ToolChatRequest openAiNone = CreateWeatherToolRequest();
+            ChatRequest openAiNone = CreateWeatherToolRequest();
             openAiNone.ToolChoice = "none";
-            ToolChatResponse openAiNoneResponse = await openAiClient.ToolChatAsync(openAiNone, token).ConfigureAwait(false);
+            ChatResponse openAiNoneResponse = await openAiClient.ChatAsync(openAiNone, token).ConfigureAwait(false);
             SharedAssert.True(openAiNoneResponse.Success, "OpenAI-compatible none tool-choice request should succeed.");
 
             using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
             ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
-            ToolChatRequest ollamaNone = CreateWeatherToolRequest();
+            ChatRequest ollamaNone = CreateWeatherToolRequest();
             ollamaNone.ToolChoice = "none";
-            ToolChatResponse ollamaNoneResponse = await ollamaClient.ToolChatAsync(ollamaNone, token).ConfigureAwait(false);
+            ChatResponse ollamaNoneResponse = await ollamaClient.ChatAsync(ollamaNone, token).ConfigureAwait(false);
             SharedAssert.True(ollamaNoneResponse.Success, "Ollama none tool-choice request should succeed.");
 
             using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint);
             geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
-            ToolChatRequest geminiRequired = CreateWeatherToolRequest();
+            ChatRequest geminiRequired = CreateWeatherToolRequest();
             geminiRequired.ToolChoice = "required";
-            ToolChatResponse geminiRequiredResponse = await geminiClient.ToolChatAsync(geminiRequired, token).ConfigureAwait(false);
+            ChatResponse geminiRequiredResponse = await geminiClient.ChatAsync(geminiRequired, token).ConfigureAwait(false);
             SharedAssert.True(geminiRequiredResponse.Success, "Gemini required tool-choice request should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -824,25 +825,25 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
             using OpenAiCompatibleClient openAiClient = CreateClient(server);
-            ToolChatRequest openAiRequest = CreateWeatherToolRequest();
+            ChatRequest openAiRequest = CreateWeatherToolRequest();
             (openAiRequest.Options ??= new CompletionOptions()).Model = "override-model";
-            ToolChatResponse openAiResponse = await openAiClient.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
+            ChatResponse openAiResponse = await openAiClient.ChatAsync(openAiRequest, token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat model override should succeed.");
 
             using OllamaClient ollamaClient = new OllamaClient(server.Endpoint, "test-key");
             ollamaClient.Defaults.Completion.Model = "test-model";
             ollamaClient.TimeoutMs = 1000;
-            ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
+            ChatRequest ollamaRequest = CreateWeatherToolRequest();
             (ollamaRequest.Options ??= new CompletionOptions()).Model = "override-model";
-            ToolChatResponse ollamaResponse = await ollamaClient.ToolChatAsync(ollamaRequest, token).ConfigureAwait(false);
+            ChatResponse ollamaResponse = await ollamaClient.ChatAsync(ollamaRequest, token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama tool chat model override should succeed.");
 
             using GeminiClient geminiClient = new GeminiClient("test-key", server.Endpoint);
             geminiClient.Defaults.Completion.Model = "test-model";
             geminiClient.TimeoutMs = 1000;
-            ToolChatRequest geminiRequest = CreateWeatherToolRequest();
+            ChatRequest geminiRequest = CreateWeatherToolRequest();
             (geminiRequest.Options ??= new CompletionOptions()).Model = "override-model";
-            ToolChatResponse geminiResponse = await geminiClient.ToolChatAsync(geminiRequest, token).ConfigureAwait(false);
+            ChatResponse geminiResponse = await geminiClient.ChatAsync(geminiRequest, token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Success, "Gemini tool chat model override should succeed.");
 
             LocalOpenAiChatRequest openAiRecorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -861,7 +862,7 @@ namespace Test.Shared
             openAiClient.TimeoutMs = 1000;
             ChatStreamingResponse openAiChat = await openAiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse openAiGeneration = await openAiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
-            ToolChatStreamingResponse openAiTool = await openAiClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse openAiTool = await openAiClient.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
 
             SharedAssert.False(openAiChat.Success, "OpenAI-compatible streaming chat should surface HTTP startup errors.");
             SharedAssert.False(openAiGeneration.Success, "OpenAI-compatible streaming generation should surface HTTP startup errors.");
@@ -875,7 +876,7 @@ namespace Test.Shared
             ollamaClient.TimeoutMs = 1000;
             ChatStreamingResponse ollamaChat = await ollamaClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse ollamaGeneration = await ollamaClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
-            ToolChatStreamingResponse ollamaTool = await ollamaClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse ollamaTool = await ollamaClient.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
 
             SharedAssert.False(ollamaChat.Success, "Ollama streaming chat should surface HTTP startup errors.");
             SharedAssert.False(ollamaGeneration.Success, "Ollama streaming generation should surface HTTP startup errors.");
@@ -889,7 +890,7 @@ namespace Test.Shared
             geminiClient.TimeoutMs = 1000;
             ChatStreamingResponse geminiChat = await geminiClient.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse geminiGeneration = await geminiClient.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
-            ToolChatStreamingResponse geminiTool = await geminiClient.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse geminiTool = await geminiClient.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
 
             SharedAssert.False(geminiChat.Success, "Gemini streaming chat should surface HTTP startup errors.");
             SharedAssert.False(geminiGeneration.Success, "Gemini streaming generation should surface HTTP startup errors.");
@@ -904,10 +905,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatResponse first = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "OpenAI-compatible ToolChatAsync should succeed.");
+            SharedAssert.True(first.Success, "OpenAI-compatible ChatAsync should succeed.");
             SharedAssert.Equal("tool_calls", first.FinishReason, "OpenAI-compatible tool response should expose finish reason.");
             SharedAssert.Equal(1, first.ToolCalls.Count, "OpenAI-compatible response should contain one tool call.");
             SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "OpenAI-compatible response should parse tool call name.");
@@ -926,9 +927,9 @@ namespace Test.Shared
             request.ToolChoice = "none";
             request.Messages.Add(ChatMessage.ToolResult(first.ToolCalls[0].Id, first.ToolCalls[0].Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "OpenAI-compatible final ToolChatAsync should succeed.");
+            SharedAssert.True(final.Success, "OpenAI-compatible final ChatAsync should succeed.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "OpenAI-compatible final response should parse text.");
 
             List<string> bodies = server.RequestBodies;
@@ -948,13 +949,13 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatStreamingResponse first = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "OpenAI-compatible ToolChatStreamingAsync should start.");
+            SharedAssert.True(first.Success, "OpenAI-compatible ChatStreamingAsync should start.");
             SharedAssert.Equal(200, first.StatusCode, "OpenAI-compatible streaming tool chat should return HTTP 200.");
 
-            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
 
             SharedAssert.True(firstChunks.Count > 0, "OpenAI-compatible streaming tool chat should receive chunks.");
             SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "OpenAI-compatible streaming tool chat should emit text chunks.");
@@ -989,10 +990,10 @@ namespace Test.Shared
                 request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
             }
 
-            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+            ChatStreamingResponse final = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "OpenAI-compatible final ToolChatStreamingAsync should start.");
+            SharedAssert.True(final.Success, "OpenAI-compatible final ChatStreamingAsync should start.");
             SharedAssert.True(finalChunks.Count > 0, "OpenAI-compatible final streaming tool chat should receive chunks.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "OpenAI-compatible final streaming response should accumulate text.");
             SharedAssert.Equal(0, final.ToolCalls.Count, "OpenAI-compatible final streaming response should not accumulate tool calls.");
@@ -1024,10 +1025,10 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatResponse first = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Ollama ToolChatAsync should succeed.");
+            SharedAssert.True(first.Success, "Ollama ChatAsync should succeed.");
             SharedAssert.Equal("tool_calls", first.FinishReason, "Ollama tool response should expose done reason.");
             SharedAssert.Equal(1, first.ToolCalls.Count, "Ollama response should contain one tool call.");
             SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Ollama response should parse tool call name.");
@@ -1046,9 +1047,9 @@ namespace Test.Shared
             request.ToolChoice = "none";
             request.Messages.Add(ChatMessage.ToolResult(first.ToolCalls[0].Id, first.ToolCalls[0].Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Ollama final ToolChatAsync should succeed.");
+            SharedAssert.True(final.Success, "Ollama final ChatAsync should succeed.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Ollama final response should parse text.");
 
             List<string> bodies = server.RequestBodies;
@@ -1067,13 +1068,13 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatStreamingResponse first = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Ollama ToolChatStreamingAsync should start.");
+            SharedAssert.True(first.Success, "Ollama ChatStreamingAsync should start.");
             SharedAssert.Equal(200, first.StatusCode, "Ollama streaming tool chat should return HTTP 200.");
 
-            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
 
             SharedAssert.True(firstChunks.Count > 0, "Ollama streaming tool chat should receive chunks.");
             SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Ollama streaming tool chat should emit text chunks.");
@@ -1107,10 +1108,10 @@ namespace Test.Shared
                 request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
             }
 
-            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+            ChatStreamingResponse final = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Ollama final ToolChatStreamingAsync should start.");
+            SharedAssert.True(final.Success, "Ollama final ChatStreamingAsync should start.");
             SharedAssert.True(finalChunks.Count > 0, "Ollama final streaming tool chat should receive chunks.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Ollama final streaming response should accumulate text.");
             SharedAssert.Equal(0, final.ToolCalls.Count, "Ollama final streaming response should not accumulate tool calls.");
@@ -1141,10 +1142,10 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatResponse first = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Gemini ToolChatAsync should succeed.");
+            SharedAssert.True(first.Success, "Gemini ChatAsync should succeed.");
             SharedAssert.Equal(1, first.ToolCalls.Count, "Gemini response should contain one tool call.");
             SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Gemini response should parse function call name.");
             Dictionary<string, string> geminiArguments = LocalRequestParser.DeserializeStringDictionary(first.ToolCalls[0].ArgumentsJson);
@@ -1162,9 +1163,9 @@ namespace Test.Shared
             request.ToolChoice = "none";
             request.Messages.Add(ChatMessage.ToolResult(first.ToolCalls[0].Id, first.ToolCalls[0].Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Gemini final ToolChatAsync should succeed.");
+            SharedAssert.True(final.Success, "Gemini final ChatAsync should succeed.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Gemini final response should parse text.");
 
             List<string> bodies = server.RequestBodies;
@@ -1198,13 +1199,13 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatStreamingResponse first = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Gemini ToolChatStreamingAsync should start.");
+            SharedAssert.True(first.Success, "Gemini ChatStreamingAsync should start.");
             SharedAssert.Equal(200, first.StatusCode, "Gemini streaming tool chat should return HTTP 200.");
 
-            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
 
             SharedAssert.True(firstChunks.Any(), "Gemini streaming tool chat should receive chunks.");
             SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Gemini streaming tool chat should emit text chunks.");
@@ -1239,10 +1240,10 @@ namespace Test.Shared
                 request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
             }
 
-            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+            ChatStreamingResponse final = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Gemini final ToolChatStreamingAsync should start.");
+            SharedAssert.True(final.Success, "Gemini final ChatStreamingAsync should start.");
             SharedAssert.True(finalChunks.Any(), "Gemini final streaming tool chat should receive chunks.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Gemini final streaming response should accumulate text.");
             SharedAssert.Equal(0, final.ToolCalls.Count, "Gemini final streaming response should not accumulate tool calls.");
@@ -1310,9 +1311,9 @@ namespace Test.Shared
 
             for (int i = 0; i < levels.Length; i++)
             {
-                ToolChatRequest request = CreateWeatherToolRequest();
+                ChatRequest request = CreateWeatherToolRequest();
                 (request.Options ??= new CompletionOptions()).ReasoningEffort = levels[i];   // exercises the implicit ReasoningEffortLevel -> ReasoningEffort conversion
-                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, "OpenAI-compatible tool chat with reasoning effort should succeed.");
             }
 
@@ -1329,10 +1330,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -1346,8 +1347,8 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = CreateClient(server);
             client.Defaults.Completion.ReasoningEffort = ReasoningEffort.High;
 
-            ToolChatRequest request = CreateWeatherToolRequest();   // no per-request effort
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();   // no per-request effort
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI-compatible tool chat with instance-default effort should succeed.");
 
             LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -1360,9 +1361,9 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = CreateClient(server);
             client.Defaults.Completion.ReasoningEffort = ReasoningEffort.Low;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI-compatible tool chat overriding the instance default should succeed.");
 
             LocalOpenAiChatRequest recorded = DeserializeRecordedOpenAiRequest(server.RequestBodies[0]);
@@ -1376,14 +1377,14 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest high = CreateWeatherToolRequest();
+            ChatRequest high = CreateWeatherToolRequest();
             (high.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
-            ToolChatResponse highResponse = await client.ToolChatAsync(high, token).ConfigureAwait(false);
+            ChatResponse highResponse = await client.ChatAsync(high, token).ConfigureAwait(false);
             SharedAssert.True(highResponse.Success, "Gemini tool chat with high reasoning effort should succeed.");
 
-            ToolChatRequest minimal = CreateWeatherToolRequest();
+            ChatRequest minimal = CreateWeatherToolRequest();
             (minimal.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Minimal;
-            ToolChatResponse minimalResponse = await client.ToolChatAsync(minimal, token).ConfigureAwait(false);
+            ChatResponse minimalResponse = await client.ChatAsync(minimal, token).ConfigureAwait(false);
             SharedAssert.True(minimalResponse.Success, "Gemini tool chat with minimal reasoning effort should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -1401,14 +1402,14 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatRequest medium = CreateWeatherToolRequest();
+            ChatRequest medium = CreateWeatherToolRequest();
             (medium.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Medium;
-            ToolChatResponse mediumResponse = await client.ToolChatAsync(medium, token).ConfigureAwait(false);
+            ChatResponse mediumResponse = await client.ChatAsync(medium, token).ConfigureAwait(false);
             SharedAssert.True(mediumResponse.Success, "Ollama tool chat with medium reasoning effort should succeed.");
 
-            ToolChatRequest minimal = CreateWeatherToolRequest();
+            ChatRequest minimal = CreateWeatherToolRequest();
             (minimal.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Minimal;
-            ToolChatResponse minimalResponse = await client.ToolChatAsync(minimal, token).ConfigureAwait(false);
+            ChatResponse minimalResponse = await client.ChatAsync(minimal, token).ConfigureAwait(false);
             SharedAssert.True(minimalResponse.Success, "Ollama tool chat with minimal reasoning effort should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -1476,23 +1477,23 @@ namespace Test.Shared
             using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
             gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
-            ToolChatRequest geminiRequest = CreateWeatherToolRequest();
+            ChatRequest geminiRequest = CreateWeatherToolRequest();
             (geminiRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
-            ToolChatResponse geminiResponse = await gemini.ToolChatAsync(geminiRequest, token).ConfigureAwait(false);
+            ChatResponse geminiResponse = await gemini.ChatAsync(geminiRequest, token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Success, "Gemini tool chat with an overridden budget should succeed.");
 
             using OpenAiCompatibleClient openAi = CreateClient(server);
-            ToolChatRequest openAiRequest = CreateWeatherToolRequest();
+            ChatRequest openAiRequest = CreateWeatherToolRequest();
             (openAiRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.High) { GeminiThinkingBudget = 16000 };
-            ToolChatResponse openAiResponse = await openAi.ToolChatAsync(openAiRequest, token).ConfigureAwait(false);
+            ChatResponse openAiResponse = await openAi.ChatAsync(openAiRequest, token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat with a Gemini-only override should succeed.");
 
             using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
             ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
-            ToolChatRequest ollamaRequest = CreateWeatherToolRequest();
+            ChatRequest ollamaRequest = CreateWeatherToolRequest();
             (ollamaRequest.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Minimal) { OllamaThink = "true" };
-            ToolChatResponse ollamaResponse = await ollama.ToolChatAsync(ollamaRequest, token).ConfigureAwait(false);
+            ChatResponse ollamaResponse = await ollama.ChatAsync(ollamaRequest, token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama tool chat with a think override should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -1537,19 +1538,19 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
 
             using OpenAiCompatibleClient openAi = CreateClient(server);
-            ToolChatResponse openAiResponse = await openAi.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatResponse openAiResponse = await openAi.ChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(openAiResponse.Success, "OpenAI-compatible tool chat without reasoning effort should succeed.");
 
             using OllamaClient ollama = new OllamaClient(server.Endpoint, "test-key");
             ollama.Defaults.Completion.Model = "test-model";
             ollama.TimeoutMs = 1000;
-            ToolChatResponse ollamaResponse = await ollama.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatResponse ollamaResponse = await ollama.ChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(ollamaResponse.Success, "Ollama tool chat without reasoning effort should succeed.");
 
             using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint);
             gemini.Defaults.Completion.Model = "test-model";
             gemini.TimeoutMs = 1000;
-            ToolChatResponse geminiResponse = await gemini.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatResponse geminiResponse = await gemini.ChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(geminiResponse.Success, "Gemini tool chat without reasoning effort should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -1620,8 +1621,8 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             SharedAssert.True(stream.Success, "OpenAI reasoning tool chat should start.");
             SharedAssert.Equal("Planning the call.", stream.Reasoning, "OpenAI reasoning tool chat should accumulate reasoning.");
@@ -1638,7 +1639,7 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Ollama reasoning tool chat should succeed.");
             SharedAssert.Equal("Let me think.", response.Reasoning, "Ollama reasoning tool chat should surface thinking.");
             SharedAssert.True(response.ToolCalls.Count == 1, "Ollama reasoning tool chat should surface the tool call.");
@@ -1725,21 +1726,21 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
             SharedAssert.NotEmpty(stream.Reasoning, "precondition: the turn produced reasoning.");
 
             ChatMessage assistant = stream.ToAssistantMessage();
-            SharedAssert.False((assistant.Content ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not be carried into the follow-up message content.");
+            SharedAssert.False((assistant.Text ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not be carried into the follow-up message content.");
             foreach (ToolCall call in assistant.ToolCalls)
             {
                 SharedAssert.False((call.ArgumentsJson ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "reasoning must not appear in tool call arguments.");
             }
         }
 
-        private static ToolChatRequest CreateReasoningToolRequest()
+        private static ChatRequest CreateReasoningToolRequest()
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.User("reasoncapture: what is the weather in Seattle?"));
             request.Tools.Add(ToolDefinition.Function(
                 "get_weather",
@@ -1753,10 +1754,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatRequest request = CreateReasoningToolRequest();
+            ChatRequest request = CreateReasoningToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             // Outbound: the effort control is sent on the request.
@@ -1773,7 +1774,7 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient client = CreateClient(server);
 
-            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI non-streaming reasoning tool chat should succeed.");
             SharedAssert.Equal("Let me think.", response.Reasoning, "OpenAI non-streaming tool chat should surface reasoning.");
             SharedAssert.True(response.ToolCalls.Count == 1, "OpenAI non-streaming reasoning tool chat should surface the tool call.");
@@ -1819,8 +1820,8 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             SharedAssert.True(stream.Success, "Ollama streaming reasoning tool chat should start.");
             SharedAssert.Equal("Let me think.", stream.Reasoning, "Ollama streaming tool chat should accumulate thinking.");
@@ -1835,7 +1836,7 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Gemini non-streaming reasoning tool chat should succeed.");
             SharedAssert.Equal("Let me think.", response.Reasoning, "Gemini non-streaming tool chat should surface the thought part.");
             SharedAssert.True(response.ToolCalls.Count == 1, "Gemini non-streaming reasoning tool chat should surface the function call.");
@@ -1848,8 +1849,8 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
             client.TimeoutMs = 1000;
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             SharedAssert.True(stream.Success, "Gemini streaming reasoning tool chat should start.");
             SharedAssert.Equal("Let me think.", stream.Reasoning, "Gemini streaming tool chat should accumulate the thought.");
@@ -2165,11 +2166,11 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = CreateClient(server);
             client.TimeoutMs = 100;
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             request.Messages.Clear();
             request.Messages.Add(ChatMessage.User("hang tool stream"));
 
-            ToolChatStreamingResponse streaming = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse streaming = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(streaming.Success, "Local streaming tool chat request should start.");
 
             Stopwatch streamWatch = Stopwatch.StartNew();
@@ -2178,7 +2179,7 @@ namespace Test.Shared
 
             try
             {
-                await foreach (ToolChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
+                await foreach (ChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
                 {
                     toolDeltas += chunk.ToolCallDeltas.Count;
                 }
@@ -2339,10 +2340,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatResponse first = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Anthropic ToolChatAsync should succeed.");
+            SharedAssert.True(first.Success, "Anthropic ChatAsync should succeed.");
             SharedAssert.Equal("tool_use", first.FinishReason, "Anthropic tool response should expose the stop reason.");
             SharedAssert.Equal("anthropic-tool-local", first.ResponseId, "Anthropic tool response should expose the message id.");
             SharedAssert.Equal(1, first.ToolCalls.Count, "Anthropic response should contain one tool call.");
@@ -2363,9 +2364,9 @@ namespace Test.Shared
             request.ToolChoice = "none";
             request.Messages.Add(ChatMessage.ToolResult(first.ToolCalls[0].Id, first.ToolCalls[0].Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Anthropic final ToolChatAsync should succeed.");
+            SharedAssert.True(final.Success, "Anthropic final ChatAsync should succeed.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Anthropic final response should parse text.");
             SharedAssert.Equal("end_turn", final.FinishReason, "Anthropic final response should expose the stop reason.");
 
@@ -2403,13 +2404,13 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatStreamingResponse first = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatStreamingResponse first = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
 
-            SharedAssert.True(first.Success, "Anthropic ToolChatStreamingAsync should start.");
+            SharedAssert.True(first.Success, "Anthropic ChatStreamingAsync should start.");
             SharedAssert.Equal(200, first.StatusCode, "Anthropic streaming tool chat should return HTTP 200.");
 
-            List<ToolChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> firstChunks = await ConsumeToolChatStreamAsync(first, token).ConfigureAwait(false);
 
             SharedAssert.True(firstChunks.Count > 0, "Anthropic streaming tool chat should receive chunks.");
             SharedAssert.True(firstChunks.Any(chunk => !string.IsNullOrEmpty(chunk.Text)), "Anthropic streaming tool chat should emit text chunks.");
@@ -2440,10 +2441,10 @@ namespace Test.Shared
                 request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72,\"conditions\":\"clear\"}"));
             }
 
-            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
+            ChatStreamingResponse final = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> finalChunks = await ConsumeToolChatStreamAsync(final, token).ConfigureAwait(false);
 
-            SharedAssert.True(final.Success, "Anthropic final ToolChatStreamingAsync should start.");
+            SharedAssert.True(final.Success, "Anthropic final ChatStreamingAsync should start.");
             SharedAssert.True(finalChunks.Count > 0, "Anthropic final streaming tool chat should receive chunks.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Anthropic final streaming response should accumulate text.");
             SharedAssert.Equal(0, final.ToolCalls.Count, "Anthropic final streaming response should not accumulate tool calls.");
@@ -2473,19 +2474,19 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest required = CreateWeatherToolRequest();
+            ChatRequest required = CreateWeatherToolRequest();
             required.ToolChoice = "required";
-            ToolChatResponse requiredResponse = await client.ToolChatAsync(required, token).ConfigureAwait(false);
+            ChatResponse requiredResponse = await client.ChatAsync(required, token).ConfigureAwait(false);
             SharedAssert.True(requiredResponse.Success, "Anthropic required tool-choice request should succeed.");
 
-            ToolChatRequest none = CreateWeatherToolRequest();
+            ChatRequest none = CreateWeatherToolRequest();
             none.ToolChoice = "none";
-            ToolChatResponse noneResponse = await client.ToolChatAsync(none, token).ConfigureAwait(false);
+            ChatResponse noneResponse = await client.ChatAsync(none, token).ConfigureAwait(false);
             SharedAssert.True(noneResponse.Success, "Anthropic none tool-choice request should succeed.");
 
-            ToolChatRequest specific = CreateWeatherToolRequest();
+            ChatRequest specific = CreateWeatherToolRequest();
             specific.ToolChoice = "get_weather";
-            ToolChatResponse specificResponse = await client.ToolChatAsync(specific, token).ConfigureAwait(false);
+            ChatResponse specificResponse = await client.ChatAsync(specific, token).ConfigureAwait(false);
             SharedAssert.True(specificResponse.Success, "Anthropic specific tool-choice request should succeed.");
 
             List<string> bodies = server.RequestBodies;
@@ -2504,9 +2505,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).Model = "override-model";
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic tool chat model override should succeed.");
 
             LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
@@ -2563,9 +2564,9 @@ namespace Test.Shared
 
             for (int i = 0; i < levels.Length; i++)
             {
-                ToolChatRequest request = CreateWeatherToolRequest();
+                ChatRequest request = CreateWeatherToolRequest();
                 (request.Options ??= new CompletionOptions()).ReasoningEffort = levels[i];
-                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, "Anthropic tool chat with reasoning effort should succeed.");
             }
 
@@ -2592,10 +2593,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
@@ -2609,9 +2610,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = new ReasoningEffort(ReasoningEffortLevel.Low) { AnthropicEffort = " XHIGH " };
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic tool chat with an effort override should succeed.");
 
             LocalAnthropicRequest recorded = DeserializeRecordedAnthropicRequest(server.RequestBodies[0]);
@@ -2657,7 +2658,7 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatResponse response = await client.ToolChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Anthropic non-streaming reasoning tool chat should succeed.");
             SharedAssert.Equal("Let me think.", response.Reasoning, "Anthropic non-streaming tool chat should surface the thinking block.");
             SharedAssert.True(response.ToolCalls.Count == 1, "Anthropic non-streaming reasoning tool chat should surface the tool call.");
@@ -2668,8 +2669,8 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateReasoningToolRequest(), token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
 
             SharedAssert.True(stream.Success, "Anthropic streaming reasoning tool chat should start.");
             SharedAssert.Equal("Planning the call.", stream.Reasoning, "Anthropic streaming tool chat should accumulate thinking.");
@@ -2678,7 +2679,7 @@ namespace Test.Shared
             SharedAssert.True(chunks.Any(c => !string.IsNullOrEmpty(c.ReasoningText)), "Anthropic thinking deltas should be present on chunks.");
 
             ChatMessage assistant = stream.ToAssistantMessage();
-            SharedAssert.False((assistant.Content ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "Anthropic thinking must not be carried into the follow-up message content.");
+            SharedAssert.False((assistant.Text ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "Anthropic thinking must not be carried into the follow-up message content.");
             foreach (ToolCall call in assistant.ToolCalls)
             {
                 SharedAssert.False((call.ArgumentsJson ?? string.Empty).Contains("Planning", StringComparison.Ordinal), "Anthropic thinking must not appear in tool call arguments.");
@@ -2713,7 +2714,7 @@ namespace Test.Shared
 
             ChatStreamingResponse chatStream = await client.ChatStreamingAsync("fail", token: token).ConfigureAwait(false);
             GenerationStreamingResponse generationStream = await client.GenerateStreamingAsync("fail", token: token).ConfigureAwait(false);
-            ToolChatStreamingResponse toolStream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse toolStream = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
 
             SharedAssert.False(chatStream.Success, "Anthropic streaming chat should surface HTTP startup errors.");
             SharedAssert.False(generationStream.Success, "Anthropic streaming generation should surface HTTP startup errors.");
@@ -2728,10 +2729,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient client = CreateAnthropicClient(server);
 
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.User("refuse please"));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "An Anthropic refusal is a successful HTTP response and must not fail.");
             SharedAssert.Equal("refusal", response.FinishReason, "An Anthropic refusal should surface the refusal stop reason.");
             SharedAssert.True(string.IsNullOrEmpty(response.Text), "An Anthropic refusal with empty content should leave Text empty.");
@@ -2769,11 +2770,11 @@ namespace Test.Shared
             SharedAssert.True(streamTimedOut, "Anthropic streaming body enumeration should time out.");
             SharedAssert.True(textChunks > 0, "Anthropic streaming body should yield the initial chunk before timing out.");
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             request.Messages.Clear();
             request.Messages.Add(ChatMessage.User("hang tool stream"));
 
-            ToolChatStreamingResponse toolStreaming = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse toolStreaming = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(toolStreaming.Success, "Anthropic hang tool stream request should start.");
 
             bool toolStreamTimedOut = false;
@@ -2781,7 +2782,7 @@ namespace Test.Shared
 
             try
             {
-                await foreach (ToolChatStreamingChunk chunk in toolStreaming.Chunks.ConfigureAwait(false))
+                await foreach (ChatStreamingChunk chunk in toolStreaming.Chunks.ConfigureAwait(false))
                 {
                     toolDeltas += chunk.ToolCallDeltas.Count;
                 }
@@ -3042,12 +3043,12 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AzureOpenAiClient client = CreateAzureClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Azure streaming tool chat should start.");
 
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
             int toolDeltaCount = 0;
-            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+            foreach (ChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
 
             SharedAssert.True(toolDeltaCount > 0, "Azure streaming tool chat should emit tool-call deltas.");
             SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Azure streaming tool chat should accumulate the get_weather call.");
@@ -3073,9 +3074,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AzureOpenAiClient client = CreateAzureClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Azure reasoning tool chat should succeed.");
 
             using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(server.RequestBodies[0]);
@@ -3157,12 +3158,12 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using VertexAiClient client = CreateVertexClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Vertex streaming tool chat should start.");
 
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
             int toolDeltaCount = 0;
-            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+            foreach (ChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
 
             SharedAssert.True(toolDeltaCount > 0, "Vertex streaming tool chat should emit tool-call deltas.");
             SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Vertex streaming tool chat should accumulate the get_weather call.");
@@ -3191,9 +3192,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using VertexAiClient client = CreateVertexClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Medium;
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Vertex reasoning tool chat should succeed.");
 
             SharedAssert.True(server.RequestBodies[0].Contains("thinkingBudget", StringComparison.Ordinal), "Vertex should map reasoning to thinkingConfig.thinkingBudget.");
@@ -3246,7 +3247,7 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using BedrockClient client = CreateBedrockClient(server);
 
-            ToolChatResponse response = await client.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Bedrock tool chat should succeed.");
             SharedAssert.True(response.ToolCalls.Any(call => call.Name == "get_weather"), "Bedrock tool chat should surface the get_weather toolUse.");
             SharedAssert.Equal("tool_use", response.FinishReason, "Bedrock tool chat should surface the tool_use stop reason.");
@@ -3289,12 +3290,12 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using BedrockClient client = CreateBedrockClient(server);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "Bedrock streaming tool chat should start.");
 
-            List<ToolChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
+            List<ChatStreamingChunk> chunks = await ConsumeToolChatStreamAsync(stream, token).ConfigureAwait(false);
             int toolDeltaCount = 0;
-            foreach (ToolChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
+            foreach (ChatStreamingChunk chunk in chunks) toolDeltaCount += chunk.ToolCallDeltas.Count;
 
             SharedAssert.True(toolDeltaCount > 0, "Bedrock streaming tool chat should emit tool-call deltas.");
             SharedAssert.True(stream.ToolCalls.Any(call => call.Name == "get_weather"), "Bedrock streaming tool chat should assemble the get_weather call.");
@@ -3343,12 +3344,12 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using BedrockClient client = CreateBedrockClient(server);
 
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.User("reasoncapture please decide the weather"));
             request.Tools.Add(ToolDefinition.Function("get_weather", "Get current weather for a city.", WeatherParameters()));
             (request.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Medium;
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Bedrock reasoning tool chat should succeed.");
             SharedAssert.NotEmpty(response.Reasoning, "Bedrock should surface reasoningContent as reasoning.");
             SharedAssert.True(server.RequestBodies[0].Contains("budget_tokens", StringComparison.Ordinal), "Bedrock should map reasoning to additionalModelRequestFields.thinking.budget_tokens.");
@@ -3550,9 +3551,9 @@ namespace Test.Shared
             return client;
         }
 
-        private static ToolChatRequest CreateWeatherToolRequest()
+        private static ChatRequest CreateWeatherToolRequest()
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.System("Answer with weather guidance."));
             request.Messages.Add(ChatMessage.User("What is the weather in Seattle?"));
             request.Tools.Add(ToolDefinition.Function(
@@ -3601,13 +3602,13 @@ namespace Test.Shared
             return models;
         }
 
-        private static async Task<List<ToolChatStreamingChunk>> ConsumeToolChatStreamAsync(
-            ToolChatStreamingResponse stream,
+        private static async Task<List<ChatStreamingChunk>> ConsumeToolChatStreamAsync(
+            ChatStreamingResponse stream,
             CancellationToken token)
         {
-            List<ToolChatStreamingChunk> chunks = new List<ToolChatStreamingChunk>();
+            List<ChatStreamingChunk> chunks = new List<ChatStreamingChunk>();
 
-            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
             {
                 chunks.Add(chunk);
             }

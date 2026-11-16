@@ -188,9 +188,9 @@ namespace Test.Shared
             SharedAssert.True((await client.ChatAsync("forever", new OllamaCompletionOptions { KeepAlive = Timeout.InfiniteTimeSpan }, token).ConfigureAwait(false)).Success, "Chat should succeed.");
             SharedAssert.True((await client.GenerateAsync("fraction", new OllamaCompletionOptions { KeepAlive = TimeSpan.FromMilliseconds(1500) }, token).ConfigureAwait(false)).Success, "Generate should succeed.");
 
-            ToolChatRequest request = new ToolChatRequest { Options = new OllamaCompletionOptions { KeepAlive = TimeSpan.Zero } };
+            ChatRequest request = new ChatRequest { Options = new OllamaCompletionOptions { KeepAlive = TimeSpan.Zero } };
             request.Messages.Add(ChatMessage.User("unload after"));
-            SharedAssert.True((await client.ToolChatAsync(request, token).ConfigureAwait(false)).Success, "Tool chat should succeed.");
+            SharedAssert.True((await client.ChatAsync(request, token).ConfigureAwait(false)).Success, "Tool chat should succeed.");
 
             List<string> bodies = server.RequestBodies;
             SharedAssert.Equal(5, bodies.Count, "Five requests.");

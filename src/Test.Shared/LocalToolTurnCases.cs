@@ -27,7 +27,7 @@ namespace Test.Shared
             "cohere" => new CohereClient("fixture", endpoint),
             _ => throw new ArgumentException(provider)
         };
-        private static ToolChatRequest Request(string provider, bool plain = false) => new()
+        private static ChatRequest Request(string provider, bool plain = false) => new()
         {
             Messages = new() { ChatMessage.User("turn-state-fixture:" + provider + (plain ? ":plain" : "")) },
             Tools = new() { ToolDefinition.Function("read_file", "Read", new() { ["type"] = "object" }) }
@@ -38,13 +38,13 @@ namespace Test.Shared
             using var http = new HttpClient(new CloudTransport(server.Endpoint));
             using var client = Client(provider, server.Endpoint, http);
             provider = provider switch { "ollamacloud" => "ollama", "vertex" => "gemini", _ => provider };
-            ToolChatRequest request = Request(provider);
+            ChatRequest request = Request(provider);
             for (int turn = 0; turn < 3; turn++)
             {
                 ChatMessage assistant;
                 if (stream)
                 {
-                    var response = await client.ToolChatStreamingAsync(request, token);
+                    var response = await client.ChatStreamingAsync(request, token);
                     await foreach (var _ in response.Chunks.WithCancellation(token)) { }
                     SharedAssert.True(response.Success, response.Error ?? "Stream failed");
                     SharedAssert.Equal(StreamingState.Completed, response.State, "Provider continuation stream completed");
@@ -52,12 +52,12 @@ namespace Test.Shared
                 }
                 else
                 {
-                    var response = await client.ToolChatAsync(request, token);
+                    var response = await client.ChatAsync(request, token);
                     SharedAssert.True(response.Success, response.Error ?? "Request failed");
                     assistant = response.ToAssistantMessage();
                 }
                 if (turn < 2) SharedAssert.Equal(2, assistant.ToolCalls.Count, "Parallel calls survive");
-                SharedAssert.False((assistant.Content ?? "").Contains("thought"), "Thinking stays out of visible text");
+                SharedAssert.False((assistant.Text ?? "").Contains("thought"), "Thinking stays out of visible text");
                 // Test the public generated metadata, not reflection serialization or only the response property.
                 string json = JsonSerializer.Serialize(assistant, PolyPromptJsonContext.Default.ChatMessage);
                 assistant = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ChatMessage)!;
@@ -98,38 +98,38 @@ namespace Test.Shared
                     SharedAssert.True(History(body, provider).Where(n => n?["role"]?.GetValue<string>() == "tool").All(n => n!["tool_name"]!.GetValue<string>() == "read_file"), "Native tool result names retained");
             }
             var noToolsRequest = Request(provider);
-            noToolsRequest.Messages[0].Content += ":no-tools";
+            noToolsRequest.Messages[0].Text += ":no-tools";
             ChatMessage noToolsAssistant;
             if (stream)
             {
-                var response = await client.ToolChatStreamingAsync(noToolsRequest, token);
+                var response = await client.ChatStreamingAsync(noToolsRequest, token);
                 await foreach (var _ in response.Chunks.WithCancellation(token)) { }
                 SharedAssert.True(response.Success, response.Error ?? "Reasoning-only stream failed");
                 noToolsAssistant = response.ToAssistantMessage();
             }
             else
             {
-                var response = await client.ToolChatAsync(noToolsRequest, token);
+                var response = await client.ChatAsync(noToolsRequest, token);
                 SharedAssert.True(response.Success, response.Error ?? "Reasoning-only turn failed");
                 noToolsAssistant = response.ToAssistantMessage();
             }
             SharedAssert.Equal(0, noToolsAssistant.ToolCalls.Count, "Reasoning without tools is supported");
             noToolsRequest.Messages.Add(noToolsAssistant);
             noToolsRequest.Messages.Add(ChatMessage.User("next"));
-            SharedAssert.True((await client.ToolChatAsync(noToolsRequest, token)).Success, "Reasoning-only follow-up succeeds");
+            SharedAssert.True((await client.ChatAsync(noToolsRequest, token)).Success, "Reasoning-only follow-up succeeds");
             SharedAssert.True(server.RequestBodies.Last().Contains("thought 0"), "Reasoning survives even without tool calls");
             // Plain assistant turns with no thinking or tools remain valid and acquire no stale state.
             var plain = Request(provider, true);
             ChatMessage plainAssistant;
             if (stream)
             {
-                var response = await client.ToolChatStreamingAsync(plain, token);
+                var response = await client.ChatStreamingAsync(plain, token);
                 await foreach (var _ in response.Chunks.WithCancellation(token)) { }
                 SharedAssert.True(response.Success, response.Error ?? "Plain stream failed"); plainAssistant = response.ToAssistantMessage();
             }
-            else { var response = await client.ToolChatAsync(plain, token); SharedAssert.True(response.Success, response.Error ?? "Plain failed"); plainAssistant = response.ToAssistantMessage(); }
+            else { var response = await client.ChatAsync(plain, token); SharedAssert.True(response.Success, response.Error ?? "Plain failed"); plainAssistant = response.ToAssistantMessage(); }
             plain.Messages.Add(plainAssistant);
-            var next = await client.ToolChatAsync(plain, token);
+            var next = await client.ChatAsync(plain, token);
             SharedAssert.True(next.Success, next.Error ?? "Plain follow-up failed");
             string outgoing = server.RequestBodies.Last();
             SharedAssert.False(outgoing.Contains("sig0") || outgoing.Contains("thought 0"), "State is local to its own turn");
@@ -141,28 +141,28 @@ namespace Test.Shared
             using var otherServer = LocalOpenAiTestServer.Start();
             using var openaiSource = Client("openai", server.Endpoint);
             using var openaiDestination = Client("openai", otherServer.Endpoint);
-            var scopedResponse = await openaiSource.ToolChatAsync(Request("openai"), token);
+            var scopedResponse = await openaiSource.ChatAsync(Request("openai"), token);
             var scopedRequest = Request("openai", true);
             scopedRequest.Messages.Add(scopedResponse.ToAssistantMessage());
             foreach (var call in scopedResponse.ToolCalls) scopedRequest.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "result"));
-            SharedAssert.True((await openaiDestination.ToolChatAsync(scopedRequest, token)).Success, "Changing compatible endpoints succeeds");
+            SharedAssert.True((await openaiDestination.ChatAsync(scopedRequest, token)).Success, "Changing compatible endpoints succeeds");
             SharedAssert.False(otherServer.RequestBodies.Last().Contains("reasoning_content"), "Reasoning extensions stay at the endpoint that returned them");
             using var xai = new XAiClient(LocalXAiRoutes.Key, server.Endpoint);
-            var xaiResponse = await xai.ToolChatAsync(new ToolChatRequest { Messages = new() { ChatMessage.User("hello") } }, token);
+            var xaiResponse = await xai.ChatAsync(new ChatRequest { Messages = new() { ChatMessage.User("hello") } }, token);
             SharedAssert.True(xaiResponse.Success, xaiResponse.Error ?? "xAI source failed");
             foreach (string source in Providers)
             {
                 using var from = Client(source, server.Endpoint);
-                var response = await from.ToolChatAsync(Request(source), token);
+                var response = await from.ChatAsync(Request(source), token);
                 SharedAssert.True(response.Success, response.Error ?? "Source failed");
-                var xaiRequest = new ToolChatRequest { Messages = new() { ChatMessage.User("hello"), response.ToAssistantMessage() } };
+                var xaiRequest = new ChatRequest { Messages = new() { ChatMessage.User("hello"), response.ToAssistantMessage() } };
                 foreach (var call in response.ToolCalls) xaiRequest.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "result"));
-                var xaiFollowup = await xai.ToolChatAsync(xaiRequest, token);
+                var xaiFollowup = await xai.ChatAsync(xaiRequest, token);
                 SharedAssert.True(xaiFollowup.Success, xaiFollowup.Error ?? "xAI ignores foreign envelope");
                 SharedAssert.False(server.RequestBodies.Last().Contains("thought 0"), "Foreign state omitted by xAI");
                 var fromXai = Request(source, true);
                 fromXai.Messages.Add(xaiResponse.ToAssistantMessage());
-                var nativeFollowup = await from.ToolChatAsync(fromXai, token);
+                var nativeFollowup = await from.ChatAsync(fromXai, token);
                 SharedAssert.True(nativeFollowup.Success, nativeFollowup.Error ?? "Native provider ignores xAI array");
                 SharedAssert.False(server.RequestBodies.Last().Contains("opaque-state"), "xAI native output stays isolated");
                 foreach (string destination in Providers.Where(p => p != source))
@@ -171,7 +171,7 @@ namespace Test.Shared
                     var request = Request(destination, true);
                     request.Messages.Add(response.ToAssistantMessage());
                     foreach (var call in response.ToolCalls) request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "result"));
-                    var followup = await to.ToolChatAsync(request, token);
+                    var followup = await to.ChatAsync(request, token);
                     SharedAssert.True(followup.Success, followup.Error ?? "Cross-protocol follow-up failed");
                     SharedAssert.False(server.RequestBodies.Last().Contains("thought 0"), "Foreign reasoning omitted");
                 }

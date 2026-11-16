@@ -22,28 +22,28 @@ public sealed class ProviderConsoleTests
         const string key = LocalClients.TestKey;
         yield return new ProviderConsole("OllamaConsole",
             e => new[] { e, key, "test-model", "all-minilm", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
-            OllamaConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Embed, Models", "test-model", "dimensions" });
+            OllamaConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Embed, Models", "test-model", "dimensions" });
         yield return new ProviderConsole("OllamaCloudConsole",
             e => new[] { key, e, "test-model", "all-minilm", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
             OllamaCloudConsole.Program.Main, new[] { "Connectivity: OK", "test-model", "dimensions" });
         yield return new ProviderConsole("OpenAIConsole",
             e => new[] { e, LocalOpenAiResponsesRoutes.Key, "test-model", "test-embedding", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
-            OpenAIConsole.Program.Main, new[] { "OpenAiClient", "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Embed, Models", "pong", "dimensions" });
+            OpenAIConsole.Program.Main, new[] { "OpenAiClient", "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Embed, Models", "pong", "dimensions" });
         yield return new ProviderConsole("OpenAIConsole --compatible",
             e => new[] { key, "test-model", "text-embedding-3-small", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
             OpenAIConsole.Program.Main, new[] { "OpenAiCompatibleClient", "Connectivity: OK", "dimensions" }, new[] { "--compatible", "{endpoint}" });
         yield return new ProviderConsole("XAiConsole",
             e => new[] { e, LocalXAiRoutes.Key, "test-model", "", "", "settings", "val", "mod", "gen", "hello" },
-            XAiConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Models", "pong" });
+            XAiConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Models", "pong" });
         yield return new ProviderConsole("AnthropicConsole",
             e => new[] { e, key, "", "test-model", "", "", "settings", "val", "mod", "gen", "hello" },
-            AnthropicConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Models" });
+            AnthropicConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Models" });
         yield return new ProviderConsole("GeminiConsole",
             e => new[] { e, key, "test-model", "test-embed", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
-            GeminiConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Embed, Models", "dimensions" });
+            GeminiConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Embed, Models", "dimensions" });
         yield return new ProviderConsole("CohereConsole",
             e => new[] { e, LocalExtendedRoutes.CohereTestKey, "command-a-plus-05-2026", "embed-v4.0", "rerank-v5.0-fast", "", "", "settings", "val", "mod", "gen", "hello", "em", "hello" },
-            CohereConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolChat, Generate, Embed, Rerank, Classify, Models", "pong", "Embeddings returned" });
+            CohereConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Chat, ToolCalling, Generate, Embed, Rerank, Classify, Models", "pong", "Embeddings returned" });
         yield return new ProviderConsole("TeiConsole",
             e => new[] { e, key, "", "settings", "val", "info", "mod" },
             TeiConsole.Program.Main, new[] { "Connectivity: OK", "Capabilities: Embed, SparseEmbed, Rerank, Classify, Models" });

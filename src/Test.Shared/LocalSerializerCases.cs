@@ -201,7 +201,7 @@ namespace Test.Shared
             Serializer serializer = new Serializer();
             SharedAssert.Equal(json, serializer.SerializeJson(messages, false), "Serializer should use the context for public models.");
 
-            ToolChatRequest request = new ToolChatRequest
+            ChatRequest request = new ChatRequest
             {
                 Messages = messages,
                 Tools = new List<ToolDefinition>
@@ -215,8 +215,8 @@ namespace Test.Shared
                 Options = new CompletionOptions { Temperature = 0.2, ReasoningEffort = ReasoningEffortLevel.Low }
             };
 
-            string requestJson = JsonSerializer.Serialize(request, PolyPromptJsonContext.Default.ToolChatRequest);
-            ToolChatRequest? restoredRequest = JsonSerializer.Deserialize(requestJson, PolyPromptJsonContext.Default.ToolChatRequest);
+            string requestJson = JsonSerializer.Serialize(request, PolyPromptJsonContext.Default.ChatRequest);
+            ChatRequest? restoredRequest = JsonSerializer.Deserialize(requestJson, PolyPromptJsonContext.Default.ChatRequest);
             SharedAssert.Equal(ReasoningEffortLevel.Low, restoredRequest!.Options!.ReasoningEffort!.Level, "Reasoning effort level.");
             SharedAssert.Equal(0.2, restoredRequest.Options.Temperature, "Temperature.");
             SharedAssert.Equal("get_weather", restoredRequest.Tools[0].Name, "Tool name.");

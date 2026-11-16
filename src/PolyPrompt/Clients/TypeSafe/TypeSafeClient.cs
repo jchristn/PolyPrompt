@@ -14,7 +14,7 @@ namespace PolyPrompt.Clients
     /// (rate limit), and 529 (overloaded), are reported on the response.
     /// <list type="bullet">
     /// <item><description>Supported: Decide.</description></item>
-    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
     /// Embed, SparseEmbed, Rerank, Classify, Models.</description></item>
     /// <item><description>Auth: required API key, sent as a bearer token.</description></item>
     /// <item><description>Defaults: decision model <c>jev-latest</c>.</description></item>

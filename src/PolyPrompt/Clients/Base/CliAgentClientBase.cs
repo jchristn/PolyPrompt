@@ -584,6 +584,8 @@ namespace PolyPrompt.Clients
                 throw new ArgumentOutOfRangeException(nameof(request), "TimeoutMs must be greater than zero.");
             if (request.History != null && request.History.Any(m => m == null))
                 throw new ArgumentException("History cannot contain null messages.", nameof(request));
+            if (request.History != null && request.History.Any(m => m.HasMedia))
+                throw new ArgumentException("Agent harnesses accept text-only history; remove image, audio, and video parts from History.", nameof(request));
         }
 
         private async Task<CliAgentResult> RunCoreAsync(CliAgentRequest request, CancellationToken token)
@@ -925,8 +927,8 @@ namespace PolyPrompt.Clients
                 foreach (ChatMessage message in request.History!)
                 {
                     if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (string.IsNullOrEmpty(message.Content)) continue;
-                    prompt.Append('\n').Append(RoleLabel(message.Role)).Append(": ").Append(message.Content).Append('\n');
+                    if (string.IsNullOrEmpty(message.Text)) continue;
+                    prompt.Append('\n').Append(RoleLabel(message.Role)).Append(": ").Append(message.Text).Append('\n');
                 }
                 prompt.Append("\nCurrent request:\n");
             }
@@ -940,8 +942,8 @@ namespace PolyPrompt.Clients
             {
                 foreach (ChatMessage message in request.History)
                 {
-                    if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(message.Content))
-                        system = string.IsNullOrWhiteSpace(system) ? message.Content : system + "\n\n" + message.Content;
+                    if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(message.Text))
+                        system = string.IsNullOrWhiteSpace(system) ? message.Text : system + "\n\n" + message.Text;
                 }
             }
 

@@ -285,7 +285,7 @@
             <summary>
             Anthropic (Claude) client for the Messages API.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>/v1/messages</c>, generation sent as one user turn,
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v1/messages</c>, generation sent as one user turn,
             streaming as typed SSE events), and Models (<c>/v1/models</c>, following pagination).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Embed, SparseEmbed, Rerank,
             Classify, Decide. For embeddings with Claude, pair it with <see cref="T:PolyPrompt.Clients.VoyageAiClient"/>.</description></item>
@@ -304,16 +304,10 @@
             <inheritdoc />
             <remarks>The Messages API rejects a request without <c>max_tokens</c>, so a limit is always sent.</remarks>
         </member>
-        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.AnthropicClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.AnthropicClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.AnthropicClient.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.AnthropicClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -330,7 +324,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.AnthropicClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.AnthropicClient.ProviderName">
@@ -1494,13 +1488,22 @@
             <param name="token">Cancellation token.</param>
             <returns>An HttpCallResult containing the response and body.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.HttpClientBase.PostAndRecordAsync(System.String,System.Net.Http.StringContent,System.String,System.Threading.CancellationToken)">
+        <member name="F:PolyPrompt.Clients.HttpClientBase.JsonContentType">
             <summary>
-            Send an HTTP POST to an upstream endpoint and record the call details.
+            Content-Type sent with JSON request bodies.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostAndRecordAsync(System.String,System.Byte[],System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Send an HTTP POST to an upstream endpoint and record the call details. The wire bytes are what is sent, what
+            <see cref="M:PolyPrompt.Clients.HttpClientBase.PrepareRequestAsync(System.Net.Http.HttpRequestMessage,System.Byte[],System.Threading.CancellationToken)"/> signs, and what telemetry measures; the recorded body is only what
+            <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/> and logs show.
             </summary>
             <param name="url">Full URL to call.</param>
-            <param name="content">HTTP content to send.</param>
-            <param name="requestBodyJson">Request body as a JSON string (for recording and signing).</param>
+            <param name="wireBody">The exact request body bytes.</param>
+            <param name="contentType">The Content-Type header value.</param>
+            <param name="recordedBody">The body to record, for example with media replaced by placeholders. Null records the
+            wire body decoded as UTF-8 when bodies are captured.</param>
             <param name="token">Cancellation token.</param>
             <returns>An HttpCallResult containing the response and body.</returns>
         </member>
@@ -1513,7 +1516,7 @@
             <param name="token">Cancellation token.</param>
             <returns>An HttpCallResult containing the response and body.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Byte[],System.String,System.Threading.CancellationToken)">
             <summary>
             Send an HTTP POST for streaming and return the response with its body unread. The timeout covers the
             whole response: <see cref="P:PolyPrompt.Clients.HttpClientBase.StreamingHttpResult.Token"/> is linked to both the caller token and
@@ -1521,13 +1524,14 @@
             <see cref="P:PolyPrompt.Clients.ClientBase.CallDetails"/>.
             </summary>
             <param name="url">Full URL to call.</param>
-            <param name="content">HTTP content to send.</param>
+            <param name="wireBody">The exact request body bytes, sent and signed.</param>
+            <param name="contentType">The Content-Type header value.</param>
             <param name="token">Cancellation token.</param>
             <returns>The HTTP response message with stream content, and the resources that must be disposed with it.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.HttpClientBase.PostStreamingJsonAsync(System.String,System.Object,System.Threading.CancellationToken)">
             <summary>
-            Serialize <paramref name="body"/> and POST it as JSON for streaming. See <see cref="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Net.Http.StringContent,System.Threading.CancellationToken)"/>.
+            Serialize <paramref name="body"/> and POST it as JSON for streaming. See <see cref="M:PolyPrompt.Clients.HttpClientBase.PostStreamingAsync(System.String,System.Byte[],System.String,System.Threading.CancellationToken)"/>.
             </summary>
             <param name="url">Full URL to call.</param>
             <param name="body">Request body.</param>
@@ -1780,6 +1784,46 @@
             <exception cref="T:System.ArgumentNullException">Thrown when prompt is null.</exception>
             <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
         </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(PolyPrompt.Models.ChatMessage,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Send one message, which may carry images, audio, or video, and return the full response.
+            </summary>
+            <param name="message">The message, usually from <see cref="M:PolyPrompt.Models.ChatMessage.User(System.String,PolyPrompt.Models.ContentPart[])"/>.</param>
+            <param name="options">Optional per-call settings.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatResponse containing the completion text, metadata, and timing.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when message is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the message or one of its parts is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(System.Collections.Generic.IEnumerable{PolyPrompt.Models.ChatMessage},PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
+            <summary>
+            Send a conversation and return the full response.
+            </summary>
+            <param name="messages">The conversation, in order.</param>
+            <param name="options">Optional per-call settings.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatResponse containing the completion text, metadata, and timing.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when messages is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the conversation is empty or a message or part is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(PolyPrompt.Models.ChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Send a chat request, optionally with tools, and return assistant text and any tool calls. Tool execution is
+            owned by the caller; append ToAssistantMessage and tool-result messages to continue. When the options set a
+            system prompt and the messages contain no system message, the system prompt is sent as the first message.
+            </summary>
+            <param name="request">Messages, tools, and optional per-call settings.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatResponse containing assistant text and requested tool calls.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is null or empty, or a message or part is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when tools or a part's modality are not supported.</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
+        </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(System.String,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
             <summary>
             Send a single user prompt and stream response chunks as they arrive.
@@ -1791,30 +1835,43 @@
             <exception cref="T:System.ArgumentNullException">Thrown when prompt is null.</exception>
             <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
         </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(PolyPrompt.Models.ChatMessage,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
             <summary>
-            Send a message-based chat request, optionally with tools, and return assistant text and any tool calls.
-            Tool execution is owned by the caller; append ToAssistantMessage and tool-result messages to continue.
-            When the options set a system prompt and the messages contain no system message, the system prompt is sent
-            as the first message.
+            Send one message, which may carry images, audio, or video, and stream response chunks as they arrive.
             </summary>
-            <param name="request">Request containing messages, tools, and optional per-call settings.</param>
+            <param name="message">The message.</param>
+            <param name="options">Optional per-call settings.</param>
             <param name="token">Cancellation token.</param>
-            <returns>A ToolChatResponse containing assistant text and requested tool calls.</returns>
-            <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
-            <exception cref="T:System.ArgumentException">Thrown when request.Messages is null, empty, or contains a null message.</exception>
+            <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when message is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the message or one of its parts is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
             <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
         </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(System.Collections.Generic.IEnumerable{PolyPrompt.Models.ChatMessage},PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
             <summary>
-            Send a message-based chat request, optionally with tools, and stream response chunks as they arrive.
-            Enumerate Chunks, then append ToAssistantMessage and tool-result messages to continue.
+            Send a conversation and stream response chunks as they arrive.
             </summary>
-            <param name="request">Request containing messages, tools, and optional per-call settings.</param>
+            <param name="messages">The conversation, in order.</param>
+            <param name="options">Optional per-call settings.</param>
             <param name="token">Cancellation token.</param>
-            <returns>A ToolChatStreamingResponse containing streamed chunks, accumulated text, and requested tool calls.</returns>
+            <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when messages is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when the conversation is empty or a message or part is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
+            <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(PolyPrompt.Models.ChatRequest,System.Threading.CancellationToken)">
+            <summary>
+            Send a chat request, optionally with tools, and stream response chunks as they arrive. Enumerate Chunks, then
+            append ToAssistantMessage and tool-result messages to continue.
+            </summary>
+            <param name="request">Messages, tools, and optional per-call settings.</param>
+            <param name="token">Cancellation token.</param>
+            <returns>A ChatStreamingResponse containing streamed chunks, accumulated text, and requested tool calls.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when request is null.</exception>
-            <exception cref="T:System.ArgumentException">Thrown when request.Messages is null, empty, or contains a null message.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when request.Messages is null or empty, or a message or part is not valid.</exception>
+            <exception cref="T:PolyPrompt.Models.CapabilityNotSupportedException">Thrown when tools or a part's modality are not supported.</exception>
             <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
         </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.GenerateAsync(System.String,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)">
@@ -1841,43 +1898,26 @@
             <exception cref="T:System.ArgumentNullException">Thrown when prompt is null.</exception>
             <exception cref="T:System.InvalidOperationException">Thrown when no model is configured.</exception>
         </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <summary>
-            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(System.String,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)"/>.
+            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ChatAsync(PolyPrompt.Models.ChatRequest,System.Threading.CancellationToken)"/>. Every chat overload ends here.
             </summary>
-            <param name="prompt">User message (not null).</param>
+            <param name="request">The validated request (for tools and tool choice).</param>
+            <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
             <param name="settings">Merged settings.</param>
             <param name="token">Cancellation token.</param>
             <returns>The chat response.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <summary>
-            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(System.String,PolyPrompt.Models.CompletionOptions,System.Threading.CancellationToken)"/>.
+            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ChatStreamingAsync(PolyPrompt.Models.ChatRequest,System.Threading.CancellationToken)"/>. Every streaming
+            chat overload ends here.
             </summary>
-            <param name="prompt">User message (not null).</param>
+            <param name="request">The validated request (for tools and tool choice).</param>
+            <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
             <param name="settings">Merged settings.</param>
             <param name="token">Cancellation token.</param>
             <returns>The streaming chat response.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <summary>
-            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ToolChatAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)"/>.
-            </summary>
-            <param name="request">The validated request (for tools and tool choice).</param>
-            <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
-            <param name="settings">Merged settings.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The tool chat response.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <summary>
-            Provider implementation of <see cref="M:PolyPrompt.Clients.ProviderClientBase.ToolChatStreamingAsync(PolyPrompt.Models.ToolChatRequest,System.Threading.CancellationToken)"/>.
-            </summary>
-            <param name="request">The validated request (for tools and tool choice).</param>
-            <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
-            <param name="settings">Merged settings.</param>
-            <param name="token">Cancellation token.</param>
-            <returns>The streaming tool chat response.</returns>
         </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <summary>
@@ -1915,18 +1955,7 @@
         </member>
         <member name="M:PolyPrompt.Clients.ProviderClientBase.WrapChunksWithTiming(PolyPrompt.Models.ChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
             <summary>
-            Wrap a raw chunk enumerable with timing-tracking logic that updates the response object.
-            </summary>
-            <param name="response">The streaming response object to update with timing.</param>
-            <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
-            <param name="sw">Stopwatch started before the HTTP request was made.</param>
-            <param name="token">Cancellation token.</param>
-            <param name="owner">Optional disposable owner released when enumeration ends.</param>
-            <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
-        </member>
-        <member name="M:PolyPrompt.Clients.ProviderClientBase.WrapToolChatChunksWithTiming(PolyPrompt.Models.ToolChatStreamingResponse,System.Collections.Generic.IAsyncEnumerable{PolyPrompt.Models.ToolChatStreamingChunk},System.Diagnostics.Stopwatch,System.Threading.CancellationToken,System.IDisposable)">
-            <summary>
-            Wrap a raw tool-chat chunk enumerable with timing and accumulation logic.
+            Wrap a raw chat chunk enumerable with timing and accumulation of text, reasoning, and tool calls.
             </summary>
             <param name="response">The streaming response object to update.</param>
             <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
@@ -1960,6 +1989,12 @@
             </summary>
             <param name="toolChoice">Tool choice directive.</param>
             <returns>True when tools must not be used.</returns>
+        </member>
+        <member name="M:PolyPrompt.Clients.ProviderClientBase.RequireChat(PolyPrompt.Models.ChatRequest,System.String)">
+            <summary>
+            Capability checks for a chat request, before anything is resolved or sent: Chat always, ToolCalling when tools
+            are present, and the input modality of every media part.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion">
             <summary>
@@ -2395,7 +2430,7 @@
             <summary>
             AWS Bedrock client. Requests are signed with AWS Signature Version 4.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (the Converse API, <c>converse</c> and
+            <item><description>Supported: Chat, ToolCalling, and Generate (the Converse API, <c>converse</c> and
             <c>converse-stream</c>), Embed (<c>InvokeModel</c> with Titan or Cohere embedding models), Rerank
             (<c>InvokeModel</c> with Cohere or Amazon rerank models), and Models (control-plane
             <c>/foundation-models</c>).</description></item>
@@ -2414,16 +2449,10 @@
             <inheritdoc />
             <remarks>Anthropic models (including cross-region inference profiles such as <c>us.anthropic.*</c>) always get a limit, as on the Anthropic API.</remarks>
         </member>
-        <member name="M:PolyPrompt.Clients.BedrockClient.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.BedrockClient.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.BedrockClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.BedrockClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.BedrockClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.BedrockClient.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.BedrockClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -2434,7 +2463,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.BedrockClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, Rerank, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.BedrockClient.ProviderName">
@@ -2739,7 +2768,7 @@
             <summary>
             Cohere client.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
             (<c>/v2/embed</c>), Rerank (<c>/v2/rerank</c>), Classify (<c>/v1/classify</c>), and Models
             (<c>/v1/models</c>).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed,
@@ -2757,16 +2786,10 @@
         <member name="M:PolyPrompt.Clients.CohereClient.ClassifyCoreAsync(System.Collections.Generic.List{System.String},System.String,PolyPrompt.Models.ClassificationOptions,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.CohereClient.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.CohereClient.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.CohereClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.CohereClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.CohereClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.CohereClient.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.CohereClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -2783,7 +2806,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.CohereClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, Rerank, Classify, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.CohereClient.ProviderName">
@@ -3037,7 +3060,7 @@
             <summary>
             Google Gemini client for the Gemini API (Google AI Studio, <c>generativelanguage.googleapis.com</c>).
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>generateContent</c> and
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>generateContent</c> and
             <c>streamGenerateContent</c>), Embed (<c>:embedContent</c> and <c>:batchEmbedContents</c>), and Models
             (<c>/v1beta/models</c>, following pagination).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -3052,7 +3075,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.GeminiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.GeminiClient.ProviderName">
@@ -3188,16 +3211,10 @@
             <param name="model">Model name.</param>
             <returns>The model URL.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.GenerateContentClientBase.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.GenerateContentClientBase.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -3224,7 +3241,7 @@
             <summary>
             Google Vertex AI client for Gemini models and Vertex text embeddings.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (the same <c>generateContent</c> schema as
+            <item><description>Supported: Chat, ToolCalling, and Generate (the same <c>generateContent</c> schema as
             <see cref="T:PolyPrompt.Clients.GeminiClient"/>, routed through the project, region, and publisher path), and Embed (<c>:predict</c>).
             </description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -3238,7 +3255,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, and Embed.
+            Operations this client supports: Chat, ToolCalling, Generate, and Embed.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.VertexAiClient.ProviderName">
@@ -3535,7 +3552,7 @@
             <summary>
             Ollama client for the native Ollama API (<c>/api/*</c>) on a local or self-hosted server.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>/api/chat</c> and <c>/api/generate</c>, streaming as
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>/api/chat</c> and <c>/api/generate</c>, streaming as
             newline-delimited JSON), Embed (<c>/api/embed</c>), and Models (<c>/api/tags</c>, <c>/api/show</c>), plus the
             Ollama-only <see cref="M:PolyPrompt.Clients.OllamaClient.PullModelAsync(System.String,System.Func{PolyPrompt.Models.ModelPullProgress,System.Threading.Tasks.Task},System.Threading.CancellationToken)"/>, <see cref="M:PolyPrompt.Clients.OllamaClient.DeleteModelAsync(System.String,System.Threading.CancellationToken)"/>, <see cref="M:PolyPrompt.Clients.OllamaClient.LoadModelAsync(System.String,System.Nullable{System.TimeSpan},System.Threading.CancellationToken)"/>, and
             <see cref="M:PolyPrompt.Clients.OllamaClient.UnloadModelAsync(System.String,System.Threading.CancellationToken)"/>.</description></item>
@@ -3550,16 +3567,10 @@
             </summary>
             <seealso href="https://github.com/jchristn/Polyprompt#capability-matrix">Capability matrix</seealso>
         </member>
-        <member name="M:PolyPrompt.Clients.OllamaClient.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.OllamaClient.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.OllamaClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.OllamaClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.OllamaClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.OllamaClient.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OllamaClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -3575,7 +3586,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OllamaClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OllamaClient.ProviderName">
@@ -3754,7 +3765,7 @@
             Ollama Cloud client for the hosted native Ollama API at https://ollama.com. It inherits every
             <see cref="T:PolyPrompt.Clients.OllamaClient"/> operation and setting and requires bearer authentication.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, Generate, Embed, and Models (the API supports embeddings; the hosted
+            <item><description>Supported: Chat, ToolCalling, Generate, Embed, and Models (the API supports embeddings; the hosted
             catalog may not include embedding models).</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
             Classify, Decide.</description></item>
@@ -3787,7 +3798,7 @@
             <c>api-version</c>. Chat, tool chat, and generation use the Responses API with the deployment name sent as
             <c>model</c>; request options and behavior match <see cref="T:PolyPrompt.Clients.OpenAiClient"/>.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>/openai/v1/responses</c>), Embed
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>/openai/v1/responses</c>), Embed
             (<c>/openai/v1/embeddings</c>), and Models (<c>/openai/v1/models</c>), plus the native operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and <see cref="M:PolyPrompt.Clients.AzureOpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/>.</description></item>
             <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -3806,7 +3817,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.AzureOpenAiClient.ProviderName">
@@ -3917,7 +3928,7 @@
             Chat Completions (vLLM, Ollama <c>/v1</c>, LM Studio, gateways) use <see cref="T:PolyPrompt.Clients.OpenAiCompatibleClient"/>; a 404 or
             405 from <c>/responses</c> says so in the error.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (Responses API; encrypted reasoning is carried in
+            <item><description>Supported: Chat, ToolCalling, and Generate (Responses API; encrypted reasoning is carried in
             <see cref="P:PolyPrompt.Models.ResponseBase.ProviderState"/>, so a tool loop keeps its reasoning between calls), Embed
             (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>), plus the native operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/> and the OpenAI-only <see cref="M:PolyPrompt.Clients.OpenAiClient.CancelResponseAsync(System.String,System.Threading.CancellationToken)"/> and
@@ -3933,7 +3944,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiClient.ProviderName">
@@ -4040,7 +4051,7 @@
             OpenRouter, Gemini's OpenAI-compatible endpoint, Azure's v1 Chat Completions route, gateways, and OpenAI itself
             when Chat Completions is wanted. For OpenAI's current API (Responses) use <see cref="T:PolyPrompt.Clients.OpenAiClient"/>.
             <list type="bullet">
-            <item><description>Supported: Chat and ToolChat (<c>/v1/chat/completions</c>, streaming as SSE), Generate (the
+            <item><description>Supported: Chat and ToolCalling (<c>/v1/chat/completions</c>, streaming as SSE), Generate (the
             legacy <c>/v1/completions</c>), Embed (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>). Reasoning extensions
             (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
             <c>extra_content.google.thought_signature</c>.</description></item>
@@ -4055,16 +4066,10 @@
             </summary>
             <seealso href="https://github.com/jchristn/Polyprompt#capability-matrix">Capability matrix</seealso>
         </member>
-        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.OpenAiCompatibleClient.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -4081,7 +4086,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.OpenAiCompatibleClient.ProviderName">
@@ -4606,19 +4611,13 @@
             <param name="path">Path without a leading slash.</param>
             <returns>The absolute URL.</returns>
         </member>
-        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ChatCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ToolChatCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ChatCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.GenerateCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
-        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ChatStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
-            <inheritdoc />
-        </member>
-        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ToolChatStreamingCoreAsync(PolyPrompt.Models.ToolChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
+        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.ChatStreamingCoreAsync(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
             <inheritdoc />
         </member>
         <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.GenerateStreamingCoreAsync(System.String,PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Threading.CancellationToken)">
@@ -4692,6 +4691,12 @@
             <param name="stream">Whether the call streams.</param>
             <param name="stage">Where in the body the fields belong.</param>
         </member>
+        <member name="M:PolyPrompt.Clients.ResponsesApiClientBase.BuildChatBody(PolyPrompt.Models.ChatRequest,System.Collections.Generic.List{PolyPrompt.Models.ChatMessage},PolyPrompt.Clients.ProviderClientBase.ResolvedCompletion,System.Boolean)">
+            <summary>
+            The chat body. A request from <c>ChatAsync(string)</c> keeps the 4.x prompt shape: <c>input</c> as a string and
+            the system prompt as <c>instructions</c>. Every other request sends the messages as an input list.
+            </summary>
+        </member>
         <member name="T:PolyPrompt.Clients.ResponsesApiDialect">
             <summary>
             Per-provider data for the shared Responses API engine. The engine never names a provider; every vendor-specific
@@ -4758,7 +4763,7 @@
             <list type="bullet">
             <item><description>Supported: Embed (<c>/embed</c>), SparseEmbed (<c>/embed_sparse</c>, SPLADE models), Rerank
             (<c>/rerank</c>, cross-encoders), Classify (<c>/predict</c>), and Models (<c>/info</c>).</description></item>
-            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
             Decide.</description></item>
             <item><description>Auth: none by default; an optional bearer token for protected deployments (for example Hugging
             Face Inference Endpoints).</description></item>
@@ -4893,7 +4898,7 @@
             (rate limit), and 529 (overloaded), are reported on the response.
             <list type="bullet">
             <item><description>Supported: Decide.</description></item>
-            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
             Embed, SparseEmbed, Rerank, Classify, Models.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
             <item><description>Defaults: decision model <c>jev-latest</c>.</description></item>
@@ -4974,7 +4979,7 @@
             VoyageAI client.
             <list type="bullet">
             <item><description>Supported: Embed (<c>/v1/embeddings</c>) and Rerank (<c>/v1/rerank</c>).</description></item>
-            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+            <item><description>Not supported (throw <see cref="T:PolyPrompt.Models.CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
             SparseEmbed, Classify, Decide, Models.</description></item>
             <item><description>Auth: required API key, sent as a bearer token.</description></item>
             <item><description>Defaults: embedding <c>voyage-3.5</c>, rerank <c>rerank-3</c>.</description></item>
@@ -5067,7 +5072,7 @@
             <summary>
             xAI (Grok) client for the Responses API.
             <list type="bullet">
-            <item><description>Supported: Chat, ToolChat, and Generate (<c>/v1/responses</c>, with encrypted reasoning replayed
+            <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v1/responses</c>, with encrypted reasoning replayed
             through <see cref="P:PolyPrompt.Models.ResponseBase.ProviderState"/>), the native Responses operations on
             <see cref="T:PolyPrompt.Clients.ResponsesApiClientBase"/>, and Models (<c>/v1/models</c>, plus the language, embedding, image, and video
             catalogs).</description></item>
@@ -5082,7 +5087,7 @@
         </member>
         <member name="P:PolyPrompt.Clients.XAiClient.Capabilities">
             <summary>
-            Operations this client supports: Chat, ToolChat, Generate, and Models.
+            Operations this client supports: Chat, ToolCalling, Generate, and Models.
             </summary>
         </member>
         <member name="P:PolyPrompt.Clients.XAiClient.ProviderName">
@@ -5224,6 +5229,43 @@
             reported (whether <c>end_index</c> is inclusive is not documented).
             </summary>
         </member>
+        <member name="T:PolyPrompt.Helpers.ContentPartListJsonConverter">
+            <summary>
+            Reads <see cref="P:PolyPrompt.Models.ChatMessage.Content"/> from either a JSON string (the 4.x shape, read as one text part), null
+            (no content), or an array of parts, and always writes an array. Uses source-generated metadata only, so it is
+            safe under Native AOT and trimming.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.ContentPartListJsonConverter.HandleNull">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Helpers.ContentPartListJsonConverter.Read(System.Text.Json.Utf8JsonReader@,System.Type,System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc />
+        </member>
+        <member name="M:PolyPrompt.Helpers.ContentPartListJsonConverter.Write(System.Text.Json.Utf8JsonWriter,System.Collections.Generic.List{PolyPrompt.Models.ContentPart},System.Text.Json.JsonSerializerOptions)">
+            <inheritdoc />
+        </member>
+        <member name="T:PolyPrompt.Helpers.MediaTypeSniffer">
+            <summary>
+            Detects common media formats from their leading bytes.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaTypeSniffer.Detect(System.ReadOnlySpan{System.Byte})">
+            <summary>
+            The media type the bytes start with, or null when the format is not recognized.
+            </summary>
+            <param name="data">The bytes.</param>
+            <returns>A media type from <see cref="T:PolyPrompt.Models.MediaTypes"/>, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Helpers.MediaTypeSniffer.Compatible(System.String,System.String)">
+            <summary>
+            Whether a declared media type agrees with a detected one. Containers shared by audio and video (WebM, Ogg, MP4)
+            match either declaration.
+            </summary>
+            <param name="detected">The detected media type.</param>
+            <param name="declared">The declared media type.</param>
+            <returns>True when they agree.</returns>
+        </member>
         <member name="T:PolyPrompt.Helpers.PolyPromptJsonContext">
             <summary>
             Source-generated JSON metadata for PolyPrompt's wire shapes and public models. It lets PolyPrompt run without
@@ -5239,6 +5281,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableBoolean">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ByteArray">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -5289,6 +5336,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ChatMessage">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ChatRequest">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -5383,6 +5435,16 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ContentPart">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ContentPartType">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.EmbeddingResponse">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
@@ -5394,6 +5456,16 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.GenerationResponse">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ImageDetail">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.NullableImageDetail">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -5508,17 +5580,12 @@
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
         </member>
-        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolChatRequest">
-            <summary>
-            Defines the source generated JSON serialization contract metadata for a given type.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolChatResponse">
-            <summary>
-            Defines the source generated JSON serialization contract metadata for a given type.
-            </summary>
-        </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ToolDefinition">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.VideoClip">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -5589,6 +5656,11 @@
             </summary>
         </member>
         <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListCliAgentEvent">
+            <summary>
+            Defines the source generated JSON serialization contract metadata for a given type.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Helpers.PolyPromptJsonContext.ListContentPart">
             <summary>
             Defines the source generated JSON serialization contract metadata for a given type.
             </summary>
@@ -5998,6 +6070,17 @@
             (see the remarks on <see cref="T:PolyPrompt.Helpers.Serializer"/>).</exception>
             <exception cref="T:System.Text.Json.JsonException">Thrown when the graph is deeper than <see cref="F:PolyPrompt.Helpers.Serializer.MaxDepth"/>.</exception>
         </member>
+        <member name="M:PolyPrompt.Helpers.Serializer.SerializeJsonUtf8(System.Object)">
+            <summary>
+            Serialize an object to compact JSON as UTF-8 bytes, without an intermediate string. The bytes are identical to
+            <c>Encoding.UTF8.GetBytes(SerializeJson(obj, false))</c>.
+            </summary>
+            <param name="obj">Object to serialize. A null object serializes to the JSON literal null.</param>
+            <returns>UTF-8 JSON bytes.</returns>
+            <exception cref="T:System.NotSupportedException">Thrown when the graph contains a type with no available metadata
+            (see the remarks on <see cref="T:PolyPrompt.Helpers.Serializer"/>).</exception>
+            <exception cref="T:System.Text.Json.JsonException">Thrown when the graph is deeper than <see cref="F:PolyPrompt.Helpers.Serializer.MaxDepth"/>.</exception>
+        </member>
         <member name="M:PolyPrompt.Helpers.Serializer.SerializeJson``1(``0,System.Text.Json.Serialization.Metadata.JsonTypeInfo{``0},System.Boolean)">
             <summary>
             Serialize a value to JSON with explicit type metadata, for example from a source-generated
@@ -6191,10 +6274,10 @@
             <summary>No capability.</summary>
         </member>
         <member name="F:PolyPrompt.Models.Capability.Chat">
-            <summary>Single-prompt chat: <c>ChatAsync</c> and <c>ChatStreamingAsync</c>.</summary>
+            <summary>Chat: <c>ChatAsync</c> and <c>ChatStreamingAsync</c>, from a prompt, one message, or a conversation.</summary>
         </member>
-        <member name="F:PolyPrompt.Models.Capability.ToolChat">
-            <summary>Message-based chat with optional tools: <c>ToolChatAsync</c> and <c>ToolChatStreamingAsync</c>.</summary>
+        <member name="F:PolyPrompt.Models.Capability.ToolCalling">
+            <summary>Tools in chat: a <see cref="T:PolyPrompt.Models.ChatRequest"/> with <see cref="P:PolyPrompt.Models.ChatRequest.Tools"/> set.</summary>
         </member>
         <member name="F:PolyPrompt.Models.Capability.Generate">
             <summary>Text generation: <c>GenerateAsync</c> and <c>GenerateStreamingAsync</c>.</summary>
@@ -6216,6 +6299,18 @@
         </member>
         <member name="F:PolyPrompt.Models.Capability.Models">
             <summary>Model catalog: <c>ListModelsAsync</c>, <c>ModelExistsAsync</c>, and <c>GetModelInformationAsync</c>.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.Capability.ImageInput">
+            <summary>Image parts in user messages (<see cref="F:PolyPrompt.Models.ContentPartType.Image"/>).</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.Capability.AudioInput">
+            <summary>Audio parts in user messages (<see cref="F:PolyPrompt.Models.ContentPartType.Audio"/>).</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.Capability.VideoInput">
+            <summary>Video parts in user messages (<see cref="F:PolyPrompt.Models.ContentPartType.Video"/>).</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.Capability.Transcribe">
+            <summary>Speech to text: <c>TranscribeAsync</c>.</summary>
         </member>
         <member name="T:PolyPrompt.Models.CapabilityNotSupportedException">
             <summary>
@@ -6255,8 +6350,8 @@
         </member>
         <member name="T:PolyPrompt.Models.ChatMessage">
             <summary>
-            Message used by tool-capable chat requests.
-            Content may be null for assistant messages that contain tool calls.
+            One message in a conversation. Content is a list of parts: text, and on user messages images, audio, and video
+            (see <see cref="T:PolyPrompt.Models.ContentPart"/>). Assistant messages that only request tools have no content.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatMessage.ProviderState">
@@ -6269,7 +6364,19 @@
         </member>
         <member name="P:PolyPrompt.Models.ChatMessage.Content">
             <summary>
-            Text content for the message. May be null for assistant tool-call messages.
+            The message content, in order. Empty for assistant tool-call messages. Media parts are accepted only on user
+            messages. When deserializing, a JSON string (the 4.x shape) is read as a single text part.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.Text">
+            <summary>
+            The message's text: its text parts joined with a newline, or null when it has none. Setting it replaces all
+            content with a single text part (null clears the content).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatMessage.HasMedia">
+            <summary>
+            True when the content holds an image, audio, or video part.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatMessage.ToolCallId">
@@ -6303,6 +6410,25 @@
             <returns>A user chat message.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when content is null.</exception>
         </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.User(System.String,PolyPrompt.Models.ContentPart[])">
+            <summary>
+            Create a user message with text followed by media parts.
+            </summary>
+            <param name="text">User text, sent first.</param>
+            <param name="media">Image, audio, or video parts, sent after the text in order.</param>
+            <returns>A user chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when text or media is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when a part is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ChatMessage.User(System.Collections.Generic.IEnumerable{PolyPrompt.Models.ContentPart})">
+            <summary>
+            Create a user message from content parts, in order.
+            </summary>
+            <param name="content">Text and media parts.</param>
+            <returns>A user chat message.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when content is null.</exception>
+            <exception cref="T:System.ArgumentException">Thrown when a part is null.</exception>
+        </member>
         <member name="M:PolyPrompt.Models.ChatMessage.Assistant(System.String)">
             <summary>
             Create an assistant text message.
@@ -6329,27 +6455,71 @@
             <returns>A tool result chat message.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when toolName or content is null.</exception>
         </member>
-        <member name="T:PolyPrompt.Models.ChatResponse">
+        <member name="T:PolyPrompt.Models.ChatRequest">
             <summary>
-            Response from a non-streaming chat completion request.
-            Contains the completion text, metadata, and timing information.
+            A chat request: messages, optional tools, and per-call settings. With no tools it is an ordinary multi-turn chat;
+            tools require <see cref="F:PolyPrompt.Models.Capability.ToolCalling"/>.
             </summary>
         </member>
-        <member name="P:PolyPrompt.Models.ChatResponse.ResponseId">
-            <summary>Provider response identifier, when reported.</summary>
+        <member name="P:PolyPrompt.Models.ChatRequest.Messages">
+            <summary>
+            Conversation messages. At least one message is required.
+            </summary>
         </member>
-        <member name="P:PolyPrompt.Models.ChatResponse.FinishReason">
-            <summary>Provider finish reason, when reported.</summary>
+        <member name="P:PolyPrompt.Models.ChatRequest.Tools">
+            <summary>
+            Tool definitions available to the model. Empty for a plain multi-turn chat.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatRequest.ToolChoice">
+            <summary>
+            Tool choice directive. Common values are auto, none, and required. Null uses provider default behavior.
+            Default: auto.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatRequest.Options">
+            <summary>
+            Per-call completion settings (model, token limit, sampling, reasoning effort, and provider-specific settings
+            when a provider options type is used). Null uses the client's <c>Defaults</c>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatRequest.FromPrompt">
+            <summary>
+            True when the request came from <c>ChatAsync(string)</c>. Providers whose 4.x single-prompt body differs from
+            their message body (the Responses API sends <c>input</c> as a string with <c>instructions</c>) keep that body.
+            </summary>
+        </member>
+        <member name="T:PolyPrompt.Models.ChatResponse">
+            <summary>
+            Response from a chat request: assistant text, reasoning, and any tool calls.
+            A response may contain text, tool calls, or both depending on the provider and model.
+            </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatResponse.Text">
             <summary>
-            The completion text returned by the model.
+            Assistant text returned by the model. May be null when the model requested tool calls.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatResponse.Reasoning">
             <summary>
             Reasoning ("thinking") content returned by the model, kept separate from <see cref="P:PolyPrompt.Models.ChatResponse.Text"/>. Null
-            when the model produced no reasoning. Returned to the caller for display or logging.
+            when the model produced no reasoning. Returned for display or logging. Provider-specific continuation state is preserved separately
+            in ProviderState and carried by ToAssistantMessage().
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.ToolCalls">
+            <summary>
+            Tool calls requested by the model.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.ResponseId">
+            <summary>
+            Provider response identifier for correlation. May be null when the provider does not emit one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatResponse.FinishReason">
+            <summary>
+            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatResponse.Usage">
@@ -6359,21 +6529,32 @@
             Null when the provider returned no usage data.
             </summary>
         </member>
+        <member name="M:PolyPrompt.Models.ChatResponse.ToAssistantMessage">
+            <summary>
+            Convert this response into an assistant message that can be appended to the next ChatRequest.
+            </summary>
+            <returns>An assistant message containing either text or tool calls.</returns>
+        </member>
         <member name="T:PolyPrompt.Models.ChatStreamingChunk">
             <summary>
-            A single chunk from a streaming chat completion response.
+            A single chunk from a streaming chat response.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.Text">
             <summary>
-            The text content of this chunk. May be null or empty for metadata-only chunks.
+            Assistant text content of this chunk. May be null or empty for metadata-only or tool-call chunks.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.ReasoningText">
             <summary>
             Reasoning ("thinking") content of this chunk, kept separate from <see cref="P:PolyPrompt.Models.ChatStreamingChunk.Text"/>. Null when the
-            chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI reasoning_content,
-            Ollama message.thinking, Gemini thought parts).
+            chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI
+            reasoning_content, Ollama message.thinking, Gemini thought parts).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingChunk.ToolCallDeltas">
+            <summary>
+            Tool call deltas emitted in this chunk.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.Model">
@@ -6389,18 +6570,17 @@
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.FinishReason">
             <summary>
             The reason generation finished. Present on the final chunk.
-            Common values: "stop", "length" (Ollama/OpenAI), "STOP", "MAX_TOKENS" (Gemini).
+            Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.Usage">
             <summary>
             Token usage and timing statistics. Typically only populated on the final chunk.
-            Gemini provides cumulative usage on every chunk.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.ResponseId">
             <summary>
-            Response identifier for correlation. Present in OpenAI (id) and Gemini (responseId).
+            Response identifier for correlation.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingChunk.CreatedUtc">
@@ -6410,64 +6590,86 @@
         </member>
         <member name="T:PolyPrompt.Models.ChatStreamingResponse">
             <summary>
-            Top-level response from a streaming chat completion request.
-            Contains metadata, timing, and an async enumerable of streaming chunks.
-            Timing fields are populated as chunks are consumed through the Chunks enumerable.
+            Response from a streaming chat request. Enumerate Chunks to receive text and tool-call deltas as they arrive.
+            Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
+            Timing and accumulated output fields are populated as chunks are consumed.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Text">
+            <summary>
+            Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Reasoning">
+            <summary>
+            Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
+            <see cref="P:PolyPrompt.Models.ChatStreamingResponse.Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
+            Returned for display or logging; native continuation state is carried separately by ToAssistantMessage().
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ToolCalls">
+            <summary>
+            Tool calls accumulated from streamed tool-call deltas.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ResponseId">
+            <summary>
+            Provider response identifier for correlation. May be null when the provider does not emit one.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.FinishReason">
+            <summary>
+            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.Chunks">
             <summary>
             The async enumerable of streaming chunks.
-            Enumerate this to receive tokens and metadata as they arrive.
-            Timing fields on this response are updated as chunks are consumed.
+            Enumerate this to receive text and tool-call deltas as they arrive.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.TimeToFirstTokenMs">
             <summary>
-            Time in milliseconds from request start to the first token received.
+            Time in milliseconds from request start to the first text or tool-call delta chunk.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.TimeToLastTokenMs">
             <summary>
-            Time in milliseconds from request start to the last token received.
+            Time in milliseconds from request start to the last text or tool-call delta chunk.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.ChunkCount">
             <summary>
-            Number of text-bearing chunks received.
+            Number of chunks containing text or tool-call deltas.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ToolCallDeltaCount">
+            <summary>
+            Number of streamed tool-call deltas received.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.OverallTokensPerSecond">
             <summary>
-            Tokens per second calculated over the overall runtime (completion tokens / overall runtime).
+            Tokens per second calculated over the overall runtime.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.InterTokenTokensPerSecond">
             <summary>
-            Tokens per second calculated between first and last token arrival (completion tokens / inter-token duration).
+            Tokens per second calculated between first and last streamed content arrival.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ChatStreamingResponse.Usage">
             <summary>
-            Final token usage from the stream (typically from the last chunk).
+            Final token usage from the stream.
             </summary>
         </member>
-        <member name="P:PolyPrompt.Models.ChatStreamingResponse.FinishReason">
+        <member name="M:PolyPrompt.Models.ChatStreamingResponse.ToAssistantMessage">
             <summary>
-            The finish reason from the model (e.g. "stop", "length").
+            Convert this response into an assistant message that can be appended to the next ChatRequest.
+            Enumerate Chunks and require State == StreamingState.Completed before accepting the turn or executing tools.
+            This accessor preserves partial output for compatibility and does not enforce completion or validate arguments.
             </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ChatStreamingResponse.ResponseId">
-            <summary>
-            Response identifier for correlation.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ChatStreamingResponse.Reasoning">
-            <summary>
-            Reasoning ("thinking") content accumulated from streamed chunks, kept separate from the text
-            chunks. Null when the model produced no reasoning. Populated as chunks are consumed; a convenience
-            so callers need not re-concatenate <see cref="P:PolyPrompt.Models.ChatStreamingChunk.ReasoningText"/> themselves.
-            </summary>
+            <returns>An assistant message containing either text or tool calls.</returns>
         </member>
         <member name="T:PolyPrompt.Models.ChoiceAnswer">
             <summary>
@@ -7246,6 +7448,162 @@
             <see cref="T:PolyPrompt.Models.ReasoningEffort"/>. Text generation ignores this setting. Default: null.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.ContentPart">
+            <summary>
+            One piece of a message's content: text, or an image, audio clip, or video given as inline bytes, a remote URL, or
+            a provider-hosted file reference. Exactly one of <see cref="P:PolyPrompt.Models.ContentPart.Text"/>, <see cref="P:PolyPrompt.Models.ContentPart.Data"/>, <see cref="P:PolyPrompt.Models.ContentPart.Url"/>, or
+            <see cref="P:PolyPrompt.Models.ContentPart.FileReference"/> is set. The factories validate when called; parts built with an object initializer are
+            validated when a request is sent. See MULTIMEDIA.md.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Type">
+            <summary>
+            What this part carries. Default: <see cref="F:PolyPrompt.Models.ContentPartType.Text"/>.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Text">
+            <summary>
+            The text, when <see cref="P:PolyPrompt.Models.ContentPart.Type"/> is <see cref="F:PolyPrompt.Models.ContentPartType.Text"/>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Data">
+            <summary>
+            Inline media bytes. Requires <see cref="P:PolyPrompt.Models.ContentPart.MediaType"/>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Url">
+            <summary>
+            A remote <c>http</c> or <c>https</c> URL that the provider fetches. PolyPrompt never downloads it. Accepted by
+            OpenAI, Azure OpenAI, xAI, Anthropic, and OpenAI-compatible servers, and for YouTube video links by Gemini and
+            Vertex AI; other providers reject it before sending. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.FileReference">
+            <summary>
+            A provider-hosted file: an OpenAI <c>file_id</c>, a Gemini File API URI, a Vertex AI <c>gs://</c> URI, or a
+            Bedrock <c>s3://</c> URI. Requires <see cref="P:PolyPrompt.Models.ContentPart.MediaType"/>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.MediaType">
+            <summary>
+            MIME type, for example <c>image/png</c> (see <see cref="T:PolyPrompt.Models.MediaTypes"/>). Required with <see cref="P:PolyPrompt.Models.ContentPart.Data"/> and
+            <see cref="P:PolyPrompt.Models.ContentPart.FileReference"/>, optional with <see cref="P:PolyPrompt.Models.ContentPart.Url"/>. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Detail">
+            <summary>
+            Image resolution hint. Images only. Default: null (provider default).
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Clip">
+            <summary>
+            The portion of a video to use and its sampling rate. Video only. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.ContentPart.Name">
+            <summary>
+            Optional display or file name, used as the file name for uploads. Default: null.
+            </summary>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.FromText(System.String)">
+            <summary>
+            A text part.
+            </summary>
+            <param name="text">The text.</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown when text is null.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.Image(System.Byte[],System.String,System.Nullable{PolyPrompt.Models.ImageDetail})">
+            <summary>
+            An inline image.
+            </summary>
+            <param name="data">Image bytes.</param>
+            <param name="mediaType">Image media type, for example <see cref="F:PolyPrompt.Models.MediaTypes.ImagePng"/>.</param>
+            <param name="detail">Optional resolution hint.</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the data is empty or the media type is not an image type.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.ImageUrl(System.String,System.Nullable{PolyPrompt.Models.ImageDetail})">
+            <summary>
+            An image the provider fetches from a URL.
+            </summary>
+            <param name="url">An http or https URL.</param>
+            <param name="detail">Optional resolution hint.</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the URL is not an absolute http or https URL.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.Audio(System.Byte[],System.String)">
+            <summary>
+            Inline audio.
+            </summary>
+            <param name="data">Audio bytes.</param>
+            <param name="mediaType">Audio media type, for example <see cref="F:PolyPrompt.Models.MediaTypes.AudioWav"/>.</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the data is empty or the media type is not an audio type.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.Video(System.Byte[],System.String,PolyPrompt.Models.VideoClip)">
+            <summary>
+            Inline video.
+            </summary>
+            <param name="data">Video bytes.</param>
+            <param name="mediaType">Video media type, for example <see cref="F:PolyPrompt.Models.MediaTypes.VideoMp4"/>.</param>
+            <param name="clip">Optional clip and sampling rate (Gemini and Vertex AI).</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the data is empty or the media type is not a video type.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.VideoUrl(System.String,PolyPrompt.Models.VideoClip)">
+            <summary>
+            A video the provider fetches from a URL: a YouTube link on Gemini and Vertex AI, or a server-fetched URL on
+            OpenAI-compatible servers that accept <c>video_url</c>.
+            </summary>
+            <param name="url">An http or https URL.</param>
+            <param name="clip">Optional clip and sampling rate (Gemini and Vertex AI).</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the URL is not an absolute http or https URL.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.FileReferenceOf(PolyPrompt.Models.ContentPartType,System.String,System.String)">
+            <summary>
+            A provider-hosted file (see <see cref="P:PolyPrompt.Models.ContentPart.FileReference"/>).
+            </summary>
+            <param name="type">Image, audio, or video.</param>
+            <param name="reference">The provider's file identifier or URI.</param>
+            <param name="mediaType">The file's media type.</param>
+            <returns>The part.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the type is Text, or the reference or media type is blank.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.FromFile(System.String)">
+            <summary>
+            Read a file and infer its part type and media type from its leading bytes, falling back to its extension.
+            </summary>
+            <param name="path">Path to an image, audio, or video file.</param>
+            <returns>The part, with <see cref="P:PolyPrompt.Models.ContentPart.Name"/> set to the file name.</returns>
+            <exception cref="T:System.ArgumentException">Thrown when the media type cannot be determined or is not image, audio, or video.</exception>
+        </member>
+        <member name="M:PolyPrompt.Models.ContentPart.Validate(System.String)">
+            <summary>
+            Check that this part is well formed: exactly one source, a type consistent with that source and the media
+            type, and type-specific settings only on their own type.
+            </summary>
+            <param name="path">Where the part is, used in error messages, for example <c>Messages[1].Content[0]</c>.</param>
+            <exception cref="T:System.ArgumentException">Thrown when the part is not well formed.</exception>
+        </member>
+        <member name="T:PolyPrompt.Models.ContentPartType">
+            <summary>
+            The kind of content a <see cref="T:PolyPrompt.Models.ContentPart"/> carries.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ContentPartType.Text">
+            <summary>Plain text.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ContentPartType.Image">
+            <summary>An image. Requires <see cref="F:PolyPrompt.Models.Capability.ImageInput"/>.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ContentPartType.Audio">
+            <summary>Audio. Requires <see cref="F:PolyPrompt.Models.Capability.AudioInput"/>.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ContentPartType.Video">
+            <summary>Video. Requires <see cref="F:PolyPrompt.Models.Capability.VideoInput"/>.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.DecisionAnswer">
             <summary>
             The answer to one <see cref="T:PolyPrompt.Models.DecisionQuestion"/>. Use the typed subclasses (<see cref="T:PolyPrompt.Models.BinaryAnswer"/>,
@@ -7673,6 +8031,21 @@
             The response body as a string.
             </summary>
         </member>
+        <member name="T:PolyPrompt.Models.ImageDetail">
+            <summary>
+            Image resolution hint. Sent as OpenAI's <c>detail</c> (Responses API and Chat Completions) and ignored by providers
+            without the concept.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ImageDetail.Auto">
+            <summary>Let the provider choose.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ImageDetail.Low">
+            <summary>Low resolution: fewer tokens, less detail.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.ImageDetail.High">
+            <summary>High resolution: more tokens, more detail.</summary>
+        </member>
         <member name="T:PolyPrompt.Models.IStreamingResponse">
             <summary>Final-outcome contract shared by completion and native event streams.</summary>
         </member>
@@ -7681,6 +8054,64 @@
         </member>
         <member name="P:PolyPrompt.Models.IStreamingResponse.StreamError">
             <summary>Failure diagnostic, or null. Partial output remains provisional unless State is Completed.</summary>
+        </member>
+        <member name="T:PolyPrompt.Models.MediaTypes">
+            <summary>
+            MIME type constants for common image, audio, and video formats, and lookup by file extension.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.ImageJpeg">
+            <summary>JPEG image.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.ImagePng">
+            <summary>PNG image.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.ImageWebp">
+            <summary>WebP image.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.ImageGif">
+            <summary>GIF image.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioWav">
+            <summary>WAV audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioMpeg">
+            <summary>MP3 audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioFlac">
+            <summary>FLAC audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioOgg">
+            <summary>Ogg audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioWebm">
+            <summary>WebM audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.AudioMp4">
+            <summary>MP4 (M4A) audio.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.VideoMp4">
+            <summary>MP4 video.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.VideoWebm">
+            <summary>WebM video.</summary>
+        </member>
+        <member name="F:PolyPrompt.Models.MediaTypes.VideoQuicktime">
+            <summary>QuickTime (MOV) video.</summary>
+        </member>
+        <member name="M:PolyPrompt.Models.MediaTypes.FromFileExtension(System.String)">
+            <summary>
+            The media type for a file's extension, or null when the extension is not one of the constants above.
+            </summary>
+            <param name="path">A file path or name.</param>
+            <returns>The media type, or null.</returns>
+        </member>
+        <member name="M:PolyPrompt.Models.MediaTypes.PartTypeOf(System.String)">
+            <summary>
+            The content type implied by a media type's top-level type (<c>image/</c>, <c>audio/</c>, <c>video/</c>), or null.
+            </summary>
+            <param name="mediaType">A media type.</param>
+            <returns>The content part type, or null.</returns>
         </member>
         <member name="T:PolyPrompt.Models.ModelInformation">
             <summary>
@@ -8483,7 +8914,7 @@
             A native Responses API tool definition (hosted tools such as web search, and client-executed non-function tools
             such as shell). Parameters keep provider-specific options. Build one with <see cref="T:PolyPrompt.Models.ResponsesApiTools"/>,
             <see cref="T:PolyPrompt.Models.OpenAiTools"/>, the xAI tool factory, or <see cref="M:PolyPrompt.Models.ResponsesApiHostedTool.Create(System.String,System.Collections.Generic.Dictionary{System.String,System.Object})"/>. Function tools go in
-            <c>ToolChatRequest.Tools</c> or <c>FunctionTools</c> instead.
+            <c>ChatRequest.Tools</c> or <c>FunctionTools</c> instead.
             </summary>
         </member>
         <member name="P:PolyPrompt.Models.ResponsesApiHostedTool.Type">
@@ -9005,215 +9436,6 @@
             Opaque provider thought signature for this tool call, when the provider emits one. See <see cref="P:PolyPrompt.Models.ToolCall.ThoughtSignature"/>.
             </summary>
         </member>
-        <member name="T:PolyPrompt.Models.ToolChatRequest">
-            <summary>
-            Request for a message-based chat completion that may use tools. With no tools it is an ordinary multi-turn chat.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatRequest.Messages">
-            <summary>
-            Conversation messages. At least one message is required.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatRequest.Tools">
-            <summary>
-            Tool definitions available to the model. Empty for a plain multi-turn chat.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatRequest.ToolChoice">
-            <summary>
-            Tool choice directive. Common values are auto, none, and required. Null uses provider default behavior.
-            Default: auto.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatRequest.Options">
-            <summary>
-            Per-call completion settings (model, token limit, sampling, reasoning effort, and provider-specific settings
-            when a provider options type is used). Null uses the client's <c>Defaults</c>. Default: null.
-            </summary>
-        </member>
-        <member name="T:PolyPrompt.Models.ToolChatResponse">
-            <summary>
-            Response from a tool-capable chat completion request.
-            A response may contain text, tool calls, or both depending on the provider and model.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.Text">
-            <summary>
-            Assistant text returned by the model. May be null when the model requested tool calls.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.Reasoning">
-            <summary>
-            Reasoning ("thinking") content returned by the model, kept separate from <see cref="P:PolyPrompt.Models.ToolChatResponse.Text"/>. Null
-            when the model produced no reasoning. Returned for display or logging. Provider-specific continuation state is preserved separately
-            in ProviderState and carried by ToAssistantMessage().
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.ToolCalls">
-            <summary>
-            Tool calls requested by the model.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.ResponseId">
-            <summary>
-            Provider response identifier for correlation. May be null when the provider does not emit one.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.FinishReason">
-            <summary>
-            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatResponse.Usage">
-            <summary>
-            Token usage for this completion, when the provider reported it. Populated on both the streaming
-            and non-streaming paths so cost and cache accounting is identical regardless of which was used.
-            Null when the provider returned no usage data.
-            </summary>
-        </member>
-        <member name="M:PolyPrompt.Models.ToolChatResponse.ToAssistantMessage">
-            <summary>
-            Convert this response into an assistant message that can be appended to the next ToolChatRequest.
-            </summary>
-            <returns>An assistant message containing either text or tool calls.</returns>
-        </member>
-        <member name="T:PolyPrompt.Models.ToolChatStreamingChunk">
-            <summary>
-            A single chunk from a streaming tool-capable chat completion response.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Text">
-            <summary>
-            Assistant text content of this chunk. May be null or empty for metadata-only or tool-call chunks.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ReasoningText">
-            <summary>
-            Reasoning ("thinking") content of this chunk, kept separate from <see cref="P:PolyPrompt.Models.ToolChatStreamingChunk.Text"/>. Null when the
-            chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI
-            reasoning_content, Ollama message.thinking, Gemini thought parts).
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ToolCallDeltas">
-            <summary>
-            Tool call deltas emitted in this chunk.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Model">
-            <summary>
-            The model that generated this chunk.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Done">
-            <summary>
-            Whether this is the final chunk in the stream.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.FinishReason">
-            <summary>
-            The reason generation finished. Present on the final chunk.
-            Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.Usage">
-            <summary>
-            Token usage and timing statistics. Typically only populated on the final chunk.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.ResponseId">
-            <summary>
-            Response identifier for correlation.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingChunk.CreatedUtc">
-            <summary>
-            UTC timestamp of when this chunk was created.
-            </summary>
-        </member>
-        <member name="T:PolyPrompt.Models.ToolChatStreamingResponse">
-            <summary>
-            Top-level response from a streaming tool-capable chat completion request.
-            Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
-            Timing and accumulated output fields are populated as chunks are consumed.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Text">
-            <summary>
-            Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Reasoning">
-            <summary>
-            Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
-            <see cref="P:PolyPrompt.Models.ToolChatStreamingResponse.Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
-            Returned for display or logging; native continuation state is carried separately by ToAssistantMessage().
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCalls">
-            <summary>
-            Tool calls accumulated from streamed tool-call deltas.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ResponseId">
-            <summary>
-            Provider response identifier for correlation. May be null when the provider does not emit one.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.FinishReason">
-            <summary>
-            Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Chunks">
-            <summary>
-            The async enumerable of streaming chunks.
-            Enumerate this to receive text and tool-call deltas as they arrive.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.TimeToFirstTokenMs">
-            <summary>
-            Time in milliseconds from request start to the first text or tool-call delta chunk.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.TimeToLastTokenMs">
-            <summary>
-            Time in milliseconds from request start to the last text or tool-call delta chunk.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ChunkCount">
-            <summary>
-            Number of chunks containing text or tool-call deltas.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.ToolCallDeltaCount">
-            <summary>
-            Number of streamed tool-call deltas received.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.OverallTokensPerSecond">
-            <summary>
-            Tokens per second calculated over the overall runtime.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.InterTokenTokensPerSecond">
-            <summary>
-            Tokens per second calculated between first and last streamed content arrival.
-            </summary>
-        </member>
-        <member name="P:PolyPrompt.Models.ToolChatStreamingResponse.Usage">
-            <summary>
-            Final token usage from the stream.
-            </summary>
-        </member>
-        <member name="M:PolyPrompt.Models.ToolChatStreamingResponse.ToAssistantMessage">
-            <summary>
-            Convert this response into an assistant message that can be appended to the next ToolChatRequest.
-            Enumerate Chunks and require State == StreamingState.Completed before accepting the turn or executing tools.
-            This accessor preserves partial output for compatibility and does not enforce completion or validate arguments.
-            </summary>
-            <returns>An assistant message containing either text or tool calls.</returns>
-        </member>
         <member name="T:PolyPrompt.Models.ToolDefinition">
             <summary>
             Portable function/tool declaration supplied to a tool-capable chat request.
@@ -9248,6 +9470,28 @@
             <param name="parameters">JSON Schema parameter object.</param>
             <returns>A function tool definition.</returns>
             <exception cref="T:System.ArgumentNullException">Thrown when name, description, or parameters is null.</exception>
+        </member>
+        <member name="T:PolyPrompt.Models.VideoClip">
+            <summary>
+            The portion of a video to use, and how densely to sample it. Sent as Gemini and Vertex AI <c>videoMetadata</c>
+            and ignored by other providers.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.VideoClip.StartOffsetMs">
+            <summary>
+            Start offset in milliseconds, at least 0. Null starts at the beginning. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.VideoClip.EndOffsetMs">
+            <summary>
+            End offset in milliseconds. Must be greater than <see cref="P:PolyPrompt.Models.VideoClip.StartOffsetMs"/> when both are set; this is checked
+            when the request is validated. Null runs to the end. Default: null.
+            </summary>
+        </member>
+        <member name="P:PolyPrompt.Models.VideoClip.FramesPerSecond">
+            <summary>
+            Frames sampled per second, from 0.1 to 24. Null uses the provider default (1 on Gemini). Default: null.
+            </summary>
         </member>
         <member name="T:PolyPrompt.Models.XAiTools">
             <summary>
@@ -9712,7 +9956,7 @@
         </member>
         <member name="P:PolyPrompt.Options.ResponsesApiCompletionOptions.FunctionTools">
             <summary>
-            Local function tools for native (raw input) requests; also combined with <c>ToolChatRequest.Tools</c>.
+            Local function tools for native (raw input) requests; also combined with <c>ChatRequest.Tools</c>.
             </summary>
         </member>
         <member name="P:PolyPrompt.Options.ResponsesApiCompletionOptions.HostedTools">
@@ -9730,7 +9974,7 @@
         </member>
         <member name="P:PolyPrompt.Options.ResponsesApiCompletionOptions.ToolChoice">
             <summary>
-            Raw <c>tool_choice</c> string or object, overriding <c>ToolChatRequest.ToolChoice</c> when supplied.
+            Raw <c>tool_choice</c> string or object, overriding <c>ChatRequest.ToolChoice</c> when supplied.
             </summary>
         </member>
         <member name="P:PolyPrompt.Options.ResponsesApiCompletionOptions.ServiceTier">
@@ -10887,22 +11131,12 @@
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationChat">
             <summary>
-            Operation value: <c>ChatAsync</c>.
+            Operation value: <c>ChatAsync</c>, with or without tools (see <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolDefinitionCount"/>).
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationChatStream">
             <summary>
-            Operation value: <c>ChatStreamingAsync</c>.
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationToolChat">
-            <summary>
-            Operation value: <c>ToolChatAsync</c>.
-            </summary>
-        </member>
-        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationToolChatStream">
-            <summary>
-            Operation value: <c>ToolChatStreamingAsync</c>.
+            Operation value: <c>ChatStreamingAsync</c>, with or without tools (see <see cref="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolDefinitionCount"/>).
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.OperationGenerate">

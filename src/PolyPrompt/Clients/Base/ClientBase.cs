@@ -584,9 +584,6 @@ namespace PolyPrompt.Clients
                         case ChatStreamingResponse chat:
                             chat.Chunks = StreamingLifecycle.Wrap(chat.Chunks, chat, c => c.Done, token);
                             break;
-                        case ToolChatStreamingResponse tools:
-                            tools.Chunks = StreamingLifecycle.Wrap(tools.Chunks, tools, c => c.Done, token);
-                            break;
                         case GenerationStreamingResponse generation:
                             generation.Chunks = StreamingLifecycle.Wrap(generation.Chunks, generation, c => c.Done, token);
                             break;

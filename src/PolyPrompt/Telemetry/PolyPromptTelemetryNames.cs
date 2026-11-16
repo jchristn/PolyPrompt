@@ -448,24 +448,14 @@ namespace PolyPrompt.Telemetry
         #region Operations
 
         /// <summary>
-        /// Operation value: <c>ChatAsync</c>.
+        /// Operation value: <c>ChatAsync</c>, with or without tools (see <see cref="ToolDefinitionCount"/>).
         /// </summary>
         public const string OperationChat = "chat";
 
         /// <summary>
-        /// Operation value: <c>ChatStreamingAsync</c>.
+        /// Operation value: <c>ChatStreamingAsync</c>, with or without tools (see <see cref="ToolDefinitionCount"/>).
         /// </summary>
         public const string OperationChatStream = "chat_stream";
-
-        /// <summary>
-        /// Operation value: <c>ToolChatAsync</c>.
-        /// </summary>
-        public const string OperationToolChat = "tool_chat";
-
-        /// <summary>
-        /// Operation value: <c>ToolChatStreamingAsync</c>.
-        /// </summary>
-        public const string OperationToolChatStream = "tool_chat_stream";
 
         /// <summary>
         /// Operation value: <c>GenerateAsync</c>.

@@ -499,8 +499,8 @@ namespace PolyPrompt.Clients
             {
                 foreach (ChatMessage message in request.History)
                 {
-                    if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(message.Content))
-                        system = string.IsNullOrWhiteSpace(system) ? message.Content : system + "\n\n" + message.Content;
+                    if (string.Equals(message.Role, "system", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(message.Text))
+                        system = string.IsNullOrWhiteSpace(system) ? message.Text : system + "\n\n" + message.Text;
                 }
             }
             return system;

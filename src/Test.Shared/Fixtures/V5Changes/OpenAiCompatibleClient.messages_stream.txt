@@ -1,0 +1,5 @@
+# reason: tool_choice is sent only when tools are present; 4.x sent tool_choice "auto" on every message-based chat.
+outcome: ok
+POST {endpoint}/v1/chat/completions
+content-type: application/json; charset=utf-8
+{"model":"gpt-4o-mini","messages":[{"role":"system","content":"You are terse."},{"role":"user","content":"Hi"},{"role":"assistant","content":"Hello."},{"role":"user","content":"Say \u0022again\u0022 in French, \u00FCn\u00EFc\u00F6d\u00E9 \u2713"}],"max_tokens":4096,"stream":true,"stream_options":{"include_usage":true}}

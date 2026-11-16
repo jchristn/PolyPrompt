@@ -44,7 +44,7 @@ namespace Test.Shared
             SharedAssert.Equal(StreamingState.Completed, generation.State, generation.StreamError ?? "Generation completed");
             SharedAssert.NotEmpty(text, "Generation produced text");
 
-            ToolChatRequest request = new ToolChatRequest
+            ChatRequest request = new ChatRequest
             {
                 Options = options,
                 Messages = new List<ChatMessage> { ChatMessage.User("Call the probe tool now with value 7. Do not answer until you have used the tool.") },
@@ -54,8 +54,8 @@ namespace Test.Shared
                     ["required"] = new[] { "value" }
                 }) }
             };
-            ToolChatStreamingResponse tools = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            await foreach (ToolChatStreamingChunk chunk in tools.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
+            ChatStreamingResponse tools = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            await foreach (ChatStreamingChunk chunk in tools.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
             SharedAssert.Equal(StreamingState.Completed, tools.State, tools.StreamError ?? "Tool turn completed");
             SharedAssert.Equal(1, tools.ToolCalls.Count, "Model requested one tool");
             ToolCall call = tools.ToolCalls[0];
@@ -64,8 +64,8 @@ namespace Test.Shared
             SharedAssert.Equal(7, arguments.RootElement.GetProperty("value").GetInt32(), "Arguments validated before producing a result");
             request.Messages.Add(tools.ToAssistantMessage());
             request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "7"));
-            ToolChatStreamingResponse continuation = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            await foreach (ToolChatStreamingChunk chunk in continuation.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
+            ChatStreamingResponse continuation = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            await foreach (ChatStreamingChunk chunk in continuation.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
             SharedAssert.Equal(StreamingState.Completed, continuation.State, continuation.StreamError ?? "Native continuation completed");
             SharedAssert.NotEmpty(continuation.Text, "Continuation produced an answer");
             SharedAssert.Equal(0, continuation.ToolCalls.Count, "Continuation accepted the result");

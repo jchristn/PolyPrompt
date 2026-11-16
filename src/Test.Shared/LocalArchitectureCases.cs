@@ -74,7 +74,7 @@ namespace Test.Shared
             SharedAssert.True(typeof(CliAgentClientBase).IsAbstract && typeof(CliAgentClientBase).BaseType == typeof(ClientBase), "CliAgentClientBase is abstract and derives from ClientBase.");
 
             // Every model operation is declared once, on ProviderClientBase, so code written against it runs on any provider.
-            string[] operations = { "ChatAsync", "ChatStreamingAsync", "ToolChatAsync", "ToolChatStreamingAsync", "GenerateAsync", "GenerateStreamingAsync",
+            string[] operations = { "ChatAsync", "ChatStreamingAsync", "ChatAsync", "ChatStreamingAsync", "GenerateAsync", "GenerateStreamingAsync",
                 "EmbedAsync", "EmbedSparseAsync", "RerankAsync", "ClassifyAsync", "DecideAsync", "ListModelsAsync", "ModelExistsAsync", "GetModelInformationAsync" };
             foreach (string operation in operations)
             {
@@ -159,15 +159,15 @@ namespace Test.Shared
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ChatStreamingAsync(null!, token: token), name + " ChatStreamingAsync should reject a null prompt.").ConfigureAwait(false);
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.GenerateAsync(null!, token: token), name + " GenerateAsync should reject a null prompt.").ConfigureAwait(false);
                     await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.GenerateStreamingAsync(null!, token: token), name + " GenerateStreamingAsync should reject a null prompt.").ConfigureAwait(false);
-                    await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ToolChatAsync(null!, token), name + " ToolChatAsync should reject a null request.").ConfigureAwait(false);
-                    await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ToolChatStreamingAsync(null!, token), name + " ToolChatStreamingAsync should reject a null request.").ConfigureAwait(false);
-                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ToolChatAsync(new ToolChatRequest(), token), name + " ToolChatAsync should reject a request with no messages.").ConfigureAwait(false);
-                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ToolChatStreamingAsync(new ToolChatRequest(), token), name + " ToolChatStreamingAsync should reject a request with no messages.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ChatAsync(null!, token), name + " ChatAsync should reject a null request.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<ArgumentNullException>(() => client.ChatStreamingAsync(null!, token), name + " ChatStreamingAsync should reject a null request.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ChatAsync(new ChatRequest(), token), name + " ChatAsync should reject a request with no messages.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ChatStreamingAsync(new ChatRequest(), token), name + " ChatStreamingAsync should reject a request with no messages.").ConfigureAwait(false);
 
-                    ToolChatRequest withNull = new ToolChatRequest();
+                    ChatRequest withNull = new ChatRequest();
                     withNull.Messages.Add(ChatMessage.User("hi"));
                     withNull.Messages.Add(null!);
-                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ToolChatAsync(withNull, token), name + " ToolChatAsync should reject a null message.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<ArgumentException>(() => client.ChatAsync(withNull, token), name + " ChatAsync should reject a null message.").ConfigureAwait(false);
                 }
 
                 SharedAssert.Equal(0, server.RequestPaths.Count, "No invalid completion call should reach the server.");
@@ -278,9 +278,9 @@ namespace Test.Shared
                     client.Defaults.Completion.Model = null;
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.ChatAsync("hi", token: token), name + " ChatAsync should throw without a model.").ConfigureAwait(false);
                     await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.GenerateStreamingAsync("hi", token: token), name + " GenerateStreamingAsync should throw without a model.").ConfigureAwait(false);
-                    ToolChatRequest request = new ToolChatRequest();
+                    ChatRequest request = new ChatRequest();
                     request.Messages.Add(ChatMessage.User("hi"));
-                    await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.ToolChatAsync(request, token), name + " ToolChatAsync should throw without a model.").ConfigureAwait(false);
+                    await SharedAssert.ThrowsExactAsync<InvalidOperationException>(() => client.ChatAsync(request, token), name + " ChatAsync should throw without a model.").ConfigureAwait(false);
 
                     ChatResponse perCall = await client.ChatAsync("hi", new CompletionOptions { Model = "per-call-model" }, token).ConfigureAwait(false);
                     SharedAssert.True(perCall.Success, name + " chat with only a per-call model should succeed. " + perCall.Error);
@@ -390,9 +390,9 @@ namespace Test.Shared
 
                     SharedAssert.True((await live.ChatAsync("hi", new CompletionOptions { MaxTokens = 11, Model = "per-call-model" }, token).ConfigureAwait(false)).Success, name + " chat with per-call options should succeed.");
 
-                    ToolChatRequest request = new ToolChatRequest { Options = new CompletionOptions { Temperature = 0.75 } };
+                    ChatRequest request = new ChatRequest { Options = new CompletionOptions { Temperature = 0.75 } };
                     request.Messages.Add(ChatMessage.User("hi"));
-                    SharedAssert.True((await live.ToolChatAsync(request, token).ConfigureAwait(false)).Success, name + " tool chat with request options should succeed.");
+                    SharedAssert.True((await live.ChatAsync(request, token).ConfigureAwait(false)).Success, name + " tool chat with request options should succeed.");
 
                     List<string> bodies = server.RequestBodies;
                     List<string> urls = server.RequestUrls;

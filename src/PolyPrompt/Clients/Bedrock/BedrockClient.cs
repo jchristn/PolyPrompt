@@ -7,7 +7,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// AWS Bedrock client. Requests are signed with AWS Signature Version 4.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (the Converse API, <c>converse</c> and
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (the Converse API, <c>converse</c> and
     /// <c>converse-stream</c>), Embed (<c>InvokeModel</c> with Titan or Cohere embedding models), Rerank
     /// (<c>InvokeModel</c> with Cohere or Amazon rerank models), and Models (control-plane
     /// <c>/foundation-models</c>).</description></item>
@@ -34,9 +34,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, Rerank, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "Bedrock";

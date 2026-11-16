@@ -9,7 +9,7 @@ namespace PolyPrompt.Clients
     /// <list type="bullet">
     /// <item><description>Supported: Embed (<c>/embed</c>), SparseEmbed (<c>/embed_sparse</c>, SPLADE models), Rerank
     /// (<c>/rerank</c>, cross-encoders), Classify (<c>/predict</c>), and Models (<c>/info</c>).</description></item>
-    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
     /// Decide.</description></item>
     /// <item><description>Auth: none by default; an optional bearer token for protected deployments (for example Hugging
     /// Face Inference Endpoints).</description></item>

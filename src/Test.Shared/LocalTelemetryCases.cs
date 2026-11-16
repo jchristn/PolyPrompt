@@ -172,21 +172,21 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = NewOpenAi(server.Endpoint, model);
             using TelemetryCapture capture = new TelemetryCapture("tel_tool_chat");
 
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.User("What is the weather in Seattle?"));
             request.Tools.Add(ToolDefinition.Function("get_weather", "Get weather.", new Dictionary<string, object> { { "type", "object" } }));
             request.Options = new CompletionOptions { MaxTokens = 256, Temperature = 0.2 };
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success && response.ToolCalls.Count == 1, "The tool chat should succeed with one tool call.");
 
-            Activity op = capture.Span("openai tool_chat");
+            Activity op = capture.Span("openai chat");
             SharedAssert.Equal(ActivityKind.Client, op.Kind, "The operation span should be a client span.");
             SharedAssert.Equal(capture.Root.SpanId, op.ParentSpanId, "The operation span should nest under the caller's span.");
             SharedAssert.Equal(ActivityStatusCode.Ok, op.Status, "A successful operation span should have status Ok.");
             SharedAssert.Equal("openai", Tag(op, N.Provider), "Provider attribute.");
             SharedAssert.Equal("chat", Tag(op, N.GenAiOperationName), "GenAI operation name.");
-            SharedAssert.Equal("tool_chat", Tag(op, N.Operation), "PolyPrompt operation.");
+            SharedAssert.Equal("chat", Tag(op, N.Operation), "PolyPrompt operation.");
             SharedAssert.Equal(model, Tag(op, N.RequestModel), "Request model attribute.");
             SharedAssert.Equal("256", Tag(op, N.RequestMaxTokens), "Max tokens attribute.");
             SharedAssert.Equal("0.2", Tag(op, N.RequestTemperature), "Temperature attribute.");
@@ -210,14 +210,14 @@ namespace Test.Shared
                 "The outbound request should carry a W3C traceparent in the caller's trace, got '" + traceparent + "'.");
 
             string port = new Uri(server.Endpoint).Port.ToString(CultureInfo.InvariantCulture);
-            capture.Require(N.OperationDuration, N.Provider, "openai", N.Capability, "completion", N.Operation, "tool_chat", N.Outcome, "success");
-            capture.Require(N.Operations, N.Provider, "openai", N.Operation, "tool_chat", N.Outcome, "success");
+            capture.Require(N.OperationDuration, N.Provider, "openai", N.Capability, "completion", N.Operation, "chat", N.Outcome, "success");
+            capture.Require(N.Operations, N.Provider, "openai", N.Operation, "chat", N.Outcome, "success");
             capture.Require(N.GenAiOperationDuration, N.GenAiOperationName, "chat", N.Provider, "openai", N.RequestModel, model);
             SharedAssert.Equal(11.0, capture.Require(N.GenAiTokenUsage, N.RequestModel, model, N.GenAiTokenType, "input").Value, "GenAI input token usage.");
             SharedAssert.Equal(7.0, capture.Require(N.GenAiTokenUsage, N.RequestModel, model, N.GenAiTokenType, "output").Value, "GenAI output token usage.");
             SharedAssert.Equal(8.0, capture.Require(N.Tokens, N.RequestModel, model, N.TokenType, "cached_input").Value, "Cached input tokens.");
             SharedAssert.Equal(4.0, capture.Require(N.Tokens, N.RequestModel, model, N.TokenType, "reasoning").Value, "Reasoning tokens.");
-            capture.Require(N.ToolCalls, N.Provider, "openai", N.Operation, "tool_chat");
+            capture.Require(N.ToolCalls, N.Provider, "openai", N.Operation, "chat");
             capture.Require(N.FinishReasons, N.Provider, "openai", N.FinishReasonLabel, "tool_calls");
             capture.Require(N.HttpRequestDuration, N.Provider, "openai", N.HttpMethod, "POST", N.HttpStatusCode, "200", N.ServerPort, port);
             capture.Require(N.HttpRequests, N.Provider, "openai", N.HttpStatusCode, "200", N.ServerPort, port);

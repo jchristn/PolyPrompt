@@ -1,26 +1,31 @@
 namespace PolyPrompt.Models
 {
     /// <summary>
-    /// A single chunk from a streaming chat completion response.
+    /// A single chunk from a streaming chat response.
     /// </summary>
     public class ChatStreamingChunk
     {
         /// <summary>
-        /// The text content of this chunk. May be null or empty for metadata-only chunks.
+        /// Assistant text content of this chunk. May be null or empty for metadata-only or tool-call chunks.
         /// </summary>
-        public string? Text { get; set; }
+        public string? Text { get; set; } = null;
 
         /// <summary>
         /// Reasoning ("thinking") content of this chunk, kept separate from <see cref="Text"/>. Null when the
-        /// chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI reasoning_content,
-        /// Ollama message.thinking, Gemini thought parts).
+        /// chunk carries no reasoning. Sourced from the provider's reasoning channel (OpenAI
+        /// reasoning_content, Ollama message.thinking, Gemini thought parts).
         /// </summary>
-        public string? ReasoningText { get; set; }
+        public string? ReasoningText { get; set; } = null;
+
+        /// <summary>
+        /// Tool call deltas emitted in this chunk.
+        /// </summary>
+        public List<ToolCallDelta> ToolCallDeltas { get; set; } = new List<ToolCallDelta>();
 
         /// <summary>
         /// The model that generated this chunk.
         /// </summary>
-        public string? Model { get; set; }
+        public string? Model { get; set; } = null;
 
         /// <summary>
         /// Whether this is the final chunk in the stream.
@@ -29,24 +34,23 @@ namespace PolyPrompt.Models
 
         /// <summary>
         /// The reason generation finished. Present on the final chunk.
-        /// Common values: "stop", "length" (Ollama/OpenAI), "STOP", "MAX_TOKENS" (Gemini).
+        /// Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
         /// </summary>
-        public string? FinishReason { get; set; }
+        public string? FinishReason { get; set; } = null;
 
         /// <summary>
         /// Token usage and timing statistics. Typically only populated on the final chunk.
-        /// Gemini provides cumulative usage on every chunk.
         /// </summary>
-        public TokenUsage? Usage { get; set; }
+        public TokenUsage? Usage { get; set; } = null;
 
         /// <summary>
-        /// Response identifier for correlation. Present in OpenAI (id) and Gemini (responseId).
+        /// Response identifier for correlation.
         /// </summary>
-        public string? ResponseId { get; set; }
+        public string? ResponseId { get; set; } = null;
 
         /// <summary>
         /// UTC timestamp of when this chunk was created.
         /// </summary>
-        public DateTime? CreatedUtc { get; set; }
+        public DateTime? CreatedUtc { get; set; } = null;
     }
 }

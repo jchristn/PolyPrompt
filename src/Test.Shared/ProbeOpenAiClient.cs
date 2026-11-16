@@ -15,8 +15,7 @@ namespace Test.Shared
         {
             string url = Endpoint.TrimEnd('/') + "/v1/chat/completions";
             string json = "{\"model\":\"test-model\",\"messages\":[{\"role\":\"user\",\"content\":\"probe\"}],\"max_tokens\":1}";
-            using StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            return await PostAndRecordAsync(url, content, json, token).ConfigureAwait(false);
+            return await PostAndRecordAsync(url, Encoding.UTF8.GetBytes(json), JsonContentType, json, token).ConfigureAwait(false);
         }
     }
 }

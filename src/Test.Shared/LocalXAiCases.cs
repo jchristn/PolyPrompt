@@ -13,7 +13,7 @@ namespace Test.Shared
     {
         private static JsonElement J(string json) { using JsonDocument d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
         private static XAiClient Client(LocalOpenAiTestServer server) => new(LocalXAiRoutes.Key, server.Endpoint);
-        private static ToolChatRequest Request(string prompt = "hello") => new()
+        private static ChatRequest Request(string prompt = "hello") => new()
         {
             Messages = new() { ChatMessage.User(prompt) },
             Tools = new() { ToolDefinition.Function("get_weather", "Weather", new() { ["type"] = "object", ["properties"] = new Dictionary<string, object> { ["city"] = new Dictionary<string, object> { ["type"] = "string" } } }) }
@@ -99,7 +99,7 @@ namespace Test.Shared
             var request = Request(); ChatMessage assistant;
             if (stream)
             {
-                var r = await c.ToolChatStreamingAsync(request, token);
+                var r = await c.ChatStreamingAsync(request, token);
                 await foreach (var _ in r.Chunks.WithCancellation(token)) { }
                 SharedAssert.True(r.Success, r.Error ?? "Tools stream failed."); SharedAssert.Equal(1, r.ToolCalls.Count, "Exactly one assembled function.");
                 SharedAssert.Equal("call-1", r.ToolCalls[0].Id, "call_id is distinct from item ID.");
@@ -107,14 +107,14 @@ namespace Test.Shared
             }
             else
             {
-                var r = await c.ToolChatAsync(request, token); SharedAssert.True(r.Success, r.Error ?? "Tools failed.");
+                var r = await c.ChatAsync(request, token); SharedAssert.True(r.Success, r.Error ?? "Tools failed.");
                 SharedAssert.Equal(1, r.ToolCalls.Count, "Function parsed."); assistant = r.ToAssistantMessage();
             }
             SharedAssert.True(assistant.ProviderState.HasValue, "ToAssistantMessage preserves opaque output.");
             string saved = JsonSerializer.Serialize(assistant, PolyPromptJsonContext.Default.ChatMessage);
             request.Messages.Add(JsonSerializer.Deserialize(saved, PolyPromptJsonContext.Default.ChatMessage)!);
             request.Messages.Add(ChatMessage.ToolResult("call-1", "get_weather", "sunny"));
-            var final = await c.ToolChatAsync(request, token); SharedAssert.True(final.Success, final.Error ?? "Followup failed.");
+            var final = await c.ChatAsync(request, token); SharedAssert.True(final.Success, final.Error ?? "Followup failed.");
             SharedAssert.Equal("pong", final.Text, "Followup text.");
             var body = J(server.RequestBodies.Last()); var input = body.GetProperty("input");
             SharedAssert.Equal(1, input.EnumerateArray().Count(i => i.TryGetProperty("encrypted_content", out _)), "Encrypted reasoning replayed once.");
@@ -226,7 +226,7 @@ namespace Test.Shared
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
             var r = await c.ChatAsync("xai-incomplete", token: token); SharedAssert.True(r.Success, r.Error ?? "Partial text is valid."); SharedAssert.Equal("length", r.FinishReason, "Token limit reason.");
-            var tools = await c.ToolChatAsync(Request("xai-incomplete"), token); SharedAssert.False(tools.Success, "Partial functions are never executable.");
+            var tools = await c.ChatAsync(Request("xai-incomplete"), token); SharedAssert.False(tools.Success, "Partial functions are never executable.");
         }
         private static async Task ValidationAsync(CancellationToken token)
         {
@@ -235,7 +235,7 @@ namespace Test.Shared
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync("hello", new XAiCompletionOptions { ReasoningEffortValue = "none" }, token), "Reasoning cannot be disabled.");
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync("hello", new XAiCompletionOptions { AdditionalParameters = new() { ["model"] = J("\"override\"") } }, token), "Reserved fields cannot be overridden.");
             await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ListResponseInputItemsAsync("id", 101, token: token), "Paging range.");
-            await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ToolChatAsync(new() { Messages = new() { ChatMessage.ToolResult(null, "tool", "result") } }, token), "Result call ID required.");
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => c.ChatAsync(new() { Messages = new() { ChatMessage.ToolResult(null, "tool", "result") } }, token), "Result call ID required.");
             SharedAssert.Equal(0, server.RequestBodies.Count, "Invalid arguments send nothing.");
         }
         private static async Task FramingAsync(CancellationToken token)
@@ -254,7 +254,7 @@ namespace Test.Shared
         private static async Task ParallelAsync(CancellationToken token)
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
-            var r = await c.ToolChatStreamingAsync(Request("xai-parallel"), token);
+            var r = await c.ChatStreamingAsync(Request("xai-parallel"), token);
             await foreach (var _ in r.Chunks.WithCancellation(token)) { }
             SharedAssert.True(r.Success, r.Error ?? "Parallel tools."); SharedAssert.Equal(2, r.ToolCalls.Count, "Two independent tool calls.");
             SharedAssert.Equal("call-1", r.ToolCalls[0].Id, "Ordered by output index, not arrival.");
@@ -281,7 +281,7 @@ namespace Test.Shared
             {
                 using var handler = new LocalFakeHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload, Encoding.UTF8, "text/event-stream") }));
                 using var http = new HttpClient(handler); using XAiClient c = new("test", options: new ClientOptions { HttpClient = http });
-                var r = await c.ToolChatStreamingAsync(Request(), token); await foreach (var _ in r.Chunks.WithCancellation(token)) { }
+                var r = await c.ChatStreamingAsync(Request(), token); await foreach (var _ in r.Chunks.WithCancellation(token)) { }
                 SharedAssert.False(r.Success, "Malformed/failed streams cannot succeed."); SharedAssert.Equal(0, r.ToolCalls.Count, "No executable calls escape a failed stream.");
             }
         }

@@ -13,11 +13,11 @@ namespace PolyPrompt.Models
         /// <summary>No capability.</summary>
         None = 0,
 
-        /// <summary>Single-prompt chat: <c>ChatAsync</c> and <c>ChatStreamingAsync</c>.</summary>
+        /// <summary>Chat: <c>ChatAsync</c> and <c>ChatStreamingAsync</c>, from a prompt, one message, or a conversation.</summary>
         Chat = 1 << 0,
 
-        /// <summary>Message-based chat with optional tools: <c>ToolChatAsync</c> and <c>ToolChatStreamingAsync</c>.</summary>
-        ToolChat = 1 << 1,
+        /// <summary>Tools in chat: a <see cref="ChatRequest"/> with <see cref="ChatRequest.Tools"/> set.</summary>
+        ToolCalling = 1 << 1,
 
         /// <summary>Text generation: <c>GenerateAsync</c> and <c>GenerateStreamingAsync</c>.</summary>
         Generate = 1 << 2,
@@ -39,5 +39,17 @@ namespace PolyPrompt.Models
 
         /// <summary>Model catalog: <c>ListModelsAsync</c>, <c>ModelExistsAsync</c>, and <c>GetModelInformationAsync</c>.</summary>
         Models = 1 << 8,
+
+        /// <summary>Image parts in user messages (<see cref="ContentPartType.Image"/>).</summary>
+        ImageInput = 1 << 9,
+
+        /// <summary>Audio parts in user messages (<see cref="ContentPartType.Audio"/>).</summary>
+        AudioInput = 1 << 10,
+
+        /// <summary>Video parts in user messages (<see cref="ContentPartType.Video"/>).</summary>
+        VideoInput = 1 << 11,
+
+        /// <summary>Speech to text: <c>TranscribeAsync</c>.</summary>
+        Transcribe = 1 << 12,
     }
 }

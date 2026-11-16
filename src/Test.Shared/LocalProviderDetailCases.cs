@@ -62,9 +62,9 @@ namespace Test.Shared
             GenerationStreamingResponse generation = await completion.GenerateStreamingAsync("hello", token: token);
             await foreach (GenerationStreamingChunk _ in generation.Chunks.WithCancellation(token)) { }
             SharedAssert.True(generation.Success, "Cloud streaming generation should succeed.");
-            SharedAssert.True((await completion.ToolChatAsync(ParallelCallsWithIdOnlyResults(), token: token)).Success, "Cloud tool chat should succeed.");
-            ToolChatStreamingResponse tools = await completion.ToolChatStreamingAsync(ParallelCallsWithIdOnlyResults(), token: token);
-            await foreach (ToolChatStreamingChunk _ in tools.Chunks.WithCancellation(token)) { }
+            SharedAssert.True((await completion.ChatAsync(ParallelCallsWithIdOnlyResults(), token: token)).Success, "Cloud tool chat should succeed.");
+            ChatStreamingResponse tools = await completion.ChatStreamingAsync(ParallelCallsWithIdOnlyResults(), token: token);
+            await foreach (ChatStreamingChunk _ in tools.Chunks.WithCancellation(token)) { }
             SharedAssert.True(tools.Success, "Cloud streaming tool chat should succeed.");
             SharedAssert.True((await embedding.EmbedAsync("hello", token: token)).Success, "Cloud embeddings should succeed.");
             int count = 0;
@@ -92,9 +92,9 @@ namespace Test.Shared
 
         #region Gemini-Tool-Names
 
-        private static ToolChatRequest ParallelCallsWithIdOnlyResults()
+        private static ChatRequest ParallelCallsWithIdOnlyResults()
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.User("Weather and time in Seattle?"));
             request.Messages.Add(ChatMessage.AssistantToolCalls(new[]
             {
@@ -103,8 +103,8 @@ namespace Test.Shared
             }));
 
             // Results arrive out of order and carry only the call id, as Mux sent them.
-            request.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-2", Content = "{\"time\":\"09:00\"}" });
-            request.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-1", Content = "{\"temperature\":72}" });
+            request.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-2", Text = "{\"time\":\"09:00\"}" });
+            request.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-1", Text = "{\"temperature\":72}" });
             return request;
         }
 
@@ -114,20 +114,20 @@ namespace Test.Shared
             using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
             using VertexAiClient vertex = new VertexAiClient("test-project", "us-central1", new PolyPrompt.Auth.StaticTokenCredential("t"), server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
-            ToolChatRequest sent = ParallelCallsWithIdOnlyResults();
-            ToolChatResponse chat = await gemini.ToolChatAsync(sent, token).ConfigureAwait(false);
+            ChatRequest sent = ParallelCallsWithIdOnlyResults();
+            ChatResponse chat = await gemini.ChatAsync(sent, token).ConfigureAwait(false);
             SharedAssert.True(chat.Success, "Gemini tool chat with id-only results should succeed. " + chat.Error);
 
-            ToolChatStreamingResponse stream = await gemini.ToolChatStreamingAsync(ParallelCallsWithIdOnlyResults(), token).ConfigureAwait(false);
-            await foreach (ToolChatStreamingChunk _ in stream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
+            ChatStreamingResponse stream = await gemini.ChatStreamingAsync(ParallelCallsWithIdOnlyResults(), token).ConfigureAwait(false);
+            await foreach (ChatStreamingChunk _ in stream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
             SharedAssert.True(stream.Success, "Streaming Gemini tool chat with id-only results should succeed. " + stream.Error);
 
-            ToolChatResponse vertexChat = await vertex.ToolChatAsync(ParallelCallsWithIdOnlyResults(), token).ConfigureAwait(false);
+            ChatResponse vertexChat = await vertex.ChatAsync(ParallelCallsWithIdOnlyResults(), token).ConfigureAwait(false);
             SharedAssert.True(vertexChat.Success, "Vertex AI tool chat with id-only results should succeed. " + vertexChat.Error);
 
-            ToolChatRequest explicitName = ParallelCallsWithIdOnlyResults();
+            ChatRequest explicitName = ParallelCallsWithIdOnlyResults();
             explicitName.Messages[3].ToolName = "explicit_name";
-            ToolChatResponse explicitChat = await gemini.ToolChatAsync(explicitName, token).ConfigureAwait(false);
+            ChatResponse explicitChat = await gemini.ChatAsync(explicitName, token).ConfigureAwait(false);
             SharedAssert.True(explicitChat.Success, "Gemini tool chat with an explicit name should succeed. " + explicitChat.Error);
 
             List<string> bodies = server.RequestBodies;
@@ -146,21 +146,21 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using GeminiClient gemini = new GeminiClient("test-key", server.Endpoint) { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
-            ToolChatRequest unknownId = ParallelCallsWithIdOnlyResults();
+            ChatRequest unknownId = ParallelCallsWithIdOnlyResults();
             unknownId.Messages[2].ToolCallId = "call-unknown";
-            await ExpectArgumentAsync(() => gemini.ToolChatAsync(unknownId, token), "'call-unknown'", "a result whose id matches no earlier call").ConfigureAwait(false);
-            await ExpectArgumentAsync(() => gemini.ToolChatStreamingAsync(unknownId, token), "'call-unknown'", "a streamed result whose id matches no earlier call").ConfigureAwait(false);
+            await ExpectArgumentAsync(() => gemini.ChatAsync(unknownId, token), "'call-unknown'", "a result whose id matches no earlier call").ConfigureAwait(false);
+            await ExpectArgumentAsync(() => gemini.ChatStreamingAsync(unknownId, token), "'call-unknown'", "a streamed result whose id matches no earlier call").ConfigureAwait(false);
 
-            ToolChatRequest noIdentity = ParallelCallsWithIdOnlyResults();
+            ChatRequest noIdentity = ParallelCallsWithIdOnlyResults();
             noIdentity.Messages[3].ToolCallId = null;
-            await ExpectArgumentAsync(() => gemini.ToolChatAsync(noIdentity, token), "message 3", "a result with neither a name nor an id").ConfigureAwait(false);
+            await ExpectArgumentAsync(() => gemini.ChatAsync(noIdentity, token), "message 3", "a result with neither a name nor an id").ConfigureAwait(false);
 
             // The call must come before its result: an id that only appears later is not used.
-            ToolChatRequest callAfterResult = new ToolChatRequest();
+            ChatRequest callAfterResult = new ChatRequest();
             callAfterResult.Messages.Add(ChatMessage.User("hi"));
-            callAfterResult.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-9", Content = "{}" });
+            callAfterResult.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "call-9", Text = "{}" });
             callAfterResult.Messages.Add(ChatMessage.AssistantToolCalls(new[] { new ToolCall { Id = "call-9", Name = "late" } }));
-            await ExpectArgumentAsync(() => gemini.ToolChatAsync(callAfterResult, token), "'call-9'", "a result before its call").ConfigureAwait(false);
+            await ExpectArgumentAsync(() => gemini.ChatAsync(callAfterResult, token), "'call-9'", "a result before its call").ConfigureAwait(false);
 
             SharedAssert.Equal(0, server.RequestPaths.Count, "No request with an unrecoverable tool name should be sent.");
         }
@@ -170,9 +170,9 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "test-model" } }, TimeoutMs = 3000 };
 
-            ToolChatRequest request = ParallelCallsWithIdOnlyResults();
+            ChatRequest request = ParallelCallsWithIdOnlyResults();
             request.Messages[2].ToolCallId = "call-unknown";
-            ToolChatResponse response = await openAi.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await openAi.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI identifies tool results by id alone and should accept a result without a name. " + response.Error);
 
             using JsonDocument body = JsonDocument.Parse(server.RequestBodies[0]);

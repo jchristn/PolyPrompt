@@ -6,7 +6,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Google Gemini client for the Gemini API (Google AI Studio, <c>generativelanguage.googleapis.com</c>).
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (<c>generateContent</c> and
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>generateContent</c> and
     /// <c>streamGenerateContent</c>), Embed (<c>:embedContent</c> and <c>:batchEmbedContents</c>), and Models
     /// (<c>/v1beta/models</c>, following pagination).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -23,9 +23,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "Gemini";

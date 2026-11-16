@@ -89,7 +89,7 @@ Every constructor signature, and how each provider authenticates, is in [PROVIDE
 Every client has every method, but not every provider supports every capability. Call `client.Supports(Capability.Embed)` to check. An unsupported call throws `CapabilityNotSupportedException` before any request is sent.
 
 <!-- capability-matrix:start -->
-| Client | Chat | ToolChat | Generate | Embed | SparseEmbed | Rerank | Classify | Decide | Models |
+| Client | Chat | ToolCalling | Generate | Embed | SparseEmbed | Rerank | Classify | Decide | Models |
 |---|---|---|---|---|---|---|---|---|---|
 | `OpenAiClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
 | `OpenAiCompatibleClient` | ✅ | ✅ | ✅ | ✅ | | | | | ✅ |
@@ -110,7 +110,7 @@ Every client has every method, but not every provider supports every capability.
 | Capability | Methods |
 |---|---|
 | `Chat` | `ChatAsync`, `ChatStreamingAsync` |
-| `ToolChat` | `ToolChatAsync`, `ToolChatStreamingAsync` |
+| `ToolCalling` | `ChatAsync(ChatRequest)` and `ChatStreamingAsync(ChatRequest)` with `Tools` set |
 | `Generate` | `GenerateAsync`, `GenerateStreamingAsync` |
 | `Embed` | `EmbedAsync` |
 | `SparseEmbed` | `EmbedSparseAsync` |
@@ -245,19 +245,19 @@ using PolyPrompt.Models;
 
 using GeminiClient gemini = new GeminiClient(Environment.GetEnvironmentVariable("GEMINI_API_KEY")!);
 
-ToolChatRequest request = new ToolChatRequest
+ChatRequest request = new ChatRequest
 {
     Messages = { ChatMessage.User("What's the weather in Seattle and Tokyo?") },
     Tools = { ToolDefinition.Function("get_weather", "Get the weather.", new Dictionary<string, object> { { "type", "object" } }) },
 };
 
-ToolChatResponse turn = await gemini.ToolChatAsync(request);
+ChatResponse turn = await gemini.ChatAsync(request);
 while (turn.Success && turn.ToolCalls.Count > 0)
 {
     request.Messages.Add(turn.ToAssistantMessage());
     foreach (ToolCall call in turn.ToolCalls)
         request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":72}"));
-    turn = await gemini.ToolChatAsync(request);
+    turn = await gemini.ChatAsync(request);
 }
 
 Console.WriteLine(turn.Text);
@@ -362,7 +362,7 @@ Sign in with each CLI first; PolyPrompt never takes a harness API key. Harnesses
 A compact, exact reference. Read the [capability matrix](#capability-matrix) and [Which OpenAI client?](#which-openai-client) too.
 
 - **Construct one client per provider:** `new OpenAiClient(key)`, `new OpenAiCompatibleClient(endpoint, key?)`, `new AzureOpenAiClient(endpoint, key | ICredentialProvider)`, `new XAiClient(key)`, `new AnthropicClient(key)`, `new GeminiClient(key)`, `new VertexAiClient(project, region, credential)`, `new BedrockClient(region, awsCredential)`, `new OllamaClient(endpoint?)`, `new OllamaCloudClient(key)`, `new CohereClient(key)`, `new VoyageAiClient(key)`, `new TeiClient(endpoint)`, `new TypeSafeClient(key)`. Optional last arguments: `endpoint`, then `ClientOptions`. Dispose clients.
-- **Operations** (all on `ProviderClientBase`): `ChatAsync(prompt, options?)`, `ChatStreamingAsync`, `ToolChatAsync(ToolChatRequest)`, `ToolChatStreamingAsync`, `GenerateAsync`, `GenerateStreamingAsync`, `EmbedAsync(string | List<string>, options?)`, `EmbedSparseAsync`, `RerankAsync(query, documents, options?)`, `ClassifyAsync`, `DecideAsync(DecisionRequest | List<DecisionRequest>)`, `ListModelsAsync`, `ModelExistsAsync`, `GetModelInformationAsync`, `ValidateConnectivityAsync`.
+- **Operations** (all on `ProviderClientBase`): `ChatAsync` and `ChatStreamingAsync` (from a prompt, a `ChatMessage`, a conversation, or a `ChatRequest` with tools), `GenerateAsync`, `GenerateStreamingAsync`, `EmbedAsync(string | List<string>, options?)`, `EmbedSparseAsync`, `RerankAsync(query, documents, options?)`, `ClassifyAsync`, `DecideAsync(DecisionRequest | List<DecisionRequest>)`, `ListModelsAsync`, `ModelExistsAsync`, `GetModelInformationAsync`, `ValidateConnectivityAsync`.
 - **Capability rule:** call `client.Supports(Capability.X)` before an operation you are not sure of; otherwise it throws `CapabilityNotSupportedException` synchronously.
 - **Models:** set `client.Defaults.Completion.Model` (or `.Embedding`, `.Rerank`, `.Classification`, `.Decision`, `.SparseEmbedding`), or pass `Model` in the per-call options. There is no `client.Model`. See [Default models](#default-models).
 - **Options rule:** pass the base options type (`CompletionOptions`, `EmbeddingOptions`, ...) or the client's own type (`OpenAiCompletionOptions` for `OpenAiClient`/`AzureOpenAiClient`, `OpenAiCompatibleCompletionOptions` for `OpenAiCompatibleClient`, `GeminiCompletionOptions` for Gemini and Vertex, `<Provider>CompletionOptions` otherwise). Another provider's type throws `ArgumentException`.

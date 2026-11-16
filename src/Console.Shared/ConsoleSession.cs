@@ -24,17 +24,17 @@ public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntim
             for (int round = 0; round < MaxRounds; round++)
             {
                 token.ThrowIfCancellationRequested();
-                ToolChatRequest request = new() { Messages = BuildMessages(), Tools = definitions.ToList() };
+                ChatRequest request = new() { Messages = BuildMessages(), Tools = definitions.ToList() };
                 ConsoleRenderer renderer = new(output);
                 List<ToolCall> calls;
                 ChatMessage assistant;
                 string? finish;
                 if (streaming)
                 {
-                    ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(request, token);
+                    ChatStreamingResponse response = await client.ChatStreamingAsync(request, token);
                     try
                     {
-                        await foreach (ToolChatStreamingChunk chunk in response.Chunks.WithCancellation(token))
+                        await foreach (ChatStreamingChunk chunk in response.Chunks.WithCancellation(token))
                         {
                             renderer.Thinking(chunk.ReasoningText);
                             renderer.Answer(chunk.Text);
@@ -46,20 +46,20 @@ public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntim
                     finally { renderer.Finish(); }
                     calls = response.ToolCalls;
                     assistant = response.ToAssistantMessage();
-                    assistant.Content = response.Text ?? "";
+                    assistant.Text = response.Text ?? "";
                     finish = response.FinishReason;
                     PrintUsage(response.Usage);
                 }
                 else
                 {
-                    ToolChatResponse response = await client.ToolChatAsync(request, token);
+                    ChatResponse response = await client.ChatAsync(request, token);
                     if (!response.Success) throw new InvalidOperationException(response.Error ?? "Chat failed.");
                     renderer.Thinking(response.Reasoning);
                     renderer.Answer(response.Text);
                     renderer.Finish();
                     calls = response.ToolCalls;
                     assistant = response.ToAssistantMessage();
-                    assistant.Content = response.Text ?? "";
+                    assistant.Text = response.Text ?? "";
                     finish = response.FinishReason;
                     PrintUsage(response.Usage);
                 }

@@ -107,7 +107,7 @@ public sealed class ConsoleTests
         Assert.That(session.Messages.Select(m => m.Role), Is.EqualTo(new[] { "user", "assistant", "tool", "assistant" }));
         Assert.That(output.ToString(), Does.Contain("Output tokens: 270" + Environment.NewLine + Environment.NewLine));
         Assert.That(session.Messages[2].ToolName, Is.EqualTo("list_directory"));
-        Assert.That(session.Messages[1].Content, Is.EqualTo("I will inspect it."));
+        Assert.That(session.Messages[1].Text, Is.EqualTo("I will inspect it."));
         await session.SendAsync("Now acknowledge", streaming, false);
         Assert.That(server.Bodies[2], Does.Contain("visible-to-model.txt"));
         session.Reset();

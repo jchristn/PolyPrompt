@@ -11,7 +11,7 @@ namespace PolyPrompt.Clients
     /// Chat Completions (vLLM, Ollama <c>/v1</c>, LM Studio, gateways) use <see cref="OpenAiCompatibleClient"/>; a 404 or
     /// 405 from <c>/responses</c> says so in the error.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (Responses API; encrypted reasoning is carried in
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (Responses API; encrypted reasoning is carried in
     /// <see cref="ResponseBase.ProviderState"/>, so a tool loop keeps its reasoning between calls), Embed
     /// (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>), plus the native operations on
     /// <see cref="ResponsesApiClientBase"/> and the OpenAI-only <see cref="CancelResponseAsync"/> and
@@ -36,9 +36,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "OpenAI";

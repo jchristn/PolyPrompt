@@ -485,25 +485,15 @@ namespace PolyPrompt.Telemetry
             {
                 case ChatResponse chat:
                     usage = chat.Usage;
-                    responseId = chat.ResponseId;
                     finishReason = chat.FinishReason;
+                    responseId = chat.ResponseId;
+                    toolCalls = chat.ToolCalls?.Count;
                     break;
                 case ChatStreamingResponse chatStream:
                     usage = chatStream.Usage;
                     finishReason = chatStream.FinishReason;
                     responseId = chatStream.ResponseId;
-                    break;
-                case ToolChatResponse toolChat:
-                    usage = toolChat.Usage;
-                    finishReason = toolChat.FinishReason;
-                    responseId = toolChat.ResponseId;
-                    toolCalls = toolChat.ToolCalls?.Count;
-                    break;
-                case ToolChatStreamingResponse toolChatStream:
-                    usage = toolChatStream.Usage;
-                    finishReason = toolChatStream.FinishReason;
-                    responseId = toolChatStream.ResponseId;
-                    toolCalls = toolChatStream.ToolCalls?.Count;
+                    toolCalls = chatStream.ToolCalls?.Count;
                     break;
                 case GenerationResponse generation:
                     usage = generation.Usage; responseId = generation.ResponseId; finishReason = generation.FinishReason;

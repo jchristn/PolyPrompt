@@ -116,21 +116,21 @@ namespace Test.Shared
             CancellationToken token)
         {
             int before = server.RequestBodies.Count;
-            ToolChatRequest request = CreateWeatherRequest();
+            ChatRequest request = CreateWeatherRequest();
 
             List<ToolCall> calls;
             ChatMessage assistant;
             if (streaming)
             {
-                ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+                ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(stream.Success, label + " tool chat should start. " + stream.Error);
-                await foreach (ToolChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
+                await foreach (ChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
                 calls = stream.ToolCalls;
                 assistant = stream.ToAssistantMessage();
             }
             else
             {
-                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, label + " tool chat should succeed. " + response.Error);
                 calls = response.ToolCalls;
                 assistant = response.ToAssistantMessage();
@@ -150,14 +150,14 @@ namespace Test.Shared
             string? finalText;
             if (streaming)
             {
-                ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+                ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(stream.Success, label + " follow-up should be accepted by the strict fixture. " + stream.Error);
-                await foreach (ToolChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
+                await foreach (ChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
                 finalText = stream.Text;
             }
             else
             {
-                ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(final.Success, label + " follow-up should be accepted by the strict fixture. " + final.Error);
                 finalText = final.Text;
             }
@@ -185,7 +185,7 @@ namespace Test.Shared
             using GeminiClient client = CreateGeminiClient(server);
 
             // History from another provider: OpenAI-style ids and no signatures.
-            ToolChatRequest request = CreateWeatherRequest();
+            ChatRequest request = CreateWeatherRequest();
             request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
             {
                 new ToolCall { Id = "call_abc", Name = "get_weather", ArgumentsJson = "{\"city\":\"Seattle\"}" },
@@ -194,7 +194,7 @@ namespace Test.Shared
             request.Messages.Add(ChatMessage.ToolResult("call_abc", "get_weather", "{\"temperature\":72}"));
             request.Messages.Add(ChatMessage.ToolResult("call_def", "get_weather", "{\"temperature\":55}"));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Unsigned history should be accepted with the sentinel. " + response.Error);
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
@@ -213,12 +213,12 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using GeminiClient client = CreateGeminiClient(server);
 
-            ToolChatRequest request = CreateWeatherRequest();
+            ChatRequest request = CreateWeatherRequest();
             request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
             {
                 new ToolCall { Id = "a", Name = "get_weather", ArgumentsJson = "{}", ThoughtSignature = "s1" }
             }));
-            request.Messages.Add(new ChatMessage { Role = "function", ToolCallId = "a", ToolName = "get_weather", Content = "{\"ok\":true}" });
+            request.Messages.Add(new ChatMessage { Role = "function", ToolCallId = "a", ToolName = "get_weather", Text = "{\"ok\":true}" });
             request.Messages.Add(ChatMessage.User("And tomorrow?"));
             request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
             {
@@ -226,7 +226,7 @@ namespace Test.Shared
             }));
             request.Messages.Add(ChatMessage.ToolResult("b", "get_weather", "{\"ok\":false}"));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Strict fixture should accept the translated roles. " + response.Error);
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
@@ -266,7 +266,7 @@ namespace Test.Shared
             for (int i = 0; i < cases.Length; i++)
             {
                 (string content, string check) = cases[i];
-                ToolChatRequest request = CreateWeatherRequest();
+                ChatRequest request = CreateWeatherRequest();
                 request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
                 {
                     new ToolCall { Id = "fc-1", Name = "get_weather", ArgumentsJson = "{}", ThoughtSignature = "s" }
@@ -274,7 +274,7 @@ namespace Test.Shared
                 request.Messages.Add(ChatMessage.ToolResult("fc-1", "get_weather", content));
 
                 string label = "Tool result '" + content + "'";
-                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, label + " should be sent and accepted. " + response.Error);
 
                 LocalJson body = LocalJson.Parse(server.RequestBodies[i]);
@@ -341,7 +341,7 @@ namespace Test.Shared
                     foreach (string arguments in malformed)
                     {
                         int index = server.RequestBodies.Count;
-                        ToolChatRequest request = CreateWeatherRequest();
+                        ChatRequest request = CreateWeatherRequest();
                         request.Messages.RemoveAt(0);
                         request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
                         {
@@ -352,7 +352,7 @@ namespace Test.Shared
                         string label = client.GetType().Name + " arguments '" + arguments + "'";
                         try
                         {
-                            await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                            await client.ChatAsync(request, token).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -381,11 +381,11 @@ namespace Test.Shared
             using GeminiClient client = CreateGeminiClient(server);
             SharedAssert.True(client.Defaults.Completion.ToolSchemaMode == null, "No schema mode is set by default, which means JsonSchema.");
 
-            ToolChatRequest request = CreateWeatherRequest();
+            ChatRequest request = CreateWeatherRequest();
             request.Tools.Add(ToolDefinition.Function("messy", "Schema with keywords outside the OpenAPI subset.", MessySchema()));
             request.Tools.Add(ToolDefinition.Function("no_args", "Takes no arguments.", new Dictionary<string, object>()));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Strict fixture should accept parametersJsonSchema. " + response.Error);
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
@@ -408,10 +408,10 @@ namespace Test.Shared
             using GeminiClient client = CreateGeminiClient(server);
             client.Defaults.Completion.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset;
 
-            ToolChatRequest request = CreateWeatherRequest();
+            ChatRequest request = CreateWeatherRequest();
             request.Tools.Add(ToolDefinition.Function("messy", "Schema with keywords outside the OpenAPI subset.", MessySchema()));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Strict fixture should accept the sanitized parameters. " + response.Error);
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[0]);
@@ -438,9 +438,9 @@ namespace Test.Shared
             SharedAssert.Equal("2", body.Str(p + ".properties.level.enum.1"), "Non-string enum values should become strings.");
 
             // A per-call mode overrides the client default in both directions.
-            ToolChatRequest perCall = CreateWeatherRequest();
+            ChatRequest perCall = CreateWeatherRequest();
             perCall.Options = new GeminiCompletionOptions { ToolSchemaMode = GeminiToolSchemaMode.JsonSchema };
-            ToolChatResponse perCallResponse = await client.ToolChatAsync(perCall, token).ConfigureAwait(false);
+            ChatResponse perCallResponse = await client.ChatAsync(perCall, token).ConfigureAwait(false);
             SharedAssert.True(perCallResponse.Success, "A per-call JsonSchema mode should be accepted. " + perCallResponse.Error);
             LocalJson perCallBody = LocalJson.Parse(server.RequestBodies[1]);
             SharedAssert.True(perCallBody.Has("tools.0.functionDeclarations.0.parametersJsonSchema"), "A per-call JsonSchema mode should override an OpenApiSubset default.");
@@ -473,15 +473,15 @@ namespace Test.Shared
             client.Defaults.Completion.Model = "test-model";
 
             // The default route returns a functionCall without an id, so the client synthesizes one.
-            ToolChatRequest request = CreateWeatherRequest();
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherRequest();
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Gemini tool chat should succeed. " + response.Error);
             SharedAssert.Equal("gemini-call-0", response.ToolCalls[0].Id, "A missing id should be synthesized.");
             SharedAssert.True(response.ToolCalls[0].ThoughtSignature == null, "A response without a signature should parse to null.");
 
             request.Messages.Add(response.ToAssistantMessage());
             request.Messages.Add(ChatMessage.ToolResult(response.ToolCalls[0].Id, "get_weather", "{\"ok\":true}"));
-            await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            await client.ChatAsync(request, token).ConfigureAwait(false);
 
             LocalJson body = LocalJson.Parse(server.RequestBodies[1]);
             SharedAssert.False(body.Has("contents.1.parts.0.functionCall.id"), "A synthesized id must not be sent as functionCall.id.");
@@ -499,8 +499,8 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
             client.Defaults.Completion.Model = LocalGeminiToolRoutes.Model;
 
-            ToolChatRequest request = CreateWeatherRequest();
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherRequest();
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "OpenAI-compatible tool chat should succeed. " + response.Error);
             SharedAssert.Equal(2, response.ToolCalls.Count, "Both tool calls should parse.");
             SharedAssert.Equal(LocalGeminiToolRoutes.Signature, response.ToolCalls[0].ThoughtSignature, "extra_content signature should be read.");
@@ -510,7 +510,7 @@ namespace Test.Shared
             request.Messages.Add(ChatMessage.ToolResult("call_1", "get_weather", "{\"t\":72}"));
             request.Messages.Add(ChatMessage.ToolResult("call_2", "get_weather", "{\"t\":55}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(final.Success, "Follow-up should be accepted by the strict fixture. " + final.Error);
             SharedAssert.Equal("Done.", final.Text, "Follow-up should return the final answer.");
 
@@ -525,12 +525,12 @@ namespace Test.Shared
             using OpenAiCompatibleClient client = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } };
             client.Defaults.Completion.Model = LocalGeminiToolRoutes.Model;
 
-            ToolChatRequest request = CreateWeatherRequest();
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherRequest();
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(stream.Success, "OpenAI-compatible streaming should start. " + stream.Error);
 
             bool deltaCarriedSignature = false;
-            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.ConfigureAwait(false))
+            await foreach (ChatStreamingChunk chunk in stream.Chunks.ConfigureAwait(false))
             {
                 if (chunk.ToolCallDeltas.Any(delta => delta.ThoughtSignature == LocalGeminiToolRoutes.Signature)) deltaCarriedSignature = true;
             }
@@ -545,9 +545,9 @@ namespace Test.Shared
             request.Messages.Add(ChatMessage.ToolResult("call_1", "get_weather", "{\"t\":72}"));
             request.Messages.Add(ChatMessage.ToolResult("call_2", "get_weather", "{\"t\":55}"));
 
-            ToolChatStreamingResponse final = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse final = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(final.Success, "Streaming follow-up should be accepted by the strict fixture. " + final.Error);
-            await foreach (ToolChatStreamingChunk _ in final.Chunks.ConfigureAwait(false)) { }
+            await foreach (ChatStreamingChunk _ in final.Chunks.ConfigureAwait(false)) { }
             SharedAssert.Equal("Done.", final.Text, "Streaming follow-up should return the final answer.");
         }
 
@@ -559,15 +559,15 @@ namespace Test.Shared
             using (OpenAiCompatibleClient openAi = new OpenAiCompatibleClient(server.Endpoint, "test-key") { Defaults = { Completion = { Model = "gpt-4o-mini" }, Embedding = { Model = "text-embedding-3-small" } } })
             {
                 openAi.Defaults.Completion.Model = "test-model";
-                ToolChatRequest request = CreateWeatherRequest();
-                ToolChatResponse response = await openAi.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatRequest request = CreateWeatherRequest();
+                ChatResponse response = await openAi.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, "OpenAI tool chat should succeed. " + response.Error);
                 SharedAssert.True(response.ToolCalls.All(call => call.ThoughtSignature == null), "OpenAI responses without extra_content should have no signature.");
 
                 request.Messages.Add(response.ToAssistantMessage());
                 request.Messages.Add(ChatMessage.ToolResult(response.ToolCalls[0].Id, "get_weather", "{\"ok\":true}"));
                 int index = server.RequestBodies.Count;
-                await openAi.ToolChatAsync(request, token).ConfigureAwait(false);
+                await openAi.ChatAsync(request, token).ConfigureAwait(false);
 
                 string body = server.RequestBodies[index];
                 SharedAssert.False(body.Contains("extra_content", StringComparison.Ordinal), "OpenAI request without a signature must not contain extra_content.");
@@ -587,7 +587,7 @@ namespace Test.Shared
             {
                 foreach (ProviderClientBase client in others)
                 {
-                    ToolChatRequest request = CreateWeatherRequest();
+                    ChatRequest request = CreateWeatherRequest();
                     request.Messages.Add(ChatMessage.AssistantToolCalls(new List<ToolCall>
                     {
                         new ToolCall { Id = "call-1", Name = "get_weather", ArgumentsJson = "{\"city\":\"Seattle\"}", ThoughtSignature = "sig-must-not-leak" }
@@ -595,7 +595,7 @@ namespace Test.Shared
                     request.Messages.Add(ChatMessage.ToolResult("call-1", "get_weather", "{\"ok\":true}"));
 
                     int index = server.RequestBodies.Count;
-                    await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                    await client.ChatAsync(request, token).ConfigureAwait(false);
                     string body = server.RequestBodies[index];
                     SharedAssert.False(body.Contains("sig-must-not-leak", StringComparison.Ordinal), client.GetType().Name + " must not send the thought signature.");
                     SharedAssert.False(body.Contains("extra_content", StringComparison.Ordinal), client.GetType().Name + " must not send extra_content.");
@@ -667,9 +667,9 @@ namespace Test.Shared
             return client;
         }
 
-        private static ToolChatRequest CreateWeatherRequest()
+        private static ChatRequest CreateWeatherRequest()
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.System("Answer with weather guidance."));
             request.Messages.Add(ChatMessage.User("What is the weather in Seattle and Portland?"));
             request.Tools.Add(ToolDefinition.Function(

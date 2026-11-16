@@ -41,9 +41,63 @@ namespace PolyPrompt.Clients
         {
             RequireCapability(Capability.Chat, nameof(ChatAsync));
             ArgumentNullException.ThrowIfNull(prompt);
-            ResolvedCompletion settings = Resolve(options);
-            return InstrumentAsync(PolyPromptTelemetryNames.OperationChat, settings.Model, s => Enrich(s, settings, null),
-                () => WithApplied(ChatCoreAsync(prompt, settings, token), settings), token);
+            return ChatAsync(FromPrompt(prompt, options), token);
+        }
+
+        /// <summary>
+        /// Send one message, which may carry images, audio, or video, and return the full response.
+        /// </summary>
+        /// <param name="message">The message, usually from <see cref="ChatMessage.User(string, ContentPart[])"/>.</param>
+        /// <param name="options">Optional per-call settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ChatResponse containing the completion text, metadata, and timing.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when message is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the message or one of its parts is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
+        public Task<ChatResponse> ChatAsync(ChatMessage message, CompletionOptions? options = null, CancellationToken token = default)
+        {
+            RequireCapability(Capability.Chat, nameof(ChatAsync));
+            ArgumentNullException.ThrowIfNull(message);
+            return ChatAsync(new ChatRequest { Messages = { message }, Options = options }, token);
+        }
+
+        /// <summary>
+        /// Send a conversation and return the full response.
+        /// </summary>
+        /// <param name="messages">The conversation, in order.</param>
+        /// <param name="options">Optional per-call settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ChatResponse containing the completion text, metadata, and timing.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when messages is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the conversation is empty or a message or part is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
+        public Task<ChatResponse> ChatAsync(IEnumerable<ChatMessage> messages, CompletionOptions? options = null, CancellationToken token = default)
+        {
+            RequireCapability(Capability.Chat, nameof(ChatAsync));
+            ArgumentNullException.ThrowIfNull(messages);
+            return ChatAsync(new ChatRequest { Messages = messages.ToList(), Options = options }, token);
+        }
+
+        /// <summary>
+        /// Send a chat request, optionally with tools, and return assistant text and any tool calls. Tool execution is
+        /// owned by the caller; append ToAssistantMessage and tool-result messages to continue. When the options set a
+        /// system prompt and the messages contain no system message, the system prompt is sent as the first message.
+        /// </summary>
+        /// <param name="request">Messages, tools, and optional per-call settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ChatResponse containing assistant text and requested tool calls.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when request.Messages is null or empty, or a message or part is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when tools or a part's modality are not supported.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
+        public Task<ChatResponse> ChatAsync(ChatRequest request, CancellationToken token = default)
+        {
+            RequireChat(request, nameof(ChatAsync));
+            ResolvedCompletion settings = ResolveChat(request, out List<ChatMessage> messages);
+            return InstrumentAsync(PolyPromptTelemetryNames.OperationChat, settings.Model, s => Enrich(s, settings, request),
+                () => WithApplied(ChatCoreAsync(request, messages, settings, token), settings), token);
         }
 
         /// <summary>
@@ -59,49 +113,62 @@ namespace PolyPrompt.Clients
         {
             RequireCapability(Capability.Chat, nameof(ChatStreamingAsync));
             ArgumentNullException.ThrowIfNull(prompt);
-            ResolvedCompletion settings = Resolve(options);
-            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationChatStream, settings.Model, s => Enrich(s, settings, null),
-                () => WithApplied(ChatStreamingCoreAsync(prompt, settings, token), settings),
-                (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text) || !string.IsNullOrEmpty(c.ReasoningText)),
-                token);
+            return ChatStreamingAsync(FromPrompt(prompt, options), token);
         }
 
         /// <summary>
-        /// Send a message-based chat request, optionally with tools, and return assistant text and any tool calls.
-        /// Tool execution is owned by the caller; append ToAssistantMessage and tool-result messages to continue.
-        /// When the options set a system prompt and the messages contain no system message, the system prompt is sent
-        /// as the first message.
+        /// Send one message, which may carry images, audio, or video, and stream response chunks as they arrive.
         /// </summary>
-        /// <param name="request">Request containing messages, tools, and optional per-call settings.</param>
+        /// <param name="message">The message.</param>
+        /// <param name="options">Optional per-call settings.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>A ToolChatResponse containing assistant text and requested tool calls.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
-        /// <exception cref="ArgumentException">Thrown when request.Messages is null, empty, or contains a null message.</exception>
+        /// <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when message is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the message or one of its parts is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
         /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
-        public Task<ToolChatResponse> ToolChatAsync(ToolChatRequest request, CancellationToken token = default)
+        public Task<ChatStreamingResponse> ChatStreamingAsync(ChatMessage message, CompletionOptions? options = null, CancellationToken token = default)
         {
-            RequireCapability(Capability.ToolChat, nameof(ToolChatAsync));
-            ResolvedCompletion settings = ResolveToolChat(request, out List<ChatMessage> messages);
-            return InstrumentAsync(PolyPromptTelemetryNames.OperationToolChat, settings.Model, s => Enrich(s, settings, request),
-                () => WithApplied(ToolChatCoreAsync(request, messages, settings, token), settings), token);
+            RequireCapability(Capability.Chat, nameof(ChatStreamingAsync));
+            ArgumentNullException.ThrowIfNull(message);
+            return ChatStreamingAsync(new ChatRequest { Messages = { message }, Options = options }, token);
         }
 
         /// <summary>
-        /// Send a message-based chat request, optionally with tools, and stream response chunks as they arrive.
-        /// Enumerate Chunks, then append ToAssistantMessage and tool-result messages to continue.
+        /// Send a conversation and stream response chunks as they arrive.
         /// </summary>
-        /// <param name="request">Request containing messages, tools, and optional per-call settings.</param>
+        /// <param name="messages">The conversation, in order.</param>
+        /// <param name="options">Optional per-call settings.</param>
         /// <param name="token">Cancellation token.</param>
-        /// <returns>A ToolChatStreamingResponse containing streamed chunks, accumulated text, and requested tool calls.</returns>
-        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
-        /// <exception cref="ArgumentException">Thrown when request.Messages is null, empty, or contains a null message.</exception>
+        /// <returns>A ChatStreamingResponse containing metadata and an async enumerable of chunks.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when messages is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when the conversation is empty or a message or part is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when a part's modality is not supported.</exception>
         /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
-        public Task<ToolChatStreamingResponse> ToolChatStreamingAsync(ToolChatRequest request, CancellationToken token = default)
+        public Task<ChatStreamingResponse> ChatStreamingAsync(IEnumerable<ChatMessage> messages, CompletionOptions? options = null, CancellationToken token = default)
         {
-            RequireCapability(Capability.ToolChat, nameof(ToolChatStreamingAsync));
-            ResolvedCompletion settings = ResolveToolChat(request, out List<ChatMessage> messages);
-            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationToolChatStream, settings.Model, s => Enrich(s, settings, request),
-                () => WithApplied(ToolChatStreamingCoreAsync(request, messages, settings, token), settings),
+            RequireCapability(Capability.Chat, nameof(ChatStreamingAsync));
+            ArgumentNullException.ThrowIfNull(messages);
+            return ChatStreamingAsync(new ChatRequest { Messages = messages.ToList(), Options = options }, token);
+        }
+
+        /// <summary>
+        /// Send a chat request, optionally with tools, and stream response chunks as they arrive. Enumerate Chunks, then
+        /// append ToAssistantMessage and tool-result messages to continue.
+        /// </summary>
+        /// <param name="request">Messages, tools, and optional per-call settings.</param>
+        /// <param name="token">Cancellation token.</param>
+        /// <returns>A ChatStreamingResponse containing streamed chunks, accumulated text, and requested tool calls.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when request is null.</exception>
+        /// <exception cref="ArgumentException">Thrown when request.Messages is null or empty, or a message or part is not valid.</exception>
+        /// <exception cref="CapabilityNotSupportedException">Thrown when tools or a part's modality are not supported.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when no model is configured.</exception>
+        public Task<ChatStreamingResponse> ChatStreamingAsync(ChatRequest request, CancellationToken token = default)
+        {
+            RequireChat(request, nameof(ChatStreamingAsync));
+            ResolvedCompletion settings = ResolveChat(request, out List<ChatMessage> messages);
+            return InstrumentStreamingAsync(PolyPromptTelemetryNames.OperationChatStream, settings.Model, s => Enrich(s, settings, request),
+                () => WithApplied(ChatStreamingCoreAsync(request, messages, settings, token), settings),
                 (r, s) => r.Chunks = s.WrapStream(r.Chunks, r, c => !string.IsNullOrEmpty(c.Text) || !string.IsNullOrEmpty(c.ReasoningText) || (c.ToolCallDeltas != null && c.ToolCallDeltas.Count > 0)),
                 token);
         }
@@ -151,53 +218,30 @@ namespace PolyPrompt.Clients
         #region Protected-Methods
 
         /// <summary>
-        /// Provider implementation of <see cref="ChatAsync"/>.
+        /// Provider implementation of <see cref="ChatAsync(ChatRequest, CancellationToken)"/>. Every chat overload ends here.
         /// </summary>
-        /// <param name="prompt">User message (not null).</param>
+        /// <param name="request">The validated request (for tools and tool choice).</param>
+        /// <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
         /// <param name="settings">Merged settings.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The chat response.</returns>
-        protected virtual Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+        protected virtual Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
             throw NotSupported(Capability.Chat, "ChatAsync");
         }
 
         /// <summary>
-        /// Provider implementation of <see cref="ChatStreamingAsync"/>.
+        /// Provider implementation of <see cref="ChatStreamingAsync(ChatRequest, CancellationToken)"/>. Every streaming
+        /// chat overload ends here.
         /// </summary>
-        /// <param name="prompt">User message (not null).</param>
+        /// <param name="request">The validated request (for tools and tool choice).</param>
+        /// <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
         /// <param name="settings">Merged settings.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The streaming chat response.</returns>
-        protected virtual Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+        protected virtual Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
             throw NotSupported(Capability.Chat, "ChatStreamingAsync");
-        }
-
-        /// <summary>
-        /// Provider implementation of <see cref="ToolChatAsync"/>.
-        /// </summary>
-        /// <param name="request">The validated request (for tools and tool choice).</param>
-        /// <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
-        /// <param name="settings">Merged settings.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The tool chat response.</returns>
-        protected virtual Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-        {
-            throw NotSupported(Capability.ToolChat, "ToolChatAsync");
-        }
-
-        /// <summary>
-        /// Provider implementation of <see cref="ToolChatStreamingAsync"/>.
-        /// </summary>
-        /// <param name="request">The validated request (for tools and tool choice).</param>
-        /// <param name="messages">Messages to send, with the system prompt prepended when it applies.</param>
-        /// <param name="settings">Merged settings.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <returns>The streaming tool chat response.</returns>
-        protected virtual Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-        {
-            throw NotSupported(Capability.ToolChat, "ToolChatStreamingAsync");
         }
 
         /// <summary>
@@ -260,80 +304,7 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Wrap a raw chunk enumerable with timing-tracking logic that updates the response object.
-        /// </summary>
-        /// <param name="response">The streaming response object to update with timing.</param>
-        /// <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
-        /// <param name="sw">Stopwatch started before the HTTP request was made.</param>
-        /// <param name="token">Cancellation token.</param>
-        /// <param name="owner">Optional disposable owner released when enumeration ends.</param>
-        /// <returns>A wrapped async enumerable that updates timing on the response as chunks flow through.</returns>
-        protected async IAsyncEnumerable<ChatStreamingChunk> WrapChunksWithTiming(
-            ChatStreamingResponse response,
-            IAsyncEnumerable<ChatStreamingChunk> rawChunks,
-            Stopwatch sw,
-            [EnumeratorCancellation] CancellationToken token = default,
-            IDisposable? owner = null)
-        {
-            try
-            {
-                await foreach (ChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
-                {
-                    bool hasReasoning = !string.IsNullOrEmpty(chunk.ReasoningText);
-
-                    if (!string.IsNullOrEmpty(chunk.Text) || hasReasoning)
-                    {
-                        if (response.ChunkCount == 0)
-                        {
-                            response.TimeToFirstTokenMs = sw.ElapsedMilliseconds;
-                        }
-                        response.ChunkCount++;
-                        response.TimeToLastTokenMs = sw.ElapsedMilliseconds;
-                    }
-
-                    if (hasReasoning)
-                    {
-                        response.Reasoning = string.IsNullOrEmpty(response.Reasoning)
-                            ? chunk.ReasoningText
-                            : response.Reasoning + chunk.ReasoningText;
-                    }
-
-                    if (chunk.Usage != null) response.Usage = chunk.Usage;
-                    if (chunk.FinishReason != null) response.FinishReason = chunk.FinishReason;
-                    if (chunk.ResponseId != null) response.ResponseId = chunk.ResponseId;
-
-                    yield return chunk;
-                }
-
-                sw.Stop();
-                response.OverallRuntimeMs = sw.ElapsedMilliseconds;
-
-                int tokenCount = response.Usage?.CompletionTokens ?? response.ChunkCount;
-
-                if (tokenCount > 0 && response.OverallRuntimeMs > 0)
-                {
-                    response.OverallTokensPerSecond = tokenCount / (response.OverallRuntimeMs / 1000.0);
-                }
-
-                if (tokenCount > 0 && response.TimeToLastTokenMs > response.TimeToFirstTokenMs)
-                {
-                    double interTokenSec = (response.TimeToLastTokenMs - response.TimeToFirstTokenMs) / 1000.0;
-                    response.InterTokenTokensPerSecond = tokenCount / interTokenSec;
-                }
-            }
-            finally
-            {
-                if (sw.IsRunning)
-                {
-                    sw.Stop();
-                    response.OverallRuntimeMs = sw.ElapsedMilliseconds;
-                }
-                owner?.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Wrap a raw tool-chat chunk enumerable with timing and accumulation logic.
+        /// Wrap a raw chat chunk enumerable with timing and accumulation of text, reasoning, and tool calls.
         /// </summary>
         /// <param name="response">The streaming response object to update.</param>
         /// <param name="rawChunks">The raw async enumerable of chunks from the provider.</param>
@@ -341,9 +312,9 @@ namespace PolyPrompt.Clients
         /// <param name="token">Cancellation token.</param>
         /// <param name="owner">Optional disposable owner released when enumeration ends.</param>
         /// <returns>A wrapped async enumerable that updates timing and accumulated output on the response.</returns>
-        protected async IAsyncEnumerable<ToolChatStreamingChunk> WrapToolChatChunksWithTiming(
-            ToolChatStreamingResponse response,
-            IAsyncEnumerable<ToolChatStreamingChunk> rawChunks,
+        protected async IAsyncEnumerable<ChatStreamingChunk> WrapChunksWithTiming(
+            ChatStreamingResponse response,
+            IAsyncEnumerable<ChatStreamingChunk> rawChunks,
             Stopwatch sw,
             [EnumeratorCancellation] CancellationToken token = default,
             IDisposable? owner = null)
@@ -352,7 +323,7 @@ namespace PolyPrompt.Clients
 
             try
             {
-                await foreach (ToolChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
+                await foreach (ChatStreamingChunk chunk in rawChunks.WithCancellation(token).ConfigureAwait(false))
                 {
                     bool hasText = !string.IsNullOrEmpty(chunk.Text);
                     bool hasToolDeltas = chunk.ToolCallDeltas != null && chunk.ToolCallDeltas.Count > 0;
@@ -535,7 +506,7 @@ namespace PolyPrompt.Clients
             return response!;
         }
 
-        private static void Enrich(OperationScope scope, ResolvedCompletion settings, ToolChatRequest? request)
+        private static void Enrich(OperationScope scope, ResolvedCompletion settings, ChatRequest? request)
         {
             scope.SetCompletionSettings(settings.MaxTokens, settings.Temperature, settings.TopP);
             if (request != null)
@@ -544,17 +515,61 @@ namespace PolyPrompt.Clients
             }
         }
 
-        private ResolvedCompletion ResolveToolChat(ToolChatRequest request, out List<ChatMessage> messages)
+        private static ChatRequest FromPrompt(string prompt, CompletionOptions? options)
+        {
+            return new ChatRequest { Messages = { ChatMessage.User(prompt) }, Options = options, FromPrompt = true };
+        }
+
+        /// <summary>
+        /// Capability checks for a chat request, before anything is resolved or sent: Chat always, ToolCalling when tools
+        /// are present, and the input modality of every media part.
+        /// </summary>
+        private void RequireChat(ChatRequest request, string operation)
+        {
+            RequireCapability(Capability.Chat, operation);
+            ArgumentNullException.ThrowIfNull(request);
+            if (request.Tools != null && request.Tools.Count > 0) RequireCapability(Capability.ToolCalling, operation);
+            if (request.Messages == null) return;
+
+            foreach (ChatMessage message in request.Messages)
+            {
+                if (message?.Content == null) continue;
+                foreach (ContentPart part in message.Content)
+                {
+                    if (part == null) continue;
+                    switch (part.Type)
+                    {
+                        case ContentPartType.Image: RequireCapability(Capability.ImageInput, operation); break;
+                        case ContentPartType.Audio: RequireCapability(Capability.AudioInput, operation); break;
+                        case ContentPartType.Video: RequireCapability(Capability.VideoInput, operation); break;
+                    }
+                }
+            }
+        }
+
+        private ResolvedCompletion ResolveChat(ChatRequest request, out List<ChatMessage> messages)
         {
             ArgumentNullException.ThrowIfNull(request);
 
             if (request.Messages == null || request.Messages.Count == 0)
-                throw new ArgumentException("Tool chat requests require at least one message.", nameof(request));
+                throw new ArgumentException("Chat requests require at least one message.", nameof(request));
 
             for (int i = 0; i < request.Messages.Count; i++)
             {
-                if (request.Messages[i] == null)
+                ChatMessage message = request.Messages[i];
+                if (message == null)
                     throw new ArgumentException("Messages[" + i + "] cannot be null.", nameof(request));
+
+                bool isUser = string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase);
+                for (int j = 0; j < message.Content.Count; j++)
+                {
+                    string path = "Messages[" + i + "].Content[" + j + "]";
+                    ContentPart part = message.Content[j];
+                    if (part == null) throw new ArgumentException(path + " cannot be null.", nameof(request));
+                    part.Validate(path);
+                    if (part.Type != ContentPartType.Text && !isUser)
+                        throw new ArgumentException(path + ": " + part.Type + " parts are accepted only on user messages (this message's role is '" + message.Role + "').", nameof(request));
+                }
             }
 
             ResolvedCompletion settings = Resolve(request.Options);
@@ -574,7 +589,7 @@ namespace PolyPrompt.Clients
         }
 
         private static void RefreshToolCalls(
-            ToolChatStreamingResponse response,
+            ChatStreamingResponse response,
             Dictionary<int, ToolCallAssembly> toolCallAssemblies)
         {
             response.ToolCalls.Clear();

@@ -8,7 +8,7 @@ namespace PolyPrompt.Clients
     /// VoyageAI client.
     /// <list type="bullet">
     /// <item><description>Supported: Embed (<c>/v1/embeddings</c>) and Rerank (<c>/v1/rerank</c>).</description></item>
-    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolChat, Generate,
+    /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): Chat, ToolCalling, Generate,
     /// SparseEmbed, Classify, Decide, Models.</description></item>
     /// <item><description>Auth: required API key, sent as a bearer token.</description></item>
     /// <item><description>Defaults: embedding <c>voyage-3.5</c>, rerank <c>rerank-3</c>.</description></item>

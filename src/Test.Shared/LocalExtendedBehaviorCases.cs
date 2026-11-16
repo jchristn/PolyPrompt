@@ -433,8 +433,8 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CohereClient client = CreateCohereClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatRequest request = CreateWeatherToolRequest();
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
 
             SharedAssert.True(response.Success, "Cohere tool chat should succeed. " + response.Error);
             SharedAssert.Equal(1, response.ToolCalls.Count, "Cohere tool chat should parse one tool call.");
@@ -459,7 +459,7 @@ namespace Test.Shared
             request.Messages.Add(response.ToAssistantMessage());
             request.Messages.Add(ChatMessage.ToolResult("call-weather-1", "get_weather", "{\"temperature\":72,\"conditions\":\"clear\"}"));
 
-            ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(final.Success, "Cohere follow-up tool chat should succeed.");
             SharedAssert.Equal("Seattle is 72 F and clear.", final.Text, "Cohere follow-up tool chat should return the final answer.");
             SharedAssert.Equal(0, final.ToolCalls.Count, "Cohere follow-up tool chat should not request more tools.");
@@ -481,11 +481,11 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CohereClient client = CreateCohereClient(server);
 
-            ToolChatStreamingResponse streaming = await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse streaming = await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             SharedAssert.True(streaming.Success, "Cohere streaming tool chat should start.");
 
             int deltaChunks = 0;
-            await foreach (ToolChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
+            await foreach (ChatStreamingChunk chunk in streaming.Chunks.ConfigureAwait(false))
             {
                 if (chunk.ToolCallDeltas.Count > 0) deltaChunks++;
             }
@@ -509,11 +509,11 @@ namespace Test.Shared
 
             async Task<LocalJson> SendAsync(string? toolChoice)
             {
-                ToolChatRequest request = CreateWeatherToolRequest();
+                ChatRequest request = CreateWeatherToolRequest();
                 request.Tools.Add(ToolDefinition.Function("get_time", "Get the time.", new Dictionary<string, object> { { "type", "object" } }));
                 request.ToolChoice = toolChoice;
                 int before = server.RequestBodies.Count;
-                ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(response.Success, "Cohere tool chat with tool choice '" + toolChoice + "' should succeed.");
                 return LocalJson.Parse(server.RequestBodies[before]);
             }
@@ -569,22 +569,22 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CohereClient client = CreateCohereClient(server);
 
-            ToolChatRequest high = CreateWeatherToolRequest();
+            ChatRequest high = CreateWeatherToolRequest();
             (high.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.High;
-            await client.ToolChatAsync(high, token).ConfigureAwait(false);
+            await client.ChatAsync(high, token).ConfigureAwait(false);
             LocalJson highBody = LocalJson.Parse(server.RequestBodies[0]);
             SharedAssert.Equal("enabled", highBody.Str("thinking.type"), "High effort should enable Cohere thinking.");
             SharedAssert.Equal(16384, highBody.Int("thinking.token_budget"), "High effort should send the 16384 token budget.");
 
-            ToolChatRequest minimal = CreateWeatherToolRequest();
+            ChatRequest minimal = CreateWeatherToolRequest();
             (minimal.Options ??= new CompletionOptions()).ReasoningEffort = ReasoningEffort.Minimal;
-            await client.ToolChatAsync(minimal, token).ConfigureAwait(false);
+            await client.ChatAsync(minimal, token).ConfigureAwait(false);
             LocalJson minimalBody = LocalJson.Parse(server.RequestBodies[1]);
             SharedAssert.Equal("disabled", minimalBody.Str("thinking.type"), "Minimal effort should disable Cohere thinking.");
             SharedAssert.False(minimalBody.Has("thinking.token_budget"), "Disabled Cohere thinking should not send a token budget.");
 
             client.Defaults.Completion.ReasoningEffort = ReasoningEffort.Low;
-            await client.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            await client.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             LocalJson streamingBody = LocalJson.Parse(server.RequestBodies[2]);
             SharedAssert.Equal(1024, streamingBody.Int("thinking.token_budget"), "The client default reasoning effort should apply to streaming tool chat.");
         }
@@ -894,10 +894,10 @@ namespace Test.Shared
             ChatStreamingResponse chatStream = await bad.ChatStreamingAsync("hi", token: token).ConfigureAwait(false);
             AssertHttpFailure(chatStream.Success, chatStream.StatusCode, chatStream.Error, 404, "Cohere streaming chat");
 
-            ToolChatResponse tool = await bad.ToolChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatResponse tool = await bad.ChatAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             AssertHttpFailure(tool.Success, tool.StatusCode, tool.Error, 404, "Cohere tool chat");
 
-            ToolChatStreamingResponse toolStream = await bad.ToolChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
+            ChatStreamingResponse toolStream = await bad.ChatStreamingAsync(CreateWeatherToolRequest(), token).ConfigureAwait(false);
             AssertHttpFailure(toolStream.Success, toolStream.StatusCode, toolStream.Error, 404, "Cohere streaming tool chat");
 
             GenerationResponse gen = await bad.GenerateAsync("hi", token: token).ConfigureAwait(false);
@@ -971,10 +971,10 @@ namespace Test.Shared
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using CohereClient client = CreateCohereClient(server);
 
-            ToolChatRequest request = CreateWeatherToolRequest();
+            ChatRequest request = CreateWeatherToolRequest();
             request.Messages.Add(ChatMessage.User("badjsonargs"));
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             SharedAssert.True(response.Success, "Cohere tool chat with malformed arguments should not fail the response.");
             SharedAssert.Equal(1, response.ToolCalls.Count, "Cohere tool chat with malformed arguments should still return the tool call.");
             SharedAssert.Equal("{\"city\":", response.ToolCalls[0].ArgumentsJson, "Cohere malformed tool arguments should be passed through verbatim for the caller to handle.");
@@ -1021,8 +1021,8 @@ namespace Test.Shared
 
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ChatAsync("hi", token: c), "Cohere ChatAsync should respect cancellation.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ChatStreamingAsync("hi", token: c), "Cohere ChatStreamingAsync should respect cancellation.").ConfigureAwait(false);
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ToolChatAsync(CreateWeatherToolRequest(), c), "Cohere ToolChatAsync should respect cancellation.").ConfigureAwait(false);
-            await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ToolChatStreamingAsync(CreateWeatherToolRequest(), c), "Cohere ToolChatStreamingAsync should respect cancellation.").ConfigureAwait(false);
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ChatAsync(CreateWeatherToolRequest(), c), "Cohere ChatAsync should respect cancellation.").ConfigureAwait(false);
+            await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.ChatStreamingAsync(CreateWeatherToolRequest(), c), "Cohere ChatStreamingAsync should respect cancellation.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.GenerateAsync("hi", token: c), "Cohere GenerateAsync should respect cancellation.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => client.GenerateStreamingAsync("hi", token: c), "Cohere GenerateStreamingAsync should respect cancellation.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<OperationCanceledException>(() => embedClient.EmbedAsync("hi", token: c), "Cohere EmbedAsync should respect cancellation.").ConfigureAwait(false);
@@ -1600,9 +1600,9 @@ namespace Test.Shared
             return client;
         }
 
-        private static ToolChatRequest CreateWeatherToolRequest()
+        private static ChatRequest CreateWeatherToolRequest()
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.System("Answer with weather guidance."));
             request.Messages.Add(ChatMessage.User("What is the weather in Seattle?"));
             request.Tools.Add(ToolDefinition.Function(

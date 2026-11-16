@@ -226,14 +226,10 @@ namespace PolyPrompt.Clients
         protected abstract string Url(string path);
 
         /// <inheritdoc />
-        protected override Task<ChatResponse> ChatCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token) =>
-            ExecutePostAsync(new ChatResponse { Model = settings.Model }, "chat", Url("responses"), BuildBody(prompt, settings, false, true), ParseResponse, token);
-
-        /// <inheritdoc />
-        protected override Task<ToolChatResponse> ToolChatCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
+        protected override Task<ChatResponse> ChatCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
-            Dictionary<string, object> body = BuildBody(BuildInput(messages), settings, false, true, request);
-            return ExecutePostAsync<ToolChatResponse>(new ResponsesApiResponse { Model = settings.Model, Stored = IsStored(body) }, "tool chat", Url("responses"), body, ParseResponse, token);
+            Dictionary<string, object> body = BuildChatBody(request, messages, settings, false);
+            return ExecutePostAsync<ChatResponse>(new ResponsesApiResponse { Model = settings.Model, Stored = IsStored(body) }, "chat", Url("responses"), body, ParseResponse, token);
         }
 
         /// <inheritdoc />
@@ -241,19 +237,11 @@ namespace PolyPrompt.Clients
             ExecutePostAsync(new GenerationResponse { Model = settings.Model }, "generate", Url("responses"), BuildBody(prompt, settings, false, false), ParseResponse, token);
 
         /// <inheritdoc />
-        protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(string prompt, ResolvedCompletion settings, CancellationToken token)
+        protected override Task<ChatStreamingResponse> ChatStreamingCoreAsync(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
         {
             ChatStreamingResponse response = new() { Model = settings.Model };
-            return ExecuteStreamingAsync(response, "chat", Url("responses"), BuildBody(prompt, settings, true, true),
+            return ExecuteStreamingAsync(response, "chat", Url("responses"), BuildChatBody(request, messages, settings, true),
                 (stream, sw) => response.Chunks = WrapChunksWithTiming(response, ReadChatChunks(response, stream.Response, stream.Token), sw, stream.Token, stream), token);
-        }
-
-        /// <inheritdoc />
-        protected override Task<ToolChatStreamingResponse> ToolChatStreamingCoreAsync(ToolChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, CancellationToken token)
-        {
-            ToolChatStreamingResponse response = new() { Model = settings.Model };
-            return ExecuteStreamingAsync(response, "tool chat", Url("responses"), BuildBody(BuildInput(messages), settings, true, true, request),
-                (stream, sw) => response.Chunks = WrapToolChatChunksWithTiming(response, ReadToolChunks(response, stream.Response, stream.Token), sw, stream.Token, stream), token);
         }
 
         /// <inheritdoc />

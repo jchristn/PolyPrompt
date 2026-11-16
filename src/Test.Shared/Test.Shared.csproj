@@ -20,6 +20,7 @@
     <EmbeddedResource Include="FakeCli\fake-cli.sh" LogicalName="FakeCli/fake-cli.sh" />
     <EmbeddedResource Include="FakeCli\Scripts\*.txt" LogicalName="FakeCli/%(Filename)%(Extension)" />
     <EmbeddedResource Include="Fixtures\V4Bodies\*.txt" LogicalName="V4Bodies/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Fixtures\V5Changes\*.txt" LogicalName="V5Changes/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

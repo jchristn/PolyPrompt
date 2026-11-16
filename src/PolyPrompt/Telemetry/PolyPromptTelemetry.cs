@@ -354,8 +354,6 @@ namespace PolyPrompt.Telemetry
             {
                 case PolyPromptTelemetryNames.OperationChat:
                 case PolyPromptTelemetryNames.OperationChatStream:
-                case PolyPromptTelemetryNames.OperationToolChat:
-                case PolyPromptTelemetryNames.OperationToolChatStream:
                     return "chat";
                 case PolyPromptTelemetryNames.OperationGenerate:
                 case PolyPromptTelemetryNames.OperationGenerateStream:

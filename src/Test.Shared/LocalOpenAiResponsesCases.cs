@@ -16,7 +16,7 @@ namespace Test.Shared
     {
         private static JsonElement J(string json) { using JsonDocument d = JsonDocument.Parse(json); return d.RootElement.Clone(); }
         private static OpenAiClient Client(LocalOpenAiTestServer server) => new(LocalOpenAiResponsesRoutes.Key, server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } };
-        private static ToolChatRequest Request(string prompt = "weather?") => new()
+        private static ChatRequest Request(string prompt = "weather?") => new()
         {
             Messages = new() { ChatMessage.User(prompt) },
             Tools = new() { ToolDefinition.Function("get_weather", "Weather", new() { ["type"] = "object", ["properties"] = new Dictionary<string, object> { ["city"] = new Dictionary<string, object> { ["type"] = "string" } } }) }
@@ -46,7 +46,7 @@ namespace Test.Shared
             SharedAssert.Equal("gpt-6.1-sol", client.Defaults.Completion.Model, "Default completion model.");
             SharedAssert.Equal("text-embedding-3-small", client.Defaults.Embedding.Model, "Default embedding model.");
             SharedAssert.Equal<bool?>(false, client.Defaults.Completion.Store, "Store defaults to false.");
-            SharedAssert.Equal(Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models, client.Capabilities, "Capabilities.");
+            SharedAssert.Equal(Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models, client.Capabilities, "Capabilities.");
             ArgumentException? url = null;
             try { using OpenAiClient bad = new("http://localhost:8000/v1"); } catch (ArgumentException ex) { url = ex; }
             SharedAssert.NotNull(url, "A URL-shaped key throws.");
@@ -106,7 +106,7 @@ namespace Test.Shared
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
             var request = Request();
-            ToolChatResponse first = await c.ToolChatAsync(request, token);
+            ChatResponse first = await c.ChatAsync(request, token);
             SharedAssert.True(first.Success, first.Error ?? "Tool chat failed.");
             SharedAssert.Equal("tool_calls", first.FinishReason, "Tool finish."); SharedAssert.Equal(1, first.ToolCalls.Count, "One call.");
             SharedAssert.Equal("call-oai-1", first.ToolCalls[0].Id, "Call id."); SharedAssert.Equal("get_weather", first.ToolCalls[0].Name, "Name.");
@@ -117,7 +117,7 @@ namespace Test.Shared
             SharedAssert.Equal(server.Endpoint.TrimEnd('/'), state.GetProperty("scope").GetString(), "4.0 envelope scope.");
             request.Messages.Add(first.ToAssistantMessage());
             request.Messages.Add(ChatMessage.ToolResult("call-oai-1", "get_weather", "sunny"));
-            ToolChatResponse second = await c.ToolChatAsync(request, token);
+            ChatResponse second = await c.ChatAsync(request, token);
             SharedAssert.True(second.Success, second.Error ?? "Follow-up failed."); SharedAssert.Equal("pong", second.Text, "Answer after tool.");
             JsonElement input = Body(server).GetProperty("input");
             List<string> types = input.EnumerateArray().Select(i => i.TryGetProperty("type", out JsonElement t) ? t.GetString()! : "message").ToList();
@@ -128,7 +128,7 @@ namespace Test.Shared
         private static async Task ToolsStreamAsync(CancellationToken token)
         {
             using var server = LocalOpenAiTestServer.Start(); using var c = Client(server);
-            var r = await c.ToolChatStreamingAsync(Request("oai-parallel"), token);
+            var r = await c.ChatStreamingAsync(Request("oai-parallel"), token);
             int deltas = 0; await foreach (var chunk in r.Chunks.WithCancellation(token)) deltas += chunk.ToolCallDeltas.Count(d => d.ArgumentsJsonDelta != null);
             SharedAssert.True(r.Success, r.Error ?? "Stream failed."); SharedAssert.Equal(2, r.ToolCalls.Count, "Two parallel calls.");
             SharedAssert.Equal("call-oai-1", r.ToolCalls[0].Id, "Ordered by output index."); SharedAssert.Equal("{\"city\":\"Tokyo\"}", r.ToolCalls[1].ArgumentsJson, "Arguments stay with their call.");
@@ -194,7 +194,7 @@ namespace Test.Shared
             foreach (var (choice, expected) in new[] { ("auto", "\"auto\""), ("none", "\"none\""), ("required", "\"required\""), ("any", "\"required\""), ("get_weather", "{\"type\":\"function\",\"name\":\"get_weather\"}") })
             {
                 var request = Request(); request.ToolChoice = choice;
-                await c.ToolChatAsync(request, token);
+                await c.ChatAsync(request, token);
                 SharedAssert.Equal(expected, Body(server).GetProperty("tool_choice").GetRawText(), "tool_choice " + choice);
             }
             var hosted = new OpenAiCompletionOptions { HostedTools = new() { ResponsesApiTools.WebSearch(), ResponsesApiTools.CodeInterpreter(), OpenAiTools.Custom("grep", "Search"), OpenAiTools.ApplyPatch(), ResponsesApiHostedTool.Create("web_search_preview") } };
@@ -269,7 +269,7 @@ namespace Test.Shared
             }
             var truncated = await c.ChatStreamingAsync("oai-truncated", token: token); await foreach (var _ in truncated.Chunks.WithCancellation(token)) { }
             SharedAssert.True(truncated.Error!.StartsWith("OpenAI stream ended", StringComparison.Ordinal), "OpenAI wording: " + truncated.Error);
-            var failed = await c.ToolChatStreamingAsync(Request("oai-failed"), token); await foreach (var _ in failed.Chunks.WithCancellation(token)) { }
+            var failed = await c.ChatStreamingAsync(Request("oai-failed"), token); await foreach (var _ in failed.Chunks.WithCancellation(token)) { }
             SharedAssert.False(failed.Success, "response.failed fails the stream."); SharedAssert.Equal(0, failed.ToolCalls.Count, "No calls escape.");
         }
 

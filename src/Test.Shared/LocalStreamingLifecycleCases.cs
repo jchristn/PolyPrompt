@@ -51,7 +51,7 @@ namespace Test.Shared
             StreamingResponseBase response;
             if (operation == "chat") response = await client.ChatStreamingAsync("hello", options, token).ConfigureAwait(false);
             else if (operation == "generate") response = await client.GenerateStreamingAsync("hello", options, token).ConfigureAwait(false);
-            else response = await client.ToolChatStreamingAsync(new ToolChatRequest
+            else response = await client.ChatStreamingAsync(new ChatRequest
             {
                 Messages = new List<ChatMessage> { ChatMessage.User("hello") }, Options = options,
                 Tools = new List<ToolDefinition> { ToolDefinition.Function("probe", "Never executed", new Dictionary<string, object> { ["type"] = "object" }) }
@@ -71,8 +71,8 @@ namespace Test.Shared
                         if (scenario == "consumer-abandons") break;
                         if (scenario == "cancel-after-partial") cancel.Cancel();
                     }
-                else if (response is ToolChatStreamingResponse tools)
-                    await foreach (ToolChatStreamingChunk chunk in tools.Chunks.WithCancellation(cancel.Token).ConfigureAwait(false))
+                else if (response is ChatStreamingResponse tools)
+                    await foreach (ChatStreamingChunk chunk in tools.Chunks.WithCancellation(cancel.Token).ConfigureAwait(false))
                     {
                         Observe(response, ref count, ref text, chunk.Text);
                         if (scenario == "consumer-abandons") break;
@@ -106,10 +106,10 @@ namespace Test.Shared
             {
                 SharedAssert.Equal(scenario == "terminal-only" ? 1 : 2, count, "Terminal policy excludes trailing records");
                 SharedAssert.Equal(scenario == "terminal-only" ? "" : "hello", text, "Output preserved");
-                TokenUsage? usage = response is ChatStreamingResponse a ? a.Usage : response is ToolChatStreamingResponse b ? b.Usage : ((GenerationStreamingResponse)response).Usage;
+                TokenUsage? usage = response is ChatStreamingResponse a ? a.Usage : response is ChatStreamingResponse b ? b.Usage : ((GenerationStreamingResponse)response).Usage;
                 SharedAssert.Equal(2, usage!.CompletionTokens!.Value, "Final usage preserved");
             }
-            if (response is ToolChatStreamingResponse toolResponse && text == "hello")
+            if (response is ChatStreamingResponse toolResponse && text == "hello")
             {
                 SharedAssert.Equal(1, toolResponse.ToolCalls.Count, "Partial calls retained for diagnostics");
                 SharedAssert.Equal(1, toolResponse.ToAssistantMessage().ToolCalls.Count, "Accessor remains compatible");
@@ -119,7 +119,7 @@ namespace Test.Shared
             SharedAssert.False(handler.Disposed, "Injected HttpClient remains caller-owned");
             if (capture != null)
             {
-                string name = (cloud ? "ollamacloud " : "ollama ") + (operation == "tools" ? "tool_chat_stream" : operation == "generate" ? "generate_stream" : "chat_stream");
+                string name = (cloud ? "ollamacloud " : "ollama ") + (operation == "tools" ? "chat_stream" : operation == "generate" ? "generate_stream" : "chat_stream");
                 System.Diagnostics.Activity span = capture.Span(name);
                 string outcome = expected == StreamingState.Completed ? "success" : expected == StreamingState.Abandoned ? "abandoned" : expected == StreamingState.Cancelled ? "cancelled" : "error";
                 SharedAssert.Equal(outcome, span.GetTagItem("polyprompt.outcome")?.ToString(), "Telemetry follows lifecycle");
@@ -140,7 +140,7 @@ namespace Test.Shared
                     using CancellationTokenSource consumer = CancellationTokenSource.CreateLinkedTokenSource(token);
                     StreamingResponseBase response = operation == "chat" ? await client.ChatStreamingAsync("hello", token: request.Token).ConfigureAwait(false) :
                         operation == "generate" ? await client.GenerateStreamingAsync("hello", token: request.Token).ConfigureAwait(false) :
-                        await client.ToolChatStreamingAsync(new ToolChatRequest { Messages = new List<ChatMessage> { ChatMessage.User("hello") } }, request.Token).ConfigureAwait(false);
+                        await client.ChatStreamingAsync(new ChatRequest { Messages = new List<ChatMessage> { ChatMessage.User("hello") } }, request.Token).ConfigureAwait(false);
                     SharedAssert.Equal(StreamingState.Open, response.State, client.GetType().Name + " opens");
                     bool cancelled = false;
                     if (mode == "pre-request-cancel") request.Cancel();
@@ -177,8 +177,8 @@ namespace Test.Shared
         {
             if (response is ChatStreamingResponse chat)
                 await foreach (ChatStreamingChunk chunk in chat.Chunks.WithCancellation(token).ConfigureAwait(false)) yield return chunk;
-            else if (response is ToolChatStreamingResponse tools)
-                await foreach (ToolChatStreamingChunk chunk in tools.Chunks.WithCancellation(token).ConfigureAwait(false)) yield return chunk;
+            else if (response is ChatStreamingResponse tools)
+                await foreach (ChatStreamingChunk chunk in tools.Chunks.WithCancellation(token).ConfigureAwait(false)) yield return chunk;
             else if (response is GenerationStreamingResponse generation)
                 await foreach (GenerationStreamingChunk chunk in generation.Chunks.WithCancellation(token).ConfigureAwait(false)) yield return chunk;
         }

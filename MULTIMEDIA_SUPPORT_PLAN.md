@@ -72,7 +72,8 @@ ContentPart.FromFile(string path)   // reads bytes, infers type and media type
 
 ```csharp
 public List<ContentPart> Content { get; set; } = new List<ContentPart>();
-public string? Text { get; }      // the text parts joined with "\n"; null when there are none
+public string? Text { get; set; } // get: the text parts joined with "\n", null when there are none
+                                  // set: replaces all content with one text part (null clears it)
 public bool HasMedia { get; }     // true when Content holds a non-text part
 ```
 
@@ -88,7 +89,7 @@ ChatMessage.AssistantToolCalls(IEnumerable<ToolCall> toolCalls)
 ChatMessage.ToolResult(string? toolCallId, string toolName, string text)
 ```
 
-`Role`, `ToolCallId`, `ToolName`, `ToolCalls`, and `ProviderState` are unchanged.
+`Role`, `ToolCallId`, `ToolName`, `ToolCalls`, and `ProviderState` are unchanged. `Text` and `HasMedia` are `[JsonIgnore]`. Because `Text` is settable, most 4.x code migrates by renaming `Content` to `Text` (`new ChatMessage { Role = "tool", Text = "{}" }`).
 
 Rules in this release: media parts are valid only on `user` messages. Media on `system`, `assistant`, or tool-result messages throws `ArgumentException` from validation. The model already permits them, so media in tool results (section 9) needs no further type change.
 
@@ -339,16 +340,16 @@ All tests are Touchstone descriptors in `src/Test.Shared`, so every runner (`Tes
 
 - **`LocalMultimodalCases.cs`**: for every client in `LocalClients.Supporting(Capability.ImageInput, ...)`, send one image by bytes and assert the exact wire shape: data URL vs raw base64, media type, part order with the leading text, and no `+` in media values. Repeat for URL images where supported, YouTube URLs on Gemini, audio and video where supported, multiple images in one message, `ImageDetail` mapping, `VideoClip` mapping (Gemini and Vertex), and a tool-bearing `ChatRequest` with an image in the user turn. One case sets `EscapeMediaInJson = true` and asserts escaped output that decodes to the same bytes.
 - **`LocalMultimodalValidationCases.cs`**: media on system, assistant, or tool-result messages throws. Missing `MediaType` with `Data` throws. A `MediaType` that disagrees with the magic bytes throws. Two populated sources on one part throw, with the part path in the message. An over-limit inline size throws with the provider-specific message. Non-YouTube URLs on Gemini, and any URL on Ollama, throw. An unsupported modality throws `CapabilityNotSupportedException` with zero server requests recorded.
-- **`LocalChatMessageSerializationCases.cs`**: a 4.x-shaped `ChatMessage` JSON (string `Content`) deserializes to one text part. Arrays round-trip. `Text` and `HasMedia` are computed correctly. Covered in `Test.Aot`.
+- **`LocalChatModelCases.cs`** (ChatMessage serialization and the chat overloads, merged into one file): a 4.x-shaped `ChatMessage` JSON (string `Content`) deserializes to one text part. Arrays round-trip. `Text` and `HasMedia` are computed correctly. Covered in `Test.Aot`.
 - **`LocalTranscriptionCases.cs`**: multipart field names and values for each format and granularity, segment and word parsing, `Language` and `Prompt` passthrough, `AuthPlacement` variants on `OpenAiCompatibleClient`, Azure deployment routing, the `whisper-1`-only format validation on `OpenAiClient`, pass-through on `OpenAiCompatibleClient`, and error status passthrough.
 - **`LocalFileUploadCases.cs`**: the Gemini resumable upload sequence, wait-for-active polling with timeout and cancellation, OpenAI file upload and delete, and file references flowing into parts.
 - **`LocalCallDetailRedactionCases.cs`**: redacted placeholders in `CallDetail.RequestBody` for media over the threshold, full bodies when redaction is off, no second serialization under `Metadata` capture, multipart summaries, Bedrock signatures valid with redaction on (the fixture server verifies the signature over the received bytes), and proof that the sent bytes are never altered.
-- **`LocalChatMergeCases.cs`**: all four `ChatAsync` overloads and their streaming variants on every chat provider, `ToolCalls` on `ChatResponse`, `ToAssistantMessage()` round trips across tool turns (replacing the 4.0 tool-turn tests), and `ToolCalling` required only when tools are present.
+- **`LocalChatModelCases.cs`**, continued: all four `ChatAsync` overloads and their streaming variants on every chat provider, `ToolCalls` on `ChatResponse`, `ToAssistantMessage()` round trips across tool turns (replacing the 4.0 tool-turn tests), and `ToolCalling` required only when tools are present.
 - **`LocalMultimodalTelemetryCases.cs`**: new span attributes and metrics, `chat` reported for tool-bearing calls, and the `modality` label limited to its four values.
 
 ### 7.3 Contract and regression updates
 
-- **4.0 wire fixtures (first task of the release).** Before any code change, capture request bodies from the 4.0.0 code for every provider: `ChatAsync(string)`, `ChatStreamingAsync(string)`, `ToolChatAsync` and its streaming form with and without tools, and multi-turn tool histories. Store them in `src/Test.Shared/Fixtures/V4Bodies/`. A new `LocalWireIdentityCases.cs` replays the same inputs through the 5.0 API and compares bytes. Accepted differences need a separate fixture with a comment and a line in the migration guide.
+- **4.0 wire fixtures (first task of the release).** Before any code change, capture request bodies from the 4.0.0 code for every provider: `ChatAsync(string)`, `ChatStreamingAsync(string)`, `ToolChatAsync` and its streaming form with and without tools, and multi-turn tool histories. Store them in `src/Test.Shared/Fixtures/V4Bodies/`. A new `LocalWireIdentityCases.cs` replays the same inputs through the 5.0 API and compares bytes, path, and `Content-Type`. An accepted difference lives in `src/Test.Shared/Fixtures/V5Changes/` under the same name, starts with a `# reason:` line, must differ from its 4.0.0 fixture, and gets a line in the migration guide.
 - **README matrix**: the renamed and new columns. `contract_readme_matrix` covers them once the columns exist.
 - **Default models table**: add a `Transcription` section. Proposed defaults are `whisper-1` for `OpenAiClient` and none for Azure and OpenAI-compatible. The contract test's section list gains `Transcription`.
 - **`LocalArchitectureCases.arch_capability_matrix`**: update the `operations[]` list. Remove the tool-chat methods, and add the new `ChatAsync` and `ChatStreamingAsync` overloads and `TranscribeAsync`.
@@ -424,17 +425,17 @@ Mocks and simulations for other providers are not part of this release.
 Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnings and the local suite green on net8.0 and net10.0.
 
 ### Phase 0: Baseline
-- [ ] Capture the 4.0.0 wire fixtures (section 7.3) from the unmodified tree, and commit them before any library change
+- [x] Capture the 4.0.0 wire fixtures (section 7.3) from the unmodified tree, and commit them before any library change
 
 ### Phase 1: Breaking model and surface changes (no media on the wire yet)
-- [ ] `ContentPartType`, `ImageDetail`, `VideoClip`, `ContentPart` (factories and `Validate`), `MediaTypes`, `MediaTypeSniffer`
-- [ ] `ChatMessage.Content` as parts, `Text`, `HasMedia`, factories, the string-or-array converter
-- [ ] Chat and tool chat merge: `ChatRequest`, merged responses and chunks, the four `ChatAsync` and `ChatStreamingAsync` overloads, `ChatCoreAsync` and `ChatStreamingCoreAsync`, the `ToolCalling` rename, and the per-provider move onto one message builder
-- [ ] Agent harnesses read `Text` and reject media history
-- [ ] `HttpClientBase.PostAndRecordAsync(wireBody, recordedBody)`, UTF-8 serialization without the intermediate string, and the `PostStreamingAsync` equivalent
-- [ ] Telemetry operation merge
-- [ ] Migrate every existing test, console, and doc snippet to the new API
-- [ ] Tests: `LocalWireIdentityCases` green against Phase 0 fixtures, `LocalChatMergeCases`, `LocalChatMessageSerializationCases`, validation cases that do not need the wire
+- [x] `ContentPartType`, `ImageDetail`, `VideoClip`, `ContentPart` (factories and `Validate`), `MediaTypes`, `MediaTypeSniffer`
+- [x] `ChatMessage.Content` as parts, `Text`, `HasMedia`, factories, the string-or-array converter
+- [x] Chat and tool chat merge: `ChatRequest`, merged responses and chunks, the four `ChatAsync` and `ChatStreamingAsync` overloads, `ChatCoreAsync` and `ChatStreamingCoreAsync`, the `ToolCalling` rename, and the per-provider move onto one message builder
+- [x] Agent harnesses read `Text` and reject media history
+- [x] `HttpClientBase.PostAndRecordAsync(wireBody, recordedBody)`, UTF-8 serialization without the intermediate string, and the `PostStreamingAsync` equivalent
+- [x] Telemetry operation merge
+- [x] Migrate every existing test, console, and doc snippet to the new API
+- [x] Tests: `LocalWireIdentityCases` green against Phase 0 fixtures; `LocalChatModelCases` (overloads, same-body, content, JSON, part validation, `FromFile`, harness history)
 
 ### Phase 2: Media on the wire
 - [ ] `MediaValue`, the serializer wire and record modes, raw media writing, `EscapeMediaInJson`
@@ -480,3 +481,5 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 
 - **2026-11-15**: First draft written from a structural review of the 4.0.0 source, as an additive 4.1.0. Key finding: only `ToolChatAsync` takes `ChatMessage`, and `ChatAsync` and `GenerateAsync` take a string.
 - **2026-11-15**: Revised after review. The owner approved a major version, so the plan became 5.0.0. Changes: `ChatMessage.Content` becomes parts, with a converter for 4.x JSON. Tool chat merges into chat, with four `ChatAsync` overloads; `ChatAsync(string, IEnumerable<ContentPart>)` was dropped because it made `ChatAsync(x, null)` ambiguous. The wire body and recorded body are separated so redaction cannot break SigV4. Media is written raw to avoid `+` inflation, with `EscapeMediaInJson` to opt out. Validation moved out of setters. Transcription format checks are per model. YouTube URLs are allowed on Gemini and Vertex. Postman scope is limited to the three existing targets. Serialization writes UTF-8 bytes without an intermediate string. Redaction moved to the media phase. Phase 0 captures the 4.0 wire fixtures. No code changes yet.
+- **2026-11-15**: Phase 0 done (`b159ef3`): 160 wire fixtures captured from 4.0.0, deterministic across two runs and both frameworks.
+- **2026-11-16**: Phase 1 done. Chat and tool chat merged; `ChatMessage.Content` is parts. Wire identity: 156 of 160 bodies are byte-identical, including `Content-Type`; the 4 differences are the intended OpenAI-compatible fix (no `tool_choice` without tools), recorded in `V5Changes`. The Native AOT request digest over 222 requests equals the 4.0.0 digest. Local suite 854 passed on net8.0 and net10.0; Xunit, Nunit, Docs, Console, and AOT green. `MIGRATION_V3_TO_V4.md` is no longer compiled by `Test.Docs` because its snippets target 4.0; `MIGRATION_V4_TO_V5.md` replaces it in Phase 6.

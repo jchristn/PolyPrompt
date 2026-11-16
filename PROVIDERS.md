@@ -110,7 +110,7 @@ using PolyPrompt.Models;
 
 using OpenAiClient openai = new OpenAiClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
 
-ToolChatRequest request = new ToolChatRequest
+ChatRequest request = new ChatRequest
 {
     Messages = { ChatMessage.User("What is the weather in Seattle?") },
     Tools = { ToolDefinition.Function("get_weather", "Get the weather for a city.", new Dictionary<string, object>
@@ -122,13 +122,13 @@ ToolChatRequest request = new ToolChatRequest
     Options = new CompletionOptions { ReasoningEffort = ReasoningEffort.High }
 };
 
-ToolChatResponse turn = await openai.ToolChatAsync(request);
+ChatResponse turn = await openai.ChatAsync(request);
 while (turn.Success && turn.ToolCalls.Count > 0)
 {
     request.Messages.Add(turn.ToAssistantMessage());   // keeps encrypted reasoning in ProviderState
     foreach (ToolCall call in turn.ToolCalls)
         request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "{\"temperature\":61}"));
-    turn = await openai.ToolChatAsync(request);
+    turn = await openai.ChatAsync(request);
 }
 
 Console.WriteLine(turn.Text + " (effort sent: " + turn.AppliedReasoningEffort + ")");
@@ -187,7 +187,7 @@ Console.WriteLine("\n" + stream.Response?.Citations.Count + " citations");
 
 ### Tools
 
-Function tools come from `ToolChatRequest.Tools` or `FunctionTools`. Hosted and client-executed tools come from factories:
+Function tools come from `ChatRequest.Tools` or `FunctionTools`. Hosted and client-executed tools come from factories:
 
 - `ResponsesApiTools` (OpenAI and xAI): `WebSearch`, `FileSearch`, `CodeInterpreter`, `Mcp`, `ImageGeneration`, `Shell`, `ToolSearch`
 - `OpenAiTools`: `Computer`, `LocalShell`, `ApplyPatch`, `Custom`, `Namespace`, `ProgrammaticToolCalling`
@@ -221,7 +221,7 @@ These rules apply to `GeminiClient` and `VertexAiClient`. The thought-signature 
 
 - **Thought signatures.** Gemini 3 attaches an opaque `thoughtSignature` to each function call and rejects a follow-up that lost it. PolyPrompt captures it into `ToolCall.ThoughtSignature` and replays it, and `ToAssistantMessage()` keeps it. Persist it with your conversation.
 - **History without signatures.** A replayed turn with no signature (for example from another provider) gets Google's documented `skip_thought_signature_validator` placeholder on its first function call.
-- **Tool result names.** Gemini needs the function name on every result. A missing `ToolName` is taken from the matching call earlier in the conversation; if there is none, `ToolChatAsync` throws `ArgumentException` before sending.
+- **Tool result names.** Gemini needs the function name on every result. A missing `ToolName` is taken from the matching call earlier in the conversation; if there is none, `ChatAsync` throws `ArgumentException` before sending.
 - **Tool results** are `functionResponse` parts in a `user` turn, with consecutive results merged. JSON objects are sent as is; arrays, scalars, and text are wrapped as `{"result": ...}`.
 - **Tool schemas** go in `parametersJsonSchema` by default. Set `GeminiCompletionOptions.ToolSchemaMode = GeminiToolSchemaMode.OpenApiSubset` for endpoints that only accept `parameters`.
 

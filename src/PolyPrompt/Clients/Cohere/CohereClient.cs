@@ -6,7 +6,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Cohere client.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/v2/chat</c>, streaming as SSE), Embed
     /// (<c>/v2/embed</c>), Rerank (<c>/v2/rerank</c>), Classify (<c>/v1/classify</c>), and Models
     /// (<c>/v1/models</c>).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed,
@@ -22,9 +22,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, Rerank, Classify, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, Rerank, Classify, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Classify | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Rerank | Capability.Classify | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "Cohere";

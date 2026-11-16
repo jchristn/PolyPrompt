@@ -86,8 +86,7 @@ namespace PolyPrompt.Clients
                     : status is "in_progress" or "queued" ? status : calls.Count > 0 ? "tool_calls" : "stop";
                 string? answer = text.Length > 0 ? text.ToString() : null;
                 string? thought = reasoning.Length > 0 ? reasoning.ToString() : null;
-                if (result is ChatResponse chat) { chat.Text = answer; chat.Reasoning = thought; chat.Usage = usage; chat.ResponseId = id; chat.FinishReason = finish; }
-                else if (result is ToolChatResponse tool) { tool.Text = answer; tool.Reasoning = thought; tool.Usage = usage; tool.ToolCalls = calls; tool.ResponseId = id; tool.FinishReason = finish; }
+                if (result is ChatResponse chat) { chat.Text = answer; chat.Reasoning = thought; chat.Usage = usage; chat.ToolCalls = calls; chat.ResponseId = id; chat.FinishReason = finish; }
                 else if (result is GenerationResponse generation) { generation.Text = answer; generation.Reasoning = thought; generation.Usage = usage; generation.ResponseId = id; generation.FinishReason = finish; }
             }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)

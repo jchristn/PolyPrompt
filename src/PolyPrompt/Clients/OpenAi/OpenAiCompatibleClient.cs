@@ -9,7 +9,7 @@ namespace PolyPrompt.Clients
     /// OpenRouter, Gemini's OpenAI-compatible endpoint, Azure's v1 Chat Completions route, gateways, and OpenAI itself
     /// when Chat Completions is wanted. For OpenAI's current API (Responses) use <see cref="OpenAiClient"/>.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat and ToolChat (<c>/v1/chat/completions</c>, streaming as SSE), Generate (the
+    /// <item><description>Supported: Chat and ToolCalling (<c>/v1/chat/completions</c>, streaming as SSE), Generate (the
     /// legacy <c>/v1/completions</c>), Embed (<c>/v1/embeddings</c>), and Models (<c>/v1/models</c>). Reasoning extensions
     /// (<c>reasoning_content</c>, <c>reasoning</c>) are read, and Gemini tool-call thought signatures are replayed in
     /// <c>extra_content.google.thought_signature</c>.</description></item>
@@ -35,9 +35,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "OpenAI-compatible server";

@@ -9,12 +9,15 @@ namespace Test.Shared
     /// <summary>
     /// Wire identity against 4.0.0. Each scenario runs against every client that supports it, and the exact request
     /// bytes, method, path, and Content-Type seen by the HTTP handler are compared with a fixture captured from the
-    /// 4.0.0 code (Fixtures/V4Bodies). Set POLYPROMPT_CAPTURE_WIRE_FIXTURES to a directory to write fixtures instead.
+    /// 4.0.0 code (Fixtures/V4Bodies). A reviewed, intended change lives in Fixtures/V5Changes under the same name: its
+    /// first line is "# reason: ..." and the rest replaces the 4.0.0 fixture, which it must differ from. Each change is
+    /// listed in MIGRATION_V4_TO_V5.md. Set POLYPROMPT_CAPTURE_WIRE_FIXTURES to a directory to write fixtures instead.
     /// </summary>
     internal static class LocalWireIdentityCases
     {
         private const string CaptureVariable = "POLYPROMPT_CAPTURE_WIRE_FIXTURES";
         private const string ResourcePrefix = "V4Bodies/";
+        private const string ChangePrefix = "V5Changes/";
 
         public static IEnumerable<TestCaseDescriptor> Create(string suite)
         {
@@ -64,16 +67,16 @@ namespace Test.Shared
             ("chat_options", Capability.Chat, (c, t) => c.ChatAsync("Hello there", Options(), t)),
             ("chat_stream", Capability.Chat, async (c, t) => await Drain((await c.ChatStreamingAsync("Hello there", null, t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
             ("chat_stream_options", Capability.Chat, async (c, t) => await Drain((await c.ChatStreamingAsync("Hello there", Options(), t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
-            ("messages_single", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Hello there") } }, t)),
-            ("messages_multiturn", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = MultiTurn() }, t)),
-            ("messages_options", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Hello there") }, Options = Options() }, t)),
-            ("tools_auto", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather } }, t)),
-            ("tools_required", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "required" }, t)),
-            ("tools_named", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "get_weather" }, t)),
-            ("tools_none", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "none" }, t)),
-            ("tools_history", Capability.ToolChat, (c, t) => c.ToolChatAsync(new ToolChatRequest { Messages = History(), Tools = { _Weather }, Options = Options() }, t)),
-            ("tools_stream", Capability.ToolChat, async (c, t) => await Drain((await c.ToolChatStreamingAsync(new ToolChatRequest { Messages = History(), Tools = { _Weather } }, t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
-            ("messages_stream", Capability.ToolChat, async (c, t) => await Drain((await c.ToolChatStreamingAsync(new ToolChatRequest { Messages = MultiTurn() }, t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
+            ("messages_single", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Hello there") } }, t)),
+            ("messages_multiturn", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = MultiTurn() }, t)),
+            ("messages_options", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Hello there") }, Options = Options() }, t)),
+            ("tools_auto", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather } }, t)),
+            ("tools_required", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "required" }, t)),
+            ("tools_named", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "get_weather" }, t)),
+            ("tools_none", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("Weather in Paris?") }, Tools = { _Weather }, ToolChoice = "none" }, t)),
+            ("tools_history", Capability.ToolCalling, (c, t) => c.ChatAsync(new ChatRequest { Messages = History(), Tools = { _Weather }, Options = Options() }, t)),
+            ("tools_stream", Capability.ToolCalling, async (c, t) => await Drain((await c.ChatStreamingAsync(new ChatRequest { Messages = History(), Tools = { _Weather } }, t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
+            ("messages_stream", Capability.ToolCalling, async (c, t) => await Drain((await c.ChatStreamingAsync(new ChatRequest { Messages = MultiTurn() }, t).ConfigureAwait(false)).Chunks, t).ConfigureAwait(false)),
             ("generate_basic", Capability.Generate, (c, t) => c.GenerateAsync("Once upon a time", Options(), t)),
             ("embed_batch", Capability.Embed, (c, t) => c.EmbedAsync(new List<string> { "alpha", "beta <&+>" }, null, t)),
         };
@@ -123,10 +126,23 @@ namespace Test.Shared
                             continue;
                         }
 
-                        string? expected = ReadFixture(name);
+                        string? baseline = ReadFixture(ResourcePrefix + name);
+                        string? change = ReadFixture(ChangePrefix + name);
                         compared++;
-                        if (expected == null) failures.Add(name + ": no 4.0.0 fixture");
-                        else if (!string.Equals(expected, actual, StringComparison.Ordinal)) failures.Add(name + ": differs from 4.0.0\n--- expected\n" + expected + "\n--- actual\n" + actual);
+                        if (baseline == null) { failures.Add(name + ": no 4.0.0 fixture"); continue; }
+
+                        string expected = baseline;
+                        string source = "4.0.0";
+                        if (change != null)
+                        {
+                            int newline = change.IndexOf('\n');
+                            if (!change.StartsWith("# reason: ", StringComparison.Ordinal) || newline < 0) { failures.Add(name + ": V5Changes fixture must start with '# reason: '"); continue; }
+                            expected = change.Substring(newline + 1);
+                            source = "the reviewed 5.0 change";
+                            if (string.Equals(expected, baseline, StringComparison.Ordinal)) { failures.Add(name + ": V5Changes fixture equals 4.0.0; delete it"); continue; }
+                        }
+
+                        if (!string.Equals(expected, actual, StringComparison.Ordinal)) failures.Add(name + ": differs from " + source + "\n--- expected\n" + expected + "\n--- actual\n" + actual);
                     }
                 }
                 finally { LocalClients.DisposeAll(clients); }
@@ -135,9 +151,9 @@ namespace Test.Shared
             if (failures.Count > 0) throw new TestFailureException(failures.Count + " of " + compared + " wire bodies differ from 4.0.0:\n" + string.Join("\n\n", failures));
         }
 
-        private static string? ReadFixture(string name)
+        private static string? ReadFixture(string resource)
         {
-            using Stream? stream = typeof(LocalWireIdentityCases).Assembly.GetManifestResourceStream(ResourcePrefix + name);
+            using Stream? stream = typeof(LocalWireIdentityCases).Assembly.GetManifestResourceStream(resource);
             if (stream == null) return null;
             using StreamReader reader = new StreamReader(stream, Encoding.UTF8);
             return reader.ReadToEnd();

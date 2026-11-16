@@ -6,7 +6,7 @@ namespace PolyPrompt.Clients
     /// Ollama Cloud client for the hosted native Ollama API at https://ollama.com. It inherits every
     /// <see cref="OllamaClient"/> operation and setting and requires bearer authentication.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, Generate, Embed, and Models (the API supports embeddings; the hosted
+    /// <item><description>Supported: Chat, ToolCalling, Generate, Embed, and Models (the API supports embeddings; the hosted
     /// catalog may not include embedding models).</description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
     /// Classify, Decide.</description></item>

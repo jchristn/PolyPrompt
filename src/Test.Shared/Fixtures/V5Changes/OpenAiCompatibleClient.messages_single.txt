@@ -1,0 +1,5 @@
+# reason: tool_choice is sent only when tools are present; 4.x sent tool_choice "auto" on every message-based chat.
+outcome: ok
+POST {endpoint}/v1/chat/completions
+content-type: application/json; charset=utf-8
+{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Hello there"}],"max_tokens":4096}

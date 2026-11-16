@@ -44,12 +44,30 @@ namespace Test.Shared
 
         #region Capabilities
 
+        private static readonly ToolDefinition _Tool = ToolDefinition.Function("t", "Tool", new Dictionary<string, object> { ["type"] = "object" });
+        private static readonly byte[] _Png = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+        private static readonly byte[] _Wav = { (byte)'R', (byte)'I', (byte)'F', (byte)'F', 0, 0, 0, 0, (byte)'W', (byte)'A', (byte)'V', (byte)'E' };
+
+        // Tools and media are checked after Chat, so a client without Chat reports Chat for them.
+        private static Capability Expected(ProviderClientBase client, Capability capability) =>
+            capability is Capability.ToolCalling or Capability.ImageInput or Capability.AudioInput or Capability.VideoInput && !client.Supports(Capability.Chat) ? Capability.Chat : capability;
+
         private static readonly (Capability Capability, string Operation, Func<ProviderClientBase, Task> Call)[] _Operations =
         {
             (Capability.Chat, "ChatAsync", c => c.ChatAsync("x")),
             (Capability.Chat, "ChatStreamingAsync", c => c.ChatStreamingAsync("x")),
-            (Capability.ToolChat, "ToolChatAsync", c => c.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("x") } })),
-            (Capability.ToolChat, "ToolChatStreamingAsync", c => c.ToolChatStreamingAsync(new ToolChatRequest { Messages = { ChatMessage.User("x") } })),
+            (Capability.Chat, "ChatAsync", c => c.ChatAsync(ChatMessage.User("x"))),
+            (Capability.Chat, "ChatAsync", c => c.ChatAsync(new[] { ChatMessage.User("x") })),
+            (Capability.Chat, "ChatAsync", c => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("x") } })),
+            (Capability.Chat, "ChatStreamingAsync", c => c.ChatStreamingAsync(ChatMessage.User("x"))),
+            (Capability.Chat, "ChatStreamingAsync", c => c.ChatStreamingAsync(new[] { ChatMessage.User("x") })),
+            (Capability.Chat, "ChatStreamingAsync", c => c.ChatStreamingAsync(new ChatRequest { Messages = { ChatMessage.User("x") } })),
+            (Capability.ToolCalling, "ChatAsync", c => c.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("x") }, Tools = { _Tool } })),
+            (Capability.ToolCalling, "ChatStreamingAsync", c => c.ChatStreamingAsync(new ChatRequest { Messages = { ChatMessage.User("x") }, Tools = { _Tool } })),
+            (Capability.ImageInput, "ChatAsync", c => c.ChatAsync(ChatMessage.User("x", ContentPart.Image(_Png, MediaTypes.ImagePng)))),
+            (Capability.ImageInput, "ChatStreamingAsync", c => c.ChatStreamingAsync(ChatMessage.User("x", ContentPart.ImageUrl("https://example.com/a.png")))),
+            (Capability.AudioInput, "ChatAsync", c => c.ChatAsync(ChatMessage.User("x", ContentPart.Audio(_Wav, MediaTypes.AudioWav)))),
+            (Capability.VideoInput, "ChatAsync", c => c.ChatAsync(ChatMessage.User("x", ContentPart.VideoUrl("https://www.youtube.com/watch?v=x")))),
             (Capability.Generate, "GenerateAsync", c => c.GenerateAsync("x")),
             (Capability.Generate, "GenerateStreamingAsync", c => c.GenerateStreamingAsync("x")),
             (Capability.Embed, "EmbedAsync", c => c.EmbedAsync("x")),
@@ -86,7 +104,7 @@ namespace Test.Shared
                         SharedAssert.True(returned == null, client.GetType().Name + "." + operation + " should throw synchronously, not return a task.");
                         SharedAssert.NotNull(caught, client.GetType().Name + "." + operation + " should throw CapabilityNotSupportedException.");
                         SharedAssert.Equal(client.ProviderName, caught!.Provider, "Provider.");
-                        SharedAssert.Equal(capability, caught.Capability, "Capability.");
+                        SharedAssert.Equal(Expected(client, capability), caught.Capability, "Capability.");
                         SharedAssert.Equal(operation, caught.Operation, "Operation.");
                         SharedAssert.True(caught.Message.Contains("#capability-matrix", StringComparison.Ordinal), "The message links the matrix.");
                         SharedAssert.True(caught is NotSupportedException, "It is a NotSupportedException.");
@@ -104,7 +122,6 @@ namespace Test.Shared
         private static readonly Dictionary<Capability, string[]> _CoreMembers = new()
         {
             [Capability.Chat] = new[] { "ChatCoreAsync", "ChatStreamingCoreAsync" },
-            [Capability.ToolChat] = new[] { "ToolChatCoreAsync", "ToolChatStreamingCoreAsync" },
             [Capability.Generate] = new[] { "GenerateCoreAsync", "GenerateStreamingCoreAsync" },
             [Capability.Embed] = new[] { "EmbedCoreAsync" },
             [Capability.SparseEmbed] = new[] { "EmbedSparseCoreAsync" },
@@ -238,7 +255,7 @@ namespace Test.Shared
             ArgumentException? ex = null;
             try { await openAi.ChatAsync("x", new XAiCompletionOptions()).ConfigureAwait(false); } catch (ArgumentException e) { ex = e; }
             SharedAssert.True(ex!.Message.StartsWith("XAiCompletionOptions cannot be used with OpenAiCompatibleClient. Use OpenAiCompatibleCompletionOptions or CompletionOptions.", StringComparison.Ordinal), "Message: " + ex.Message);
-            await SharedAssert.ThrowsAsync<ArgumentException>(() => openAi.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("x") }, Options = new AnthropicCompletionOptions() }), "Tool chat options type.").ConfigureAwait(false);
+            await SharedAssert.ThrowsAsync<ArgumentException>(() => openAi.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("x") }, Options = new AnthropicCompletionOptions() }), "Tool chat options type.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<ArgumentException>(() => openAi.GenerateStreamingAsync("x", new GeminiCompletionOptions()), "Generation options type.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<ArgumentException>(() => openAi.EmbedAsync("x", new VoyageAiEmbeddingOptions()), "Embedding options type.").ConfigureAwait(false);
             await SharedAssert.ThrowsAsync<ArgumentException>(() => cohere.RerankAsync("q", new List<string> { "d" }, new VoyageAiRerankOptions()), "Rerank options type.").ConfigureAwait(false);
@@ -449,23 +466,23 @@ namespace Test.Shared
         {
             using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
             using AnthropicClient anthropic = new(LocalClients.TestKey, server.Endpoint);
-            ToolChatRequest Make(JsonElement state) => new ToolChatRequest { Messages = { ChatMessage.User("q"), new ChatMessage { Role = "assistant", Content = "plain answer", ProviderState = state }, ChatMessage.User("next") } };
+            ChatRequest Make(JsonElement state) => new ChatRequest { Messages = { ChatMessage.User("q"), new ChatMessage { Role = "assistant", Text = "plain answer", ProviderState = state }, ChatMessage.User("next") } };
             string legacyBlocks = "[{\"type\":\"thinking\",\"thinking\":\"legacy-thought\",\"signature\":\"s\"},{\"type\":\"text\",\"text\":\"plain answer\"}]";
 
-            await anthropic.ToolChatAsync(Make(J("{\"protocol\":\"anthropic\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
+            await anthropic.ChatAsync(Make(J("{\"protocol\":\"anthropic\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
             SharedAssert.True(server.RequestBodies.Last().Contains("legacy-thought", StringComparison.Ordinal), "A 3.x envelope is still replayed.");
-            await anthropic.ToolChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"anthropic\",\"scope\":\"" + server.Endpoint.TrimEnd('/') + "\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
+            await anthropic.ChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"anthropic\",\"scope\":\"" + server.Endpoint.TrimEnd('/') + "\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
             SharedAssert.True(server.RequestBodies.Last().Contains("legacy-thought", StringComparison.Ordinal), "A matching 4.0 envelope is replayed.");
-            await anthropic.ToolChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"anthropic\",\"scope\":\"https://elsewhere\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
+            await anthropic.ChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"anthropic\",\"scope\":\"https://elsewhere\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
             SharedAssert.False(server.RequestBodies.Last().Contains("legacy-thought", StringComparison.Ordinal), "Another endpoint's state falls back to plain history.");
-            await anthropic.ToolChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"aws.bedrock\",\"scope\":\"" + server.Endpoint.TrimEnd('/') + "\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
+            await anthropic.ChatAsync(Make(J("{\"protocol\":\"anthropic\",\"provider\":\"aws.bedrock\",\"scope\":\"" + server.Endpoint.TrimEnd('/') + "\",\"value\":" + legacyBlocks + "}")), token).ConfigureAwait(false);
             SharedAssert.False(server.RequestBodies.Last().Contains("legacy-thought", StringComparison.Ordinal), "Another provider's state falls back to plain history.");
 
             using OpenAiCompatibleClient compatible = new(server.Endpoint, "k") { Defaults = { Completion = { Model = "m" } } };
             string legacyOpenAi = "{\"protocol\":\"openai\",\"scope\":\"" + server.Endpoint.TrimEnd('/') + "\",\"value\":{\"reasoning_content\":\"legacy-reasoning\"}}";
-            await compatible.ToolChatAsync(Make(J(legacyOpenAi)), token).ConfigureAwait(false);
+            await compatible.ChatAsync(Make(J(legacyOpenAi)), token).ConfigureAwait(false);
             SharedAssert.True(server.RequestBodies.Last().Contains("legacy-reasoning", StringComparison.Ordinal), "3.x Chat Completions state is read by OpenAiCompatibleClient.");
-            ToolChatResponse written = await compatible.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("reasoncapture") } }, token).ConfigureAwait(false);
+            ChatResponse written = await compatible.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("reasoncapture") } }, token).ConfigureAwait(false);
             if (written.ProviderState is JsonElement state)
             {
                 SharedAssert.Equal("chat_completions", state.GetProperty("protocol").GetString(), "4.0 writes the chat_completions protocol.");
@@ -473,15 +490,15 @@ namespace Test.Shared
             }
 
             using XAiClient xai = new(LocalXAiRoutes.Key, server.Endpoint);
-            await xai.ToolChatAsync(Make(J("[{\"type\":\"reasoning\",\"encrypted_content\":\"legacy-xai\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"plain answer\"}]}]")), token).ConfigureAwait(false);
+            await xai.ChatAsync(Make(J("[{\"type\":\"reasoning\",\"encrypted_content\":\"legacy-xai\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"plain answer\"}]}]")), token).ConfigureAwait(false);
             SharedAssert.True(server.RequestBodies.Last().Contains("legacy-xai", StringComparison.Ordinal), "xAI still reads its 3.x untagged output array.");
             using OpenAiClient openAi = new(LocalOpenAiResponsesRoutes.Key, server.Endpoint);
-            await openAi.ToolChatAsync(Make(J("[{\"type\":\"reasoning\",\"encrypted_content\":\"legacy-xai\"}]")), token).ConfigureAwait(false);
+            await openAi.ChatAsync(Make(J("[{\"type\":\"reasoning\",\"encrypted_content\":\"legacy-xai\"}]")), token).ConfigureAwait(false);
             SharedAssert.False(server.RequestBodies.Last().Contains("legacy-xai", StringComparison.Ordinal), "OpenAI ignores an untagged xAI array.");
-            ToolChatResponse fromOpenAi = await openAi.ToolChatAsync(new ToolChatRequest { Messages = { ChatMessage.User("hi") } }, token).ConfigureAwait(false);
-            await xai.ToolChatAsync(Make(fromOpenAi.ProviderState!.Value), token).ConfigureAwait(false);
+            ChatResponse fromOpenAi = await openAi.ChatAsync(new ChatRequest { Messages = { ChatMessage.User("hi") } }, token).ConfigureAwait(false);
+            await xai.ChatAsync(Make(fromOpenAi.ProviderState!.Value), token).ConfigureAwait(false);
             SharedAssert.False(server.RequestBodies.Last().Contains("oai-encrypted-state", StringComparison.Ordinal), "xAI ignores OpenAI state.");
-            await compatible.ToolChatAsync(Make(fromOpenAi.ProviderState!.Value), token).ConfigureAwait(false);
+            await compatible.ChatAsync(Make(fromOpenAi.ProviderState!.Value), token).ConfigureAwait(false);
             SharedAssert.False(server.RequestBodies.Last().Contains("oai-encrypted-state", StringComparison.Ordinal), "OpenAiCompatibleClient ignores Responses state.");
         }
 

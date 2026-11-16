@@ -53,7 +53,7 @@ namespace PolyPrompt.Options
         public List<string>? Include { get; set; }
 
         /// <summary>
-        /// Local function tools for native (raw input) requests; also combined with <c>ToolChatRequest.Tools</c>.
+        /// Local function tools for native (raw input) requests; also combined with <c>ChatRequest.Tools</c>.
         /// </summary>
         public List<ToolDefinition>? FunctionTools { get; set; }
 
@@ -71,7 +71,7 @@ namespace PolyPrompt.Options
         public Dictionary<string, object>? TextFormat { get; set; }
 
         /// <summary>
-        /// Raw <c>tool_choice</c> string or object, overriding <c>ToolChatRequest.ToolChoice</c> when supplied.
+        /// Raw <c>tool_choice</c> string or object, overriding <c>ChatRequest.ToolChoice</c> when supplied.
         /// </summary>
         public JsonElement? ToolChoice { get; set; }
 

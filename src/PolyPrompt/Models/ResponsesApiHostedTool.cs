@@ -6,7 +6,7 @@ namespace PolyPrompt.Models
     /// A native Responses API tool definition (hosted tools such as web search, and client-executed non-function tools
     /// such as shell). Parameters keep provider-specific options. Build one with <see cref="ResponsesApiTools"/>,
     /// <see cref="OpenAiTools"/>, the xAI tool factory, or <see cref="Create"/>. Function tools go in
-    /// <c>ToolChatRequest.Tools</c> or <c>FunctionTools</c> instead.
+    /// <c>ChatRequest.Tools</c> or <c>FunctionTools</c> instead.
     /// </summary>
     public class ResponsesApiHostedTool
     {

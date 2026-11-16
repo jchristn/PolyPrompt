@@ -6,7 +6,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Ollama client for the native Ollama API (<c>/api/*</c>) on a local or self-hosted server.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (<c>/api/chat</c> and <c>/api/generate</c>, streaming as
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (<c>/api/chat</c> and <c>/api/generate</c>, streaming as
     /// newline-delimited JSON), Embed (<c>/api/embed</c>), and Models (<c>/api/tags</c>, <c>/api/show</c>), plus the
     /// Ollama-only <see cref="PullModelAsync"/>, <see cref="DeleteModelAsync"/>, <see cref="LoadModelAsync"/>, and
     /// <see cref="UnloadModelAsync"/>.</description></item>
@@ -25,9 +25,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, Embed, and Models.
+        /// Operations this client supports: Chat, ToolCalling, Generate, Embed, and Models.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed | Capability.Models;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed | Capability.Models;
 
         /// <inheritdoc />
         public override string ProviderName => "Ollama";

@@ -1,65 +1,96 @@
 namespace PolyPrompt.Models
 {
     /// <summary>
-    /// Top-level response from a streaming chat completion request.
-    /// Contains metadata, timing, and an async enumerable of streaming chunks.
-    /// Timing fields are populated as chunks are consumed through the Chunks enumerable.
+    /// Response from a streaming chat request. Enumerate Chunks to receive text and tool-call deltas as they arrive.
+    /// Contains metadata, timing, an async enumerable of chunks, and accumulated final output.
+    /// Timing and accumulated output fields are populated as chunks are consumed.
     /// </summary>
     public class ChatStreamingResponse : StreamingResponseBase
     {
         /// <summary>
+        /// Assistant text accumulated from streamed chunks. May be null when the model only requested tool calls.
+        /// </summary>
+        public string? Text { get; set; } = null;
+
+        /// <summary>
+        /// Reasoning ("thinking") content accumulated from streamed chunks, kept separate from
+        /// <see cref="Text"/>. Null when the model produced no reasoning. Populated as chunks are consumed.
+        /// Returned for display or logging; native continuation state is carried separately by ToAssistantMessage().
+        /// </summary>
+        public string? Reasoning { get; set; } = null;
+
+        /// <summary>
+        /// Tool calls accumulated from streamed tool-call deltas.
+        /// </summary>
+        public List<ToolCall> ToolCalls { get; set; } = new List<ToolCall>();
+
+        /// <summary>
+        /// Provider response identifier for correlation. May be null when the provider does not emit one.
+        /// </summary>
+        public string? ResponseId { get; set; } = null;
+
+        /// <summary>
+        /// Provider finish reason. Common values include stop, tool_calls, length, STOP, and MAX_TOKENS.
+        /// </summary>
+        public string? FinishReason { get; set; } = null;
+
+        /// <summary>
         /// The async enumerable of streaming chunks.
-        /// Enumerate this to receive tokens and metadata as they arrive.
-        /// Timing fields on this response are updated as chunks are consumed.
+        /// Enumerate this to receive text and tool-call deltas as they arrive.
         /// </summary>
         public IAsyncEnumerable<ChatStreamingChunk> Chunks { get; set; } = EmptyChunks();
 
         /// <summary>
-        /// Time in milliseconds from request start to the first token received.
+        /// Time in milliseconds from request start to the first text or tool-call delta chunk.
         /// </summary>
         public long TimeToFirstTokenMs { get; set; } = -1;
 
         /// <summary>
-        /// Time in milliseconds from request start to the last token received.
+        /// Time in milliseconds from request start to the last text or tool-call delta chunk.
         /// </summary>
         public long TimeToLastTokenMs { get; set; } = -1;
 
         /// <summary>
-        /// Number of text-bearing chunks received.
+        /// Number of chunks containing text or tool-call deltas.
         /// </summary>
         public int ChunkCount { get; set; }
 
         /// <summary>
-        /// Tokens per second calculated over the overall runtime (completion tokens / overall runtime).
+        /// Number of streamed tool-call deltas received.
+        /// </summary>
+        public int ToolCallDeltaCount { get; set; }
+
+        /// <summary>
+        /// Tokens per second calculated over the overall runtime.
         /// </summary>
         public double OverallTokensPerSecond { get; set; }
 
         /// <summary>
-        /// Tokens per second calculated between first and last token arrival (completion tokens / inter-token duration).
+        /// Tokens per second calculated between first and last streamed content arrival.
         /// </summary>
         public double InterTokenTokensPerSecond { get; set; }
 
         /// <summary>
-        /// Final token usage from the stream (typically from the last chunk).
+        /// Final token usage from the stream.
         /// </summary>
-        public TokenUsage? Usage { get; set; }
+        public TokenUsage? Usage { get; set; } = null;
 
         /// <summary>
-        /// The finish reason from the model (e.g. "stop", "length").
+        /// Convert this response into an assistant message that can be appended to the next ChatRequest.
+        /// Enumerate Chunks and require State == StreamingState.Completed before accepting the turn or executing tools.
+        /// This accessor preserves partial output for compatibility and does not enforce completion or validate arguments.
         /// </summary>
-        public string? FinishReason { get; set; }
-
-        /// <summary>
-        /// Response identifier for correlation.
-        /// </summary>
-        public string? ResponseId { get; set; }
-
-        /// <summary>
-        /// Reasoning ("thinking") content accumulated from streamed chunks, kept separate from the text
-        /// chunks. Null when the model produced no reasoning. Populated as chunks are consumed; a convenience
-        /// so callers need not re-concatenate <see cref="ChatStreamingChunk.ReasoningText"/> themselves.
-        /// </summary>
-        public string? Reasoning { get; set; }
+        /// <returns>An assistant message containing either text or tool calls.</returns>
+        public ChatMessage ToAssistantMessage()
+        {
+            return new ChatMessage
+            {
+                Role = "assistant",
+                Text = Text,
+                ToolCalls = ToolCalls ?? new List<ToolCall>(),
+                ProviderState = ProviderState?.Clone()
+            };
+        }
 
         private static async IAsyncEnumerable<ChatStreamingChunk> EmptyChunks()
         {

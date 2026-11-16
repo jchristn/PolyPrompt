@@ -41,7 +41,7 @@ namespace PolyPrompt.Clients
         /// <param name="stage">Where in the body the fields belong.</param>
         private protected abstract void AddProviderFields(Dictionary<string, object> body, ResolvedCompletion settings, bool stream, ResponsesApiFieldStage stage);
 
-        private Dictionary<string, object> BuildBody(object input, ResolvedCompletion settings, bool stream, bool chat, ToolChatRequest? request = null, string? previousOverride = null)
+        private Dictionary<string, object> BuildBody(object input, ResolvedCompletion settings, bool stream, bool chat, ChatRequest? request = null, string? previousOverride = null)
         {
             ResponsesApiDialect dialect = Dialect;
             Dictionary<string, object> body = new() { ["model"] = settings.Model, ["input"] = input, ["stream"] = stream };
@@ -142,6 +142,16 @@ namespace PolyPrompt.Clients
             return body;
         }
 
+        /// <summary>
+        /// The chat body. A request from <c>ChatAsync(string)</c> keeps the 4.x prompt shape: <c>input</c> as a string and
+        /// the system prompt as <c>instructions</c>. Every other request sends the messages as an input list.
+        /// </summary>
+        private Dictionary<string, object> BuildChatBody(ChatRequest request, List<ChatMessage> messages, ResolvedCompletion settings, bool stream)
+        {
+            if (request.FromPrompt) return BuildBody(request.Messages[0].Text ?? string.Empty, settings, stream, true);
+            return BuildBody(BuildInput(messages), settings, stream, true, request);
+        }
+
         private List<object> BuildInput(List<ChatMessage> messages)
         {
             ResponsesApiDialect dialect = Dialect;
@@ -174,12 +184,12 @@ namespace PolyPrompt.Clients
                 if (message.Role == "tool")
                 {
                     if (string.IsNullOrWhiteSpace(message.ToolCallId)) throw new ArgumentException(dialect.Name + " tool results require ToolCallId (the function's call_id).");
-                    input.Add(new Dictionary<string, object> { ["type"] = "function_call_output", ["call_id"] = message.ToolCallId, ["output"] = message.Content ?? "" });
+                    input.Add(new Dictionary<string, object> { ["type"] = "function_call_output", ["call_id"] = message.ToolCallId, ["output"] = message.Text ?? "" });
                     continue;
                 }
                 if (message.Role is not ("system" or "developer" or "user" or "assistant")) throw new ArgumentException("Unsupported " + dialect.Name + " message role: " + message.Role);
-                if (!string.IsNullOrEmpty(message.Content) || message.ToolCalls.Count == 0)
-                    input.Add(new Dictionary<string, object> { ["role"] = message.Role, ["content"] = message.Content ?? "" });
+                if (!string.IsNullOrEmpty(message.Text) || message.ToolCalls.Count == 0)
+                    input.Add(new Dictionary<string, object> { ["role"] = message.Role, ["content"] = message.Text ?? "" });
                 foreach (ToolCall call in message.ToolCalls)
                 {
                     if (string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name)) throw new ArgumentException(dialect.Name + " assistant function calls require an ID and name.");

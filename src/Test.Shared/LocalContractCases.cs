@@ -14,7 +14,7 @@ namespace Test.Shared
     /// </summary>
     internal static class LocalContractCases
     {
-        private static readonly string[] _Columns = { "Chat", "ToolChat", "Generate", "Embed", "SparseEmbed", "Rerank", "Classify", "Decide", "Models" };
+        private static readonly string[] _Columns = { "Chat", "ToolCalling", "Generate", "Embed", "SparseEmbed", "Rerank", "Classify", "Decide", "Models" };
 
         public static IEnumerable<TestCaseDescriptor> Create(string suite)
         {

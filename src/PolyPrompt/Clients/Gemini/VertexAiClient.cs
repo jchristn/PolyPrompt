@@ -9,7 +9,7 @@ namespace PolyPrompt.Clients
     /// <summary>
     /// Google Vertex AI client for Gemini models and Vertex text embeddings.
     /// <list type="bullet">
-    /// <item><description>Supported: Chat, ToolChat, and Generate (the same <c>generateContent</c> schema as
+    /// <item><description>Supported: Chat, ToolCalling, and Generate (the same <c>generateContent</c> schema as
     /// <see cref="GeminiClient"/>, routed through the project, region, and publisher path), and Embed (<c>:predict</c>).
     /// </description></item>
     /// <item><description>Not supported (throw <see cref="CapabilityNotSupportedException"/>): SparseEmbed, Rerank,
@@ -33,9 +33,9 @@ namespace PolyPrompt.Clients
         #region Public-Members
 
         /// <summary>
-        /// Operations this client supports: Chat, ToolChat, Generate, and Embed.
+        /// Operations this client supports: Chat, ToolCalling, Generate, and Embed.
         /// </summary>
-        public override Capability Capabilities => Capability.Chat | Capability.ToolChat | Capability.Generate | Capability.Embed;
+        public override Capability Capabilities => Capability.Chat | Capability.ToolCalling | Capability.Generate | Capability.Embed;
 
         /// <inheritdoc />
         public override string ProviderName => "Vertex AI";

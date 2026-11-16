@@ -6,7 +6,7 @@ namespace PolyPrompt.Models
     /// A complete Responses API result from <c>ResponsesApiClientBase</c> native operations (OpenAI, Azure OpenAI, and
     /// xAI). The full provider JSON, including hosted-tool output, is in <see cref="ResponseBase.RawResponse"/>.
     /// </summary>
-    public class ResponsesApiResponse : ToolChatResponse
+    public class ResponsesApiResponse : ChatResponse
     {
         /// <summary>
         /// Provider response status: <c>completed</c>, <c>incomplete</c>, <c>queued</c>, <c>in_progress</c>,

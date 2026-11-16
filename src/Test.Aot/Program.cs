@@ -263,9 +263,9 @@ namespace Test.Aot
                 ExpectFailureWithGuidance(decided, "decision with an unregistered state type");
 
                 using OpenAiCompatibleClient completion = new OpenAiCompatibleClient("http://127.0.0.1:1", "test-key", new ClientOptions { HttpClient = http }) { Defaults = { Completion = { Model = Model } } };
-                ToolChatRequest request = WeatherToolRequest();
+                ChatRequest request = WeatherToolRequest();
                 request.Tools[0].Parameters["x-extra"] = new UnregisteredState { Note = "x" };
-                ExpectFailureWithGuidance(await completion.ToolChatAsync(request).ConfigureAwait(false), "tool schema with an unregistered value type");
+                ExpectFailureWithGuidance(await completion.ChatAsync(request).ConfigureAwait(false), "tool schema with an unregistered value type");
 
                 Expect(0, handler.Count, "requests sent");
             }).GetAwaiter().GetResult();
@@ -372,21 +372,21 @@ namespace Test.Aot
             using OpenAiClient openai = new OpenAiClient(LocalOpenAiResponsesRoutes.Key, server.Endpoint) { Defaults = { Completion = { Model = "test-model" } } };
             await CheckAsync("OpenAI Responses: tool chat and encrypted replay", async () =>
             {
-                ToolChatRequest request = WeatherToolRequest();
-                ToolChatResponse first = await openai.ToolChatAsync(request).ConfigureAwait(false);
+                ChatRequest request = WeatherToolRequest();
+                ChatResponse first = await openai.ChatAsync(request).ConfigureAwait(false);
                 Ok(first);
                 string json = JsonSerializer.Serialize(first.ToAssistantMessage(), PolyPromptJsonContext.Default.ChatMessage);
                 ChatMessage restored = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ChatMessage)!;
                 Expect("responses", restored.ProviderState!.Value.GetProperty("protocol").GetString(), "4.0 envelope protocol");
                 request.Messages.Add(restored);
                 foreach (ToolCall call in first.ToolCalls) request.Messages.Add(ChatMessage.ToolResult(call.Id, call.Name, "sunny"));
-                Ok(await openai.ToolChatAsync(request).ConfigureAwait(false));
+                Ok(await openai.ChatAsync(request).ConfigureAwait(false));
                 Expect(true, server.RequestBodies.Last().Contains("oai-encrypted-state", StringComparison.Ordinal), "encrypted reasoning replayed");
             }).ConfigureAwait(false);
             await CheckAsync("OpenAI Responses: streaming tool chat", async () =>
             {
-                ToolChatStreamingResponse stream = await openai.ToolChatStreamingAsync(WeatherToolRequest()).ConfigureAwait(false);
-                await foreach (ToolChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
+                ChatStreamingResponse stream = await openai.ChatStreamingAsync(WeatherToolRequest()).ConfigureAwait(false);
+                await foreach (ChatStreamingChunk _ in stream.Chunks.ConfigureAwait(false)) { }
                 Expect(true, stream.Success && stream.ToolCalls.Count > 0, "streamed tool call: " + stream.Error);
             }).ConfigureAwait(false);
             await CheckAsync("OpenAI Responses: native create, citations, values", async () =>
@@ -452,7 +452,7 @@ namespace Test.Aot
         {
             await CheckAsync(name + ": chat", async () => Ok(await client.ChatAsync("Say hello.").ConfigureAwait(false))).ConfigureAwait(false);
             await CheckAsync(name + ": generate", async () => Ok(await client.GenerateAsync("Say hello.").ConfigureAwait(false))).ConfigureAwait(false);
-            await CheckAsync(name + ": tool chat", async () => Ok(await client.ToolChatAsync(WeatherToolRequest()).ConfigureAwait(false))).ConfigureAwait(false);
+            await CheckAsync(name + ": tool chat", async () => Ok(await client.ChatAsync(WeatherToolRequest()).ConfigureAwait(false))).ConfigureAwait(false);
 
             await CheckAsync(name + ": chat streaming", async () =>
             {
@@ -464,9 +464,9 @@ namespace Test.Aot
 
             await CheckAsync(name + ": tool chat streaming", async () =>
             {
-                ToolChatStreamingResponse response = await client.ToolChatStreamingAsync(WeatherToolRequest()).ConfigureAwait(false);
+                ChatStreamingResponse response = await client.ChatStreamingAsync(WeatherToolRequest()).ConfigureAwait(false);
                 Ok(response);
-                await foreach (ToolChatStreamingChunk chunk in response.Chunks.ConfigureAwait(false)) { }
+                await foreach (ChatStreamingChunk chunk in response.Chunks.ConfigureAwait(false)) { }
                 Expect(true, response.Success, "stream completed: " + response.Error);
             }).ConfigureAwait(false);
         }
@@ -482,7 +482,7 @@ namespace Test.Aot
             if (defaults.Decision != null) defaults.Decision.Model = Model;
         }
 
-        private static ToolChatRequest WeatherToolRequest()
+        private static ChatRequest WeatherToolRequest()
         {
             // The schema mixes dictionaries, lists, arrays, and a JsonElement, as callers build them.
             Dictionary<string, object> parameters = new Dictionary<string, object>
@@ -498,7 +498,7 @@ namespace Test.Aot
                 { "required", new[] { "city" } },
             };
 
-            return new ToolChatRequest
+            return new ChatRequest
             {
                 Messages = new List<ChatMessage> { ChatMessage.System("Use tools."), ChatMessage.User("Weather in Paris?") },
                 Tools = new List<ToolDefinition> { ToolDefinition.Function("get_weather", "Get the weather.", parameters) },

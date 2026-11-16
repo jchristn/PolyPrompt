@@ -299,19 +299,19 @@ namespace Test.Shared
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
             ProviderClientBase client = provider.Completion!;
-            ToolChatRequest request = CreateWeatherToolRequest(configuration);
+            ChatRequest request = CreateWeatherToolRequest(configuration);
 
-            ToolChatResponse response = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+            ChatResponse response = await client.ChatAsync(request, token).ConfigureAwait(false);
             if (!response.Success && IsToolCapabilityError(response.Error))
             {
                 SharedAssert.True(response.StatusCode >= 400, "An unsupported-tool response should include an HTTP error status.");
                 return;
             }
 
-            SharedAssert.True(response.Success, "ToolChatAsync should succeed. " + response.Error);
-            SharedAssert.True(response.StatusCode == 200, "ToolChatAsync should return HTTP 200.");
-            SharedAssert.NotEmpty(response.Model, "ToolChatAsync should return a model.");
-            SharedAssert.True(response.ToolCalls.Any() || !string.IsNullOrWhiteSpace(response.Text), "ToolChatAsync should return assistant text or tool calls.");
+            SharedAssert.True(response.Success, "ChatAsync should succeed. " + response.Error);
+            SharedAssert.True(response.StatusCode == 200, "ChatAsync should return HTTP 200.");
+            SharedAssert.NotEmpty(response.Model, "ChatAsync should return a model.");
+            SharedAssert.True(response.ToolCalls.Any() || !string.IsNullOrWhiteSpace(response.Text), "ChatAsync should return assistant text or tool calls.");
 
             if (!response.ToolCalls.Any()) return;
 
@@ -319,50 +319,50 @@ namespace Test.Shared
             AppendWeatherToolResults(request, response.ToolCalls, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}");
 
             // Keep the tools declared on the follow-up: a replayed tool call must still validate against them.
-            ToolChatResponse finalResponse = await client.ToolChatAsync(request, token).ConfigureAwait(false);
-            SharedAssert.True(finalResponse.Success, "ToolChatAsync follow-up should succeed. " + finalResponse.Error);
-            SharedAssert.True(finalResponse.StatusCode == 200, "ToolChatAsync follow-up should return HTTP 200.");
-            SharedAssert.True(finalResponse.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalResponse.Text), "ToolChatAsync follow-up should return assistant text or additional tool calls.");
+            ChatResponse finalResponse = await client.ChatAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(finalResponse.Success, "ChatAsync follow-up should succeed. " + finalResponse.Error);
+            SharedAssert.True(finalResponse.StatusCode == 200, "ChatAsync follow-up should return HTTP 200.");
+            SharedAssert.True(finalResponse.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalResponse.Text), "ChatAsync follow-up should return assistant text or additional tool calls.");
         }
 
         private static async Task RunToolChatStreamingTestsAsync(ProviderTestConfiguration configuration, CancellationToken token)
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
             ProviderClientBase client = provider.Completion!;
-            ToolChatRequest request = CreateWeatherToolRequest(configuration);
+            ChatRequest request = CreateWeatherToolRequest(configuration);
 
-            ToolChatStreamingResponse stream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
+            ChatStreamingResponse stream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
             if (!stream.Success && IsToolCapabilityError(stream.Error))
             {
                 SharedAssert.True(stream.StatusCode >= 400, "An unsupported-tool response should include an HTTP error status.");
                 return;
             }
 
-            SharedAssert.True(stream.Success, "ToolChatStreamingAsync should start successfully. " + stream.Error);
-            SharedAssert.True(stream.StatusCode == 200, "ToolChatStreamingAsync should return HTTP 200.");
+            SharedAssert.True(stream.Success, "ChatStreamingAsync should start successfully. " + stream.Error);
+            SharedAssert.True(stream.StatusCode == 200, "ChatStreamingAsync should return HTTP 200.");
 
             int chunkCount = 0;
             bool sawDone = false;
-            await foreach (ToolChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
+            await foreach (ChatStreamingChunk chunk in stream.Chunks.WithCancellation(token).ConfigureAwait(false))
             {
                 chunkCount++;
                 if (chunk.Done) sawDone = true;
             }
 
-            SharedAssert.True(chunkCount > 0, "ToolChatStreamingAsync should receive chunks.");
-            SharedAssert.True(stream.ChunkCount > 0, "ToolChatStreamingAsync should count text or tool-call chunks.");
-            SharedAssert.True(sawDone || stream.FinishReason != null, "ToolChatStreamingAsync should expose completion through done chunks or finish reason.");
-            SharedAssert.True(stream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(stream.Text), "ToolChatStreamingAsync should accumulate assistant text or tool calls.");
+            SharedAssert.True(chunkCount > 0, "ChatStreamingAsync should receive chunks.");
+            SharedAssert.True(stream.ChunkCount > 0, "ChatStreamingAsync should count text or tool-call chunks.");
+            SharedAssert.True(sawDone || stream.FinishReason != null, "ChatStreamingAsync should expose completion through done chunks or finish reason.");
+            SharedAssert.True(stream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(stream.Text), "ChatStreamingAsync should accumulate assistant text or tool calls.");
 
             if (!stream.ToolCalls.Any()) return;
 
             request.Messages.Add(stream.ToAssistantMessage());
             AppendWeatherToolResults(request, stream.ToolCalls, "{\"temperature\":72,\"conditions\":\"clear\",\"unit\":\"fahrenheit\"}");
 
-            ToolChatStreamingResponse finalStream = await client.ToolChatStreamingAsync(request, token).ConfigureAwait(false);
-            SharedAssert.True(finalStream.Success, "ToolChatStreamingAsync follow-up should start successfully. " + finalStream.Error);
-            await foreach (ToolChatStreamingChunk chunk in finalStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
-            SharedAssert.True(finalStream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalStream.Text), "ToolChatStreamingAsync follow-up should accumulate assistant text or additional tool calls.");
+            ChatStreamingResponse finalStream = await client.ChatStreamingAsync(request, token).ConfigureAwait(false);
+            SharedAssert.True(finalStream.Success, "ChatStreamingAsync follow-up should start successfully. " + finalStream.Error);
+            await foreach (ChatStreamingChunk chunk in finalStream.Chunks.WithCancellation(token).ConfigureAwait(false)) { }
+            SharedAssert.True(finalStream.ToolCalls.Any() || !string.IsNullOrWhiteSpace(finalStream.Text), "ChatStreamingAsync follow-up should accumulate assistant text or additional tool calls.");
         }
 
         private static async Task RunToolResultShapesAsync(ProviderTestConfiguration configuration, CancellationToken token)
@@ -372,10 +372,10 @@ namespace Test.Shared
 
             foreach (string result in new[] { "[{\"city\":\"Seattle\",\"temperature\":72}]", "It is 72 degrees and clear in Seattle." })
             {
-                ToolChatRequest request = CreateWeatherToolRequest(configuration);
+                ChatRequest request = CreateWeatherToolRequest(configuration);
                 request.ToolChoice = "required";
 
-                ToolChatResponse first = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse first = await client.ChatAsync(request, token).ConfigureAwait(false);
                 if (!first.Success && IsToolCapabilityError(first.Error)) return;
                 SharedAssert.True(first.Success, "Forced tool chat should succeed. " + first.Error);
                 if (!first.ToolCalls.Any()) return;
@@ -384,7 +384,7 @@ namespace Test.Shared
                 AppendWeatherToolResults(request, first.ToolCalls, result);
                 request.ToolChoice = "auto";
 
-                ToolChatResponse final = await client.ToolChatAsync(request, token).ConfigureAwait(false);
+                ChatResponse final = await client.ChatAsync(request, token).ConfigureAwait(false);
                 SharedAssert.True(final.Success, "A tool loop whose result is '" + result + "' should complete. " + final.Error);
             }
         }
@@ -768,7 +768,7 @@ namespace Test.Shared
             {
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ChatAsync("x", token: c), "ChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ChatStreamingAsync("x", token: c), "ChatStreamingAsync should respect a pre-cancelled token.").ConfigureAwait(false);
-                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ToolChatAsync(CreateWeatherToolRequest(configuration), c), "ToolChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
+                await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.ChatAsync(CreateWeatherToolRequest(configuration), c), "ChatAsync should respect a pre-cancelled token.").ConfigureAwait(false);
                 await SharedAssert.ThrowsAsync<OperationCanceledException>(() => provider.Completion.GenerateAsync("x", token: c), "GenerateAsync should respect a pre-cancelled token.").ConfigureAwait(false);
             }
 
@@ -821,9 +821,9 @@ namespace Test.Shared
             };
         }
 
-        private static ToolChatRequest CreateWeatherToolRequest(ProviderTestConfiguration configuration)
+        private static ChatRequest CreateWeatherToolRequest(ProviderTestConfiguration configuration)
         {
-            ToolChatRequest request = new ToolChatRequest();
+            ChatRequest request = new ChatRequest();
             request.Messages.Add(ChatMessage.System("Use tools when they are helpful. Keep final answers concise."));
             request.Messages.Add(ChatMessage.User("What is the current weather in Seattle? Use get_weather if tool calling is available."));
             request.Tools.Add(ToolDefinition.Function("get_weather", "Get current weather for a city.", WeatherParameters()));
@@ -848,7 +848,7 @@ namespace Test.Shared
             };
         }
 
-        private static void AppendWeatherToolResults(ToolChatRequest request, List<ToolCall> toolCalls, string result)
+        private static void AppendWeatherToolResults(ChatRequest request, List<ToolCall> toolCalls, string result)
         {
             foreach (ToolCall call in toolCalls)
             {

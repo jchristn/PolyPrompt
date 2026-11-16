@@ -401,20 +401,30 @@ namespace PolyPrompt.Clients
         }
 
         /// <summary>
-        /// Send an HTTP POST to an upstream endpoint and record the call details.
+        /// Content-Type sent with JSON request bodies.
+        /// </summary>
+        protected const string JsonContentType = "application/json; charset=utf-8";
+
+        /// <summary>
+        /// Send an HTTP POST to an upstream endpoint and record the call details. The wire bytes are what is sent, what
+        /// <see cref="PrepareRequestAsync"/> signs, and what telemetry measures; the recorded body is only what
+        /// <see cref="ClientBase.CallDetails"/> and logs show.
         /// </summary>
         /// <param name="url">Full URL to call.</param>
-        /// <param name="content">HTTP content to send.</param>
-        /// <param name="requestBodyJson">Request body as a JSON string (for recording and signing).</param>
+        /// <param name="wireBody">The exact request body bytes.</param>
+        /// <param name="contentType">The Content-Type header value.</param>
+        /// <param name="recordedBody">The body to record, for example with media replaced by placeholders. Null records the
+        /// wire body decoded as UTF-8 when bodies are captured.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>An HttpCallResult containing the response and body.</returns>
         protected async Task<HttpCallResult> PostAndRecordAsync(
-            string url, StringContent content, string requestBodyJson, CancellationToken token)
+            string url, byte[] wireBody, string contentType, string? recordedBody, CancellationToken token)
         {
+            ArgumentNullException.ThrowIfNull(wireBody);
             CallDetail detail = new CallDetail();
             detail.Url = url;
             detail.Method = "POST";
-            detail.RequestBody = requestBodyJson;
+            detail.RequestBody = RecordedBody(wireBody, recordedBody);
             detail.TimestampUtc = DateTime.UtcNow;
 
             Stopwatch sw = Stopwatch.StartNew();
@@ -428,11 +438,10 @@ namespace PolyPrompt.Clients
                 // Build an explicit request so subclasses can attach per-request credentials (a fresh bearer
                 // token or a SigV4 signature computed over the body) via PrepareRequestAsync.
                 using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
-                request.Content = content;
-                byte[] body = Encoding.UTF8.GetBytes(requestBodyJson ?? string.Empty);
-                await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
+                request.Content = BodyContent(wireBody, contentType);
+                await PrepareRequestAsync(request, wireBody, linkedCts.Token).ConfigureAwait(false);
                 detail.RequestHeaders = CaptureRequestHeaders(request);
-                http = HttpCallScope.Start(TelemetryProvider, "POST", url, body.Length);
+                http = HttpCallScope.Start(TelemetryProvider, "POST", url, wireBody.Length);
 
                 using HttpResponseMessage response = await _HttpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
@@ -462,9 +471,7 @@ namespace PolyPrompt.Clients
         /// <returns>An HttpCallResult containing the response and body.</returns>
         protected Task<HttpCallResult> PostJsonAsync(string url, object body, CancellationToken token)
         {
-            string json = _Serializer.SerializeJson(body, false);
-            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            return PostAndRecordAsync(url, content, json, token);
+            return PostAndRecordAsync(url, _Serializer.SerializeJsonUtf8(body), JsonContentType, null, token);
         }
 
         /// <summary>
@@ -474,26 +481,27 @@ namespace PolyPrompt.Clients
         /// <see cref="ClientBase.CallDetails"/>.
         /// </summary>
         /// <param name="url">Full URL to call.</param>
-        /// <param name="content">HTTP content to send.</param>
+        /// <param name="wireBody">The exact request body bytes, sent and signed.</param>
+        /// <param name="contentType">The Content-Type header value.</param>
         /// <param name="token">Cancellation token.</param>
         /// <returns>The HTTP response message with stream content, and the resources that must be disposed with it.</returns>
         protected async Task<StreamingHttpResult> PostStreamingAsync(
-            string url, StringContent content, CancellationToken token)
+            string url, byte[] wireBody, string contentType, CancellationToken token)
         {
+            ArgumentNullException.ThrowIfNull(wireBody);
             CancellationTokenSource timeoutCts = new CancellationTokenSource(TimeoutMs);
             CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(token, timeoutCts.Token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Content = content;
+            request.Content = BodyContent(wireBody, contentType);
             HttpCallScope? http = null;
 
             try
             {
                 // Attach per-request credentials (fresh bearer token or SigV4 signature over the body)
                 // before the request is sent, mirroring the non-streaming path.
-                byte[] body = await content.ReadAsByteArrayAsync(linkedCts.Token).ConfigureAwait(false);
-                await PrepareRequestAsync(request, body, linkedCts.Token).ConfigureAwait(false);
-                http = HttpCallScope.Start(TelemetryProvider, "POST", url, body.Length);
+                await PrepareRequestAsync(request, wireBody, linkedCts.Token).ConfigureAwait(false);
+                http = HttpCallScope.Start(TelemetryProvider, "POST", url, wireBody.Length);
 
                 HttpResponseMessage response = await _HttpClient.SendAsync(
                     request,
@@ -522,9 +530,20 @@ namespace PolyPrompt.Clients
         /// <returns>The streaming result.</returns>
         protected Task<StreamingHttpResult> PostStreamingJsonAsync(string url, object body, CancellationToken token)
         {
-            string json = _Serializer.SerializeJson(body, false);
-            StringContent content = new StringContent(json, Encoding.UTF8, "application/json");
-            return PostStreamingAsync(url, content, token);
+            return PostStreamingAsync(url, _Serializer.SerializeJsonUtf8(body), JsonContentType, token);
+        }
+
+        private string? RecordedBody(byte[] wireBody, string? recordedBody)
+        {
+            if (recordedBody != null) return recordedBody;
+            return CallDetailCapture == CallDetailCapture.Full ? Encoding.UTF8.GetString(wireBody) : null;
+        }
+
+        private static ByteArrayContent BodyContent(byte[] wireBody, string contentType)
+        {
+            ByteArrayContent content = new ByteArrayContent(wireBody);
+            content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse(contentType);
+            return content;
         }
 
         /// <summary>
@@ -695,7 +714,7 @@ namespace PolyPrompt.Clients
                 parse(result.ResponseBody, response);
                 if (response.RawResponse == null && TryParseJson(result.ResponseBody, out JsonElement raw)) response.RawResponse = raw;
                 if (response.Error == null && response.Citations.Count == 0 && response.RawResponse is JsonElement root
-                    && response is ChatResponse or ToolChatResponse or GenerationResponse)
+                    && response is ChatResponse or GenerationResponse)
                     response.Citations = ExtractCitations(root) ?? response.Citations;
                 response.Success = response.Error == null;
                 if (!response.Success) _Logging.Warn(_Header + operation + " response could not be parsed: " + response.Error);
