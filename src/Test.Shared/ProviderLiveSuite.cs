@@ -199,8 +199,16 @@ namespace Test.Shared
                 SharedAssert.Equal("test-model", client.Defaults.Completion.Model, "Completion Model should be stored in Defaults.Model.");
                 client.Defaults.Completion.Model = originalModel;
 
-                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Defaults.Completion.Model = string.Empty; return Task.CompletedTask; }, "Model should reject empty string.").ConfigureAwait(false);
-                await SharedAssert.ThrowsAsync<ArgumentNullException>(() => { client.Defaults.Completion.Model = "   "; return Task.CompletedTask; }, "Model should reject whitespace.").ConfigureAwait(false);
+                // An empty or whitespace model is accepted by the setter and rejected when a call resolves it, before sending.
+                foreach (string blank in new[] { string.Empty, "   " })
+                {
+                    client.Defaults.Completion.Model = blank;
+                    bool rejected = false;
+                    try { _ = client.ChatAsync("unused"); }
+                    catch (InvalidOperationException) { rejected = true; }
+                    SharedAssert.True(rejected, "A call with model '" + blank + "' should throw InvalidOperationException before sending.");
+                }
+                client.Defaults.Completion.Model = originalModel;
 
                 client.Defaults.Completion.MaxTokens = -1;
                 SharedAssert.Equal(1, client.Defaults.Completion.MaxTokens, "MaxTokens should clamp to minimum 1.");
@@ -679,6 +687,9 @@ namespace Test.Shared
         {
             using LiveProvider provider = LiveProvider.Create(configuration);
             HttpClientBase recorded;
+            // Bodies are recorded only with CallDetailCapture.Full (the default is Metadata).
+            foreach (HttpClientBase? client in new HttpClientBase?[] { provider.Completion, provider.Embedding, provider.SparseEmbedding, provider.Rerank, provider.Classification, provider.Decision, provider.Models })
+                if (client != null) client.CallDetailCapture = CallDetailCapture.Full;
 
             if (provider.Completion != null)
             {
@@ -920,8 +931,8 @@ namespace Test.Shared
 
         private static bool AcceptsSampling(ProviderTestConfiguration configuration)
         {
-            // Current Claude models (directly and through Bedrock) reject sampling parameters.
-            return configuration.ProviderType != "anthropic" && configuration.ProviderType != "bedrock";
+            // Current Claude models (directly and through Bedrock) and OpenAI's default reasoning models reject sampling parameters.
+            return configuration.ProviderType is not ("anthropic" or "bedrock" or "openai" or "azure");
         }
 
         private static async Task<List<ModelInformation>> GetModelsAsync(ProviderClientBase client, CancellationToken token)
@@ -948,7 +959,9 @@ namespace Test.Shared
                     return new OllamaCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40, RepeatPenalty = 1.1, Seed = 42 };
                 case "openai":
                 case "azure":
-                    return new OpenAiCompatibleCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, FrequencyPenalty = 0.0, PresencePenalty = 0.0, Seed = 42 };
+                    // OpenAiClient and AzureOpenAiClient take the Responses options; the default models are reasoning
+                    // models, which reject sampling settings.
+                    return new OpenAiCompletionOptions { MaxTokens = maxTokens, Store = false };
                 case "gemini":
                 case "vertex":
                     return new GeminiCompletionOptions { Temperature = 0.5, TopP = 0.9, MaxTokens = maxTokens, TopK = 40 };
