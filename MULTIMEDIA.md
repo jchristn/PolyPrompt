@@ -66,7 +66,7 @@ Magic-byte detection covers JPEG, PNG, GIF, WebP, WAV, MP3, FLAC, Ogg, MP4/MOV, 
 
 Text-only messages keep their 4.x shape on every provider (a plain string where the provider used one).
 
-**Per-model caveats.** The flags are per provider. A specific model can still lack a modality: text-only Ollama models, Bedrock models other than Amazon Nova for video, and Cohere models other than Command A Vision. On Ollama, `GetModelInformationAsync` reports `InputModalities` from `/api/show`, and the xAI catalog reports `input_modalities`.
+**Per-model caveats.** The flags are per provider. A specific model can still lack a modality: text-only Ollama models, Bedrock models other than Amazon Nova for video, and Cohere models other than Command A Vision. On Ollama, `GetModelInformationAsync` reports `InputModalities` from `/api/show`. On xAI, `ListLanguageModelsAsync` and `GetCatalogModelInformationAsync("language-models", id)` report them; the generic `/v1/models` route that `GetModelInformationAsync` uses does not.
 
 **Formats.** Bedrock accepts images as `png`, `jpeg`, `gif`, or `webp` and video as `mkv`, `mov`, `mp4`, `webm`, `flv`, `mpeg`, `mpg`, `wmv`, or `three_gp`; others throw before sending. OpenAI-compatible `input_audio` sends the format from the media type (`wav`, `mp3`, `flac`, `m4a`, ...). OpenAI's own Chat Completions accepts `wav` and `mp3`.
 

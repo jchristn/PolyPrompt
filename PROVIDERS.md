@@ -66,7 +66,7 @@ azureChat.Defaults.Completion.Model = "my-deployment";
 
 **`AzureOpenAiClient`**: `api-key` or Entra ID. v1 API with no `api-version`; deployment names are models. Images as on OpenAI. `TranscribeAsync` posts `/openai/v1/audio/transcriptions` with the transcription deployment as the model (no default).
 
-**`XAiClient`**: bearer key. Responses API; also `ListLanguageModelsAsync`, `ListImageGenerationModelsAsync`, `ListVideoGenerationModelsAsync`, and `GetCatalogModelInformationAsync`. At most 1000 tools; reasoning effort `low` to `xhigh`. xAI no longer offers embedding models. Images go as `input_image`; catalog entries report `InputModalities`.
+**`XAiClient`**: bearer key. Responses API; also `ListLanguageModelsAsync`, `ListImageGenerationModelsAsync`, `ListVideoGenerationModelsAsync`, and `GetCatalogModelInformationAsync`. At most 1000 tools; reasoning effort `low` to `xhigh`. xAI no longer offers embedding models. Images go as `input_image`. `ListLanguageModelsAsync` and `GetCatalogModelInformationAsync("language-models", id)` report `InputModalities`; `/v1/models` does not include them.
 
 **`AnthropicClient`**: `x-api-key`. `AnthropicVersion`, `WorkspaceId` (identity-linked keys), `PageSize`. `max_tokens` is always sent. Citations on documents cannot be combined with `output_config.format`. Images go as `image` blocks from bytes (`base64` source) or a URL (`url` source); `ImageDetail` is ignored.
 

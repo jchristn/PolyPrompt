@@ -70,7 +70,7 @@ namespace PolyPrompt.Models
 
         /// <summary>
         /// The input modalities the model accepts, where the provider's model API reports them (Ollama
-        /// <c>capabilities</c>, the xAI catalog's <c>input_modalities</c>). Null when not reported. Use it when the
+        /// <c>capabilities</c>; on xAI, the <c>language-models</c> catalog's <c>input_modalities</c>, not <c>/v1/models</c>). Null when not reported. Use it when the
         /// provider-level <see cref="Capability"/> flag is not specific enough. Default: null.
         /// </summary>
         public List<ContentPartType>? InputModalities { get; set; } = null;
