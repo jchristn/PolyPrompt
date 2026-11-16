@@ -94,4 +94,56 @@ public sealed class ProviderConsoleTests
         Assert.That(text, Does.Not.Contain("Error:"), console.Name + " reported an error:" + Environment.NewLine + text);
         Assert.That(server.RequestPaths.Count, Is.GreaterThan(0), console.Name + " should have reached the server.");
     }
+
+    [Test]
+    public async Task ConsolesAttachMediaAndTranscribe()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "polyprompt-console-media-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string png = Path.Combine(directory, "photo.png");
+            File.WriteAllBytes(png, new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52 });
+            string flac = Path.Combine(directory, "speech.flac");
+            File.WriteAllBytes(flac, System.Text.Encoding.ASCII.GetBytes("fLaC").Concat(new byte[64]).ToArray());
+
+            using LocalOpenAiTestServer server = LocalOpenAiTestServer.Start();
+            string text = await RunAsync(OpenAIConsole.Program.Main, new[] { "--compatible", server.Endpoint },
+                LocalClients.TestKey, "test-model", "text-embedding-3-small", "", "",
+                "tools off", "attach " + png, "attach", "ch", "Describe this picture",
+                "transcribe " + flac, "transcription-model whisper-local", "transcribe " + flac + " en").ConfigureAwait(false);
+            Assert.That(text, Does.Contain("Attached [image] photo.png (image/png, 16 bytes)"), text);
+            Assert.That(text, Does.Contain("  [image] photo.png (image/png)"), text);
+            Assert.That(text, Does.Contain("No transcription model is set"), text);
+            Assert.That(text, Does.Contain("Transcription model: whisper-local"), text);
+            Assert.That(text, Does.Contain("--- Transcript ---").And.Contain("[00:00.7 - 00:01.4] world").And.Contain("Language: en"), text);
+            Assert.That(text, Does.Not.Contain("Error:"), text);
+            string chat = server.RequestBodies.First(b => b.Contains("Describe this picture", StringComparison.Ordinal));
+            Assert.That(chat, Does.Contain("\"type\":\"image_url\"").And.Contain("data:image/png;base64,"), chat);
+
+            using LocalOpenAiTestServer xaiServer = LocalOpenAiTestServer.Start();
+            string xai = await RunAsync(XAiConsole.Program.Main, Array.Empty<string>(), xaiServer.Endpoint, LocalXAiRoutes.Key, "test-model", "", "",
+                "attach " + flac, "transcribe " + flac).ConfigureAwait(false);
+            Assert.That(xai, Does.Contain("does not support audio input (AudioInput); nothing was attached."), xai);
+            Assert.That(xai, Does.Contain("This provider does not support transcription (Transcribe)."), xai);
+
+            using LocalOpenAiTestServer teiServer = LocalOpenAiTestServer.Start();
+            string tei = await RunAsync(TeiConsole.Program.Main, Array.Empty<string>(), teiServer.Endpoint, LocalClients.TestKey, "", "attach " + png).ConfigureAwait(false);
+            Assert.That(tei, Does.Contain("no chat capability"), tei);
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    private async Task<string> RunAsync(Func<string[], Task> main, string[] args, params string[] lines)
+    {
+        using StringWriter output = new();
+        System.Console.SetIn(new StringReader(string.Join(Environment.NewLine, lines) + Environment.NewLine));
+        System.Console.SetOut(output);
+        Task run = main(args);
+        Task finished = await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(60))).ConfigureAwait(false);
+        System.Console.SetOut(_PreviousOut);
+        Assert.That(finished, Is.SameAs(run), "The console did not finish its script. Output:" + Environment.NewLine + output);
+        await run.ConfigureAwait(false);
+        return output.ToString();
+    }
 }

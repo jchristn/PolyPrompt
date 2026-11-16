@@ -11307,6 +11307,13 @@
             <param name="temperature">Temperature, or null.</param>
             <param name="topP">Top-p, or null.</param>
         </member>
+        <member name="M:PolyPrompt.Telemetry.OperationScope.RecordInputMedia(System.Collections.Generic.IEnumerable{PolyPrompt.Models.ChatMessage})">
+            <summary>
+            Record the image, audio, and video parts of a chat request: span attributes, and the media part counter and
+            bytes histogram by modality. Does nothing for text-only requests.
+            </summary>
+            <param name="messages">The request messages.</param>
+        </member>
         <member name="M:PolyPrompt.Telemetry.OperationScope.RecordBatchSize(System.Int32)">
             <summary>
             Record the number of inputs in the request.
@@ -11461,6 +11468,16 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.ToolCalls">
             <summary>
             Tool call counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.InputMedia">
+            <summary>
+            Media part counter.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.InputMediaBytes">
+            <summary>
+            Inline media bytes histogram.
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetry.FinishReasons">
@@ -11688,6 +11705,17 @@
             Counter ({call}): tool calls requested by the model. Labels: provider, operation.
             </summary>
         </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputMedia">
+            <summary>
+            Counter ({part}): image, audio, and video parts sent in chat requests. Labels: provider, operation,
+            polyprompt.modality.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputMediaBytes">
+            <summary>
+            Histogram (By): inline media bytes per chat request, by modality. Labels: provider, operation, polyprompt.modality.
+            </summary>
+        </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.FinishReasons">
             <summary>
             Counter ({response}): completion responses by finish reason, which exposes truncation (length / max_tokens)
@@ -11912,6 +11940,36 @@
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.ToolDefinitionCount">
             <summary>
             Number of tool definitions offered to the model. Span attribute only.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.Modality">
+            <summary>
+            Media modality label: <c>image</c>, <c>audio</c>, or <c>video</c>.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputImages">
+            <summary>
+            Image parts in the request. Span attribute only; set when non-zero.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputAudio">
+            <summary>
+            Audio parts in the request. Span attribute only; set when non-zero.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputVideos">
+            <summary>
+            Video parts in the request. Span attribute only; set when non-zero.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputMediaBytesAttribute">
+            <summary>
+            Inline media bytes (decoded) in the request. Span attribute only; set when there is media.
+            </summary>
+        </member>
+        <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.InputFileReferences">
+            <summary>
+            Media parts sent as a provider file reference. Span attribute only; set when non-zero.
             </summary>
         </member>
         <member name="F:PolyPrompt.Telemetry.PolyPromptTelemetryNames.TranscriptionAudioBytes">

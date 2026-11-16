@@ -66,7 +66,7 @@ namespace Test.Shared
             List<string> documented = new List<string>
             {
                 N.OperationDuration, N.Operations, N.ActiveOperations, N.GenAiOperationDuration, N.GenAiTokenUsage, N.Tokens,
-                N.StreamTimeToFirstChunk, N.StreamChunks, N.BatchSize, N.ToolCalls, N.FinishReasons,
+                N.StreamTimeToFirstChunk, N.StreamChunks, N.BatchSize, N.ToolCalls, N.InputMedia, N.InputMediaBytes, N.FinishReasons,
                 N.HttpRequestDuration, N.HttpRequests, N.HttpActiveRequests, N.HttpRequestBodySize, N.HttpResponseBodySize,
                 N.ProcessDuration, N.ProcessExecutions, N.ProcessActive,
                 N.DecisionQueueDuration, N.DecisionInFlight, N.DecisionQueued, N.DecisionQuestions,

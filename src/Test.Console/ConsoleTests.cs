@@ -115,6 +115,25 @@ public sealed class ConsoleTests
     }
 
     [Test]
+    public async Task AttachmentsGoWithTheNextPromptOnly()
+    {
+        using ModelServer server = new();
+        using OllamaClient client = new(server.Endpoint);
+        using StringWriter output = new();
+        using ConsoleSession session = new(client, new ProcessToolRuntime(), output) { WorkingDirectory = _Directory };
+        byte[] png = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        session.Attach(ContentPart.Image(png, MediaTypes.ImagePng));
+        Assert.That(session.Attachments, Has.Count.EqualTo(1));
+        await session.SendAsync("What is this?", false);
+        Assert.That(server.Bodies[0], Does.Contain("\"images\":[\"" + Convert.ToBase64String(png) + "\"]"));
+        Assert.That(session.Attachments, Is.Empty);
+        Assert.That(session.Messages[0].HasMedia, Is.True);
+        session.Attach(ContentPart.Image(png, MediaTypes.ImagePng));
+        session.Reset();
+        Assert.That(session.Attachments, Is.Empty);
+    }
+
+    [Test]
     public async Task ToolFailuresReturnToModelWithoutRunningUnknownTools()
     {
         using ModelServer server = new("unknown");

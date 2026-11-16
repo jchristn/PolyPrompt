@@ -7,10 +7,21 @@ using PolyPrompt.Models;
 public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntime tools, TextWriter output) : IDisposable
 {
     private readonly List<ChatMessage> _Messages = new();
+    private readonly List<ContentPart> _Attachments = new();
     public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
     public int MaxRounds { get; set; } = 12;
     public IReadOnlyList<ChatMessage> Messages => _Messages;
-    public void Reset() => _Messages.Clear();
+
+    /// <summary>Media queued for the next prompt.</summary>
+    public IReadOnlyList<ContentPart> Attachments => _Attachments;
+
+    /// <summary>Queue a media part; it is sent with the next prompt and then cleared.</summary>
+    public void Attach(ContentPart part) => _Attachments.Add(part ?? throw new ArgumentNullException(nameof(part)));
+
+    /// <summary>Drop queued media.</summary>
+    public void ClearAttachments() => _Attachments.Clear();
+
+    public void Reset() { _Messages.Clear(); _Attachments.Clear(); }
 
     public async Task SendAsync(string prompt, bool streaming, bool enableTools = true, CancellationToken token = default)
     {
@@ -18,7 +29,7 @@ public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntim
         if (MaxRounds < 1) throw new InvalidOperationException("MaxRounds must be positive.");
         IReadOnlyList<ToolDefinition> definitions = enableTools ? await tools.GetToolsAsync(token) : Array.Empty<ToolDefinition>();
         int start = _Messages.Count;
-        _Messages.Add(ChatMessage.User(prompt));
+        _Messages.Add(_Attachments.Count > 0 ? ChatMessage.User(prompt, _Attachments.ToArray()) : ChatMessage.User(prompt));
         try
         {
             for (int round = 0; round < MaxRounds; round++)
@@ -64,6 +75,8 @@ public sealed class ConsoleSession(ProviderClientBase client, IConsoleToolRuntim
                     PrintUsage(response.Usage);
                 }
                 _Messages.Add(assistant);
+                // The attachments were accepted with this prompt; a failed turn keeps them queued for a retry.
+                _Attachments.Clear();
                 if (calls.Count == 0)
                 {
                     if (finish is "length" or "max_tokens" or "MAX_TOKENS")

@@ -157,6 +157,64 @@ namespace PolyPrompt.Telemetry
         }
 
         /// <summary>
+        /// Record the image, audio, and video parts of a chat request: span attributes, and the media part counter and
+        /// bytes histogram by modality. Does nothing for text-only requests.
+        /// </summary>
+        /// <param name="messages">The request messages.</param>
+        public void RecordInputMedia(IEnumerable<ChatMessage> messages)
+        {
+            try
+            {
+                int images = 0, audio = 0, videos = 0, references = 0;
+                long imageBytes = 0, audioBytes = 0, videoBytes = 0;
+                foreach (ChatMessage message in messages)
+                {
+                    if (message?.Content == null) continue;
+                    foreach (ContentPart part in message.Content)
+                    {
+                        if (part == null || part.Type == ContentPartType.Text) continue;
+                        long bytes = part.Data?.Length ?? 0;
+                        if (part.FileReference != null) references++;
+                        switch (part.Type)
+                        {
+                            case ContentPartType.Image: images++; imageBytes += bytes; break;
+                            case ContentPartType.Audio: audio++; audioBytes += bytes; break;
+                            case ContentPartType.Video: videos++; videoBytes += bytes; break;
+                        }
+                    }
+                }
+
+                if (images + audio + videos == 0) return;
+                if (images > 0) SetTag(PolyPromptTelemetryNames.InputImages, images);
+                if (audio > 0) SetTag(PolyPromptTelemetryNames.InputAudio, audio);
+                if (videos > 0) SetTag(PolyPromptTelemetryNames.InputVideos, videos);
+                if (references > 0) SetTag(PolyPromptTelemetryNames.InputFileReferences, references);
+                SetTag(PolyPromptTelemetryNames.InputMediaBytesAttribute, imageBytes + audioBytes + videoBytes);
+
+                RecordMedia("image", images, imageBytes);
+                RecordMedia("audio", audio, audioBytes);
+                RecordMedia("video", videos, videoBytes);
+            }
+            catch
+            {
+                // Telemetry never fails the call.
+            }
+        }
+
+        private void RecordMedia(string modality, int count, long bytes)
+        {
+            if (count == 0) return;
+            TagList tags = new TagList
+            {
+                { PolyPromptTelemetryNames.Provider, _Provider },
+                { PolyPromptTelemetryNames.Operation, _Operation },
+                { PolyPromptTelemetryNames.Modality, modality },
+            };
+            if (PolyPromptTelemetry.InputMedia.Enabled) PolyPromptTelemetry.SafeAdd(PolyPromptTelemetry.InputMedia, count, tags);
+            if (bytes > 0 && PolyPromptTelemetry.InputMediaBytes.Enabled) PolyPromptTelemetry.SafeRecord(PolyPromptTelemetry.InputMediaBytes, bytes, tags);
+        }
+
+        /// <summary>
         /// Record the number of inputs in the request.
         /// </summary>
         /// <param name="count">Input count.</param>
@@ -571,7 +629,17 @@ namespace PolyPrompt.Telemetry
             RecordTokens("cached_input", usage.CachedPromptTokens);
             RecordTokens("cache_creation", usage.CacheCreationTokens);
             RecordTokens("reasoning", usage.ReasoningTokens);
+
+            if (usage.InputByModality != null)
+            {
+                RecordTokens("input_text", ToInt(usage.InputByModality.Text));
+                RecordTokens("input_image", ToInt(usage.InputByModality.Image));
+                RecordTokens("input_audio", ToInt(usage.InputByModality.Audio));
+                RecordTokens("input_video", ToInt(usage.InputByModality.Video));
+            }
         }
+
+        private static int? ToInt(long? value) => value.HasValue ? (int)Math.Min(value.Value, int.MaxValue) : null;
 
         private void RecordGenAiTokens(string genAiOperation, string tokenType, int? value)
         {

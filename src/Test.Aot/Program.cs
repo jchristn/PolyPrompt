@@ -65,11 +65,19 @@ namespace Test.Aot
 
             await RunAgentHarnessChecksAsync().ConfigureAwait(false);
 
+            // Media, transcription, and files run on their own server so the request digest above stays comparable with
+            // 4.0.0 (text only), while the media digest covers the 5.0 wire. Both must match between JIT and native.
+            using LocalOpenAiTestServer mediaServer = LocalOpenAiTestServer.Start();
+            await RunMediaChecksAsync(mediaServer).ConfigureAwait(false);
+
             string digest = Digest(server);
+            string mediaDigest = MediaDigest(mediaServer);
             Console.WriteLine();
             Console.WriteLine("Requests sent:  " + (server.RequestBodies.Count + _ContinuationBodies.Count) + " HTTP, " + _AgentInvocations.Count + " harness processes");
             Console.WriteLine("Request digest: " + digest);
-            if (digestPath != null) File.WriteAllText(digestPath, digest);
+            Console.WriteLine("Media requests: " + mediaServer.RequestBodies.Count + " HTTP");
+            Console.WriteLine("Media digest:   " + mediaDigest);
+            if (digestPath != null) File.WriteAllText(digestPath, digest + "\n" + mediaDigest);
 
             Console.WriteLine("Passed: " + _Passed + "  Failed: " + _Failures.Count);
             foreach (string failure in _Failures) Console.WriteLine("  FAIL " + failure);
@@ -575,6 +583,89 @@ namespace Test.Aot
             }
 
             throw new InvalidOperationException(what + ": expected " + typeof(TException).Name + ".");
+        }
+
+        private static async Task RunMediaChecksAsync(LocalOpenAiTestServer server)
+        {
+            byte[] png = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0xFB, 0xEF, 0xBE, 1, 2, 3 };
+            byte[] mp4 = { 0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D, 0, 0, 2, 0 };
+            byte[] flac = Encoding.ASCII.GetBytes("fLaC").Concat(Enumerable.Range(0, 64).Select(i => (byte)i)).ToArray();
+
+            Check("Media: ChatMessage parts and 4.x string content round-trip without reflection", () =>
+            {
+                ChatMessage message = ChatMessage.User("look", ContentPart.Image(png, MediaTypes.ImagePng, ImageDetail.High), ContentPart.VideoUrl("https://www.youtube.com/watch?v=x", new VideoClip { StartOffsetMs = 1000, FramesPerSecond = 2 }));
+                string json = JsonSerializer.Serialize(message, PolyPromptJsonContext.Default.ChatMessage);
+                ChatMessage back = JsonSerializer.Deserialize(json, PolyPromptJsonContext.Default.ChatMessage)!;
+                Expect(3, back.Content.Count, "parts");
+                Expect(true, png.SequenceEqual(back.Content[1].Data!), "bytes");
+                Expect(ImageDetail.High, back.Content[1].Detail, "detail");
+                Expect("from 4.x", JsonSerializer.Deserialize("{\"Role\":\"user\",\"Content\":\"from 4.x\"}", PolyPromptJsonContext.Default.ChatMessage)!.Text, "legacy content");
+                string response = JsonSerializer.Serialize(new TranscriptionResponse { Text = "t", Segments = { new TranscriptionSegment { Text = "s" } } }, PolyPromptJsonContext.Default.TranscriptionResponse);
+                Expect(true, response.Contains("\"Segments\":[", StringComparison.Ordinal), "transcription JSON");
+            });
+
+            List<ProviderClientBase> clients = LocalClients.Supporting(Capability.ImageInput, server.Endpoint);
+            try
+            {
+                foreach (ProviderClientBase client in clients)
+                {
+                    await CheckAsync("Media: " + client.GetType().Name + " image chat", async () =>
+                    {
+                        client.CallDetailCapture = CallDetailCapture.Full;
+                        Ok(await client.ChatAsync(ChatMessage.User("Describe", ContentPart.Image(png, MediaTypes.ImagePng))).ConfigureAwait(false));
+                        Expect(false, server.RequestBodies.Last().Contains("\\u002B", StringComparison.Ordinal), "raw base64");
+                    }).ConfigureAwait(false);
+                }
+            }
+            finally { LocalClients.DisposeAll(clients); }
+
+            using GeminiClient gemini = new GeminiClient(LocalClients.TestKey, server.Endpoint) { CallDetailCapture = CallDetailCapture.Full };
+            await CheckAsync("Media: Gemini video clip, upload, and wait", async () =>
+            {
+                Ok(await gemini.ChatAsync(ChatMessage.User("Summarize", ContentPart.Video(mp4, MediaTypes.VideoMp4, new VideoClip { StartOffsetMs = 1500, FramesPerSecond = 2 }))).ConfigureAwait(false));
+                GeminiFileResponse uploaded = await gemini.UploadFileAsync(mp4, MediaTypes.VideoMp4, "clip").ConfigureAwait(false);
+                Ok(uploaded);
+                GeminiFileResponse active = await gemini.WaitForFileActiveAsync(uploaded.File!.Name, TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(10)).ConfigureAwait(false);
+                Ok(active);
+                Expect(GeminiFileState.Active, active.File!.State, "active");
+            }).ConfigureAwait(false);
+
+            using OpenAiCompatibleClient whisper = new OpenAiCompatibleClient(server.Endpoint, LocalClients.TestKey) { Defaults = { Transcription = { Model = "whisper-local" } } };
+            await CheckAsync("Media: transcription verbose_json with words", async () =>
+            {
+                TranscriptionResponse transcript = await whisper.TranscribeAsync(new TranscriptionRequest { Audio = flac, Language = "en", Format = TranscriptionFormat.VerboseJson, TimestampGranularities = { TranscriptionTimestampGranularity.Word } }).ConfigureAwait(false);
+                Ok(transcript);
+                Expect(2, transcript.Segments.Count, "segments");
+                Expect(2, transcript.Words.Count, "words");
+            }).ConfigureAwait(false);
+
+            using OpenAiClient openai = new OpenAiClient(LocalOpenAiResponsesRoutes.Key, server.Endpoint);
+            await CheckAsync("Media: OpenAI file upload and file_id image", async () =>
+            {
+                OpenAiFileResponse file = await openai.UploadFileAsync(png, "cat.png").ConfigureAwait(false);
+                Ok(file);
+                Ok(await openai.ChatAsync(ChatMessage.User("Describe", ContentPart.FileReferenceOf(ContentPartType.Image, file.File!.Id, MediaTypes.ImagePng))).ConfigureAwait(false));
+            }).ConfigureAwait(false);
+        }
+
+        private static string MediaDigest(LocalOpenAiTestServer server)
+        {
+            // Multipart boundaries and Gemini upload IDs are random per run, so they are normalized before hashing.
+            StringBuilder all = new StringBuilder();
+            List<string> urls = server.RequestUrls;
+            List<string> types = server.RequestContentTypes;
+            List<string> bodies = server.RequestBodies;
+            for (int i = 0; i < bodies.Count; i++)
+            {
+                string body = bodies[i];
+                string url = System.Text.RegularExpressions.Regex.Replace(urls[i], "upload_id=[0-9a-f]+", "upload_id=ID");
+                int at = types[i].IndexOf("boundary=", StringComparison.Ordinal);
+                if (at >= 0) body = body.Replace(types[i].Substring(at + 9).Trim('"'), "BOUNDARY", StringComparison.Ordinal);
+                body = System.Text.RegularExpressions.Regex.Replace(body, "files/[0-9a-f]{12}", "files/ID");
+                url = System.Text.RegularExpressions.Regex.Replace(url, "files/[0-9a-f]{12}", "files/ID");
+                all.Append(url).Append('\n').Append(body).Append('\n');
+            }
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(all.ToString())));
         }
 
         private static string Digest(LocalOpenAiTestServer server)

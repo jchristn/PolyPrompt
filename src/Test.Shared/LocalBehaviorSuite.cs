@@ -53,6 +53,7 @@ namespace Test.Shared
             cases.AddRange(LocalMultimodalCases.Create(SuiteId));
             cases.AddRange(LocalTranscriptionCases.Create(SuiteId));
             cases.AddRange(LocalFileUploadCases.Create(SuiteId));
+            cases.AddRange(LocalMultimodalTelemetryCases.Create(SuiteId));
             return new TestSuiteDescriptor(SuiteId, "Local behavior", cases);
         }
 

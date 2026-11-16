@@ -155,6 +155,18 @@ namespace PolyPrompt.Telemetry
             PolyPromptTelemetryNames.ToolCalls, "{call}", "Tool calls requested by the model.");
 
         /// <summary>
+        /// Media part counter.
+        /// </summary>
+        public static readonly Counter<long> InputMedia = Meter.CreateCounter<long>(
+            PolyPromptTelemetryNames.InputMedia, "{part}", "Image, audio, and video parts sent in chat requests.");
+
+        /// <summary>
+        /// Inline media bytes histogram.
+        /// </summary>
+        public static readonly Histogram<long> InputMediaBytes = Meter.CreateHistogram<long>(
+            PolyPromptTelemetryNames.InputMediaBytes, "By", "Inline media bytes per chat request, by modality.");
+
+        /// <summary>
         /// Finish reason counter.
         /// </summary>
         public static readonly Counter<long> FinishReasons = Meter.CreateCounter<long>(

@@ -552,6 +552,7 @@ namespace PolyPrompt.Clients
             if (request != null)
             {
                 scope.SetTag(PolyPromptTelemetryNames.ToolDefinitionCount, request.Tools?.Count ?? 0);
+                if (request.Messages != null) scope.RecordInputMedia(request.Messages);
             }
         }
 

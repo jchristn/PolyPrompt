@@ -84,6 +84,17 @@ namespace PolyPrompt.Telemetry
         public const string ToolCalls = "polyprompt.client.tool_calls";
 
         /// <summary>
+        /// Counter ({part}): image, audio, and video parts sent in chat requests. Labels: provider, operation,
+        /// polyprompt.modality.
+        /// </summary>
+        public const string InputMedia = "polyprompt.client.input.media";
+
+        /// <summary>
+        /// Histogram (By): inline media bytes per chat request, by modality. Labels: provider, operation, polyprompt.modality.
+        /// </summary>
+        public const string InputMediaBytes = "polyprompt.client.input.media_bytes";
+
+        /// <summary>
         /// Counter ({response}): completion responses by finish reason, which exposes truncation (length / max_tokens)
         /// and content filtering. Labels: provider, operation, gen_ai.response.finish_reason.
         /// </summary>
@@ -312,6 +323,36 @@ namespace PolyPrompt.Telemetry
         /// Number of tool definitions offered to the model. Span attribute only.
         /// </summary>
         public const string ToolDefinitionCount = "polyprompt.tool.definitions";
+
+        /// <summary>
+        /// Media modality label: <c>image</c>, <c>audio</c>, or <c>video</c>.
+        /// </summary>
+        public const string Modality = "polyprompt.modality";
+
+        /// <summary>
+        /// Image parts in the request. Span attribute only; set when non-zero.
+        /// </summary>
+        public const string InputImages = "polyprompt.input.images";
+
+        /// <summary>
+        /// Audio parts in the request. Span attribute only; set when non-zero.
+        /// </summary>
+        public const string InputAudio = "polyprompt.input.audio";
+
+        /// <summary>
+        /// Video parts in the request. Span attribute only; set when non-zero.
+        /// </summary>
+        public const string InputVideos = "polyprompt.input.videos";
+
+        /// <summary>
+        /// Inline media bytes (decoded) in the request. Span attribute only; set when there is media.
+        /// </summary>
+        public const string InputMediaBytesAttribute = "polyprompt.input.media_bytes";
+
+        /// <summary>
+        /// Media parts sent as a provider file reference. Span attribute only; set when non-zero.
+        /// </summary>
+        public const string InputFileReferences = "polyprompt.input.file_references";
 
         /// <summary>
         /// Audio bytes sent to <c>TranscribeAsync</c>. Span attribute only.

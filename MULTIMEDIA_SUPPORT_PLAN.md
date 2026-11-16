@@ -307,8 +307,8 @@ The changes follow `TELEMETRY.md`'s existing conventions:
 - New operation constant `transcribe`. `PolyPromptTelemetry.ResolveCapability` maps it to a new `transcription` capability label.
 - New span attributes set in `ProviderClientBase.Completion.cs : Enrich(...)`: `polyprompt.input.images`, `polyprompt.input.audio`, `polyprompt.input.videos`, `polyprompt.input.media_bytes`, `polyprompt.input.file_references`.
 - Transcription spans: `polyprompt.transcription.audio_bytes`, `polyprompt.transcription.duration_seconds` (from the response), `polyprompt.transcription.segments`.
-- New counter `polyprompt.client.input.media` with low-cardinality labels `provider` and `modality`. New histogram `polyprompt.client.input.media_bytes` labeled by `modality`.
-- Token usage by modality is added to `polyprompt.client.tokens` with a `modality` label only when the provider reports it, which keeps label cardinality bounded (four values).
+- New counter `polyprompt.client.input.media` and histogram `polyprompt.client.input.media_bytes`, labeled `provider`, `operation`, and `polyprompt.modality` (`image`, `audio`, `video`).
+- Token usage by modality is added to `polyprompt.client.tokens` as the token types `input_text`, `input_image`, `input_audio`, and `input_video`, only when the provider reports it. This follows the existing `cached_input` and `reasoning` types (bounded values, no new label), instead of adding a `modality` label to `input`.
 - HTTP body size attributes measure `wireBody`, never the redacted recording.
 
 ---
@@ -363,7 +363,7 @@ All tests are Touchstone descriptors in `src/Test.Shared`, so every runner (`Tes
 
 ### 7.5 AOT, docs, and consoles
 
-- **`Test.Aot`**: link the new case files and fixtures, and add multimodal, redacted-recording, and transcription digests to `verify-aot.sh` comparisons.
+- **`Test.Aot`**: media, transcription, and file checks run on a second fixture server and produce a separate media digest, normalized for multipart boundaries and upload IDs. That keeps the request digest comparable with 4.0.0 (it is unchanged), while `verify-aot.sh` compares both digests between the JIT and native runs.
 - **`Test.Docs`**: every `csharp` block in README, PROVIDERS, MULTIMEDIA, STREAMING, MIGRATION_V4_TO_V5, and DEVELOPMENT must compile. README keeps more than 10 snippets.
 - **`Test.Console`**: scripted runs for the new console commands below.
 
@@ -375,10 +375,10 @@ All tests are Touchstone descriptors in `src/Test.Shared`, so every runner (`Tes
 
 `Console.Shared` moves to the merged chat API and gains two commands, available in every provider console whose client supports them:
 
-- `/attach <path>` queues a media part, which is sent with the next prompt and shown as a chip in the prompt line.
-- `/transcribe <path> [language]` calls `TranscribeAsync` and prints segments with timestamps.
+- `attach PATH` queues a media part (sniffed by `ContentPart.FromFile`), which is sent with the next chat prompt; `attach` lists the queue and `attach clear` empties it. A failed turn keeps the queue for a retry. (Console commands are bare words, like `tools` and `cd`, so there is no slash; the queue is listed by `attach` rather than shown as a chip.)
+- `transcribe PATH [language]` calls `TranscribeAsync` with `VerboseJson` segments, falls back to `Json` for models without segments, and prints timed segments. `transcription-model NAME` sets the model.
 
-`/attach` on an unsupported provider prints the capability message without sending anything.
+`attach` on a provider without the modality, and `transcribe` on a provider without `Transcribe`, print the capability message without sending anything.
 
 ### 8.2 Postman
 
@@ -465,10 +465,10 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - [x] Tests: `LocalFileUploadCases`
 
 ### Phase 5: Telemetry, AOT, consoles
-- [ ] Span attributes, metrics, modality token labels
-- [ ] `Test.Aot` linking and digests, `verify-aot.sh`
-- [ ] Console commands and `Test.Console` scripts
-- [ ] Tests: `LocalMultimodalTelemetryCases`
+- [x] Span attributes, metrics, modality token labels
+- [x] `Test.Aot` linking and digests, `verify-aot.sh`
+- [x] Console commands and `Test.Console` scripts
+- [x] Tests: `LocalMultimodalTelemetryCases`
 
 ### Phase 6: Documentation and release preparation
 - [ ] MIGRATION_V4_TO_V5, README, MULTIMEDIA, PROVIDERS, STREAMING, TELEMETRY, AOT, DEVELOPMENT, HARNESSES, llms.txt
@@ -488,3 +488,4 @@ Each phase ends with `dotnet build src/PolyPrompt.sln -c Release` free of warnin
 - **2026-11-16**: Phase 2 done. Checked the *verify* cells against provider docs: OpenAI and Azure audio input ship off; Cohere vision and Vertex YouTube are confirmed; only `whisper-1` has `verbose_json` and timestamps. Media is written raw through `MediaValue`; recorded bodies use placeholders. Ten local clients send images (plus Ollama Cloud), with audio and video on OpenAI-compatible, Gemini, Vertex, and Bedrock (video). Local suite 867 passed on net8.0 and net10.0; Docs, Console, and AOT green; the AOT request digest is still the 4.0.0 digest. Deviations: `S3BucketOwner` is a `BedrockClient` property; `MaxInlineMediaBytes` lives on `ClientOptions`; no fixture-server media DTOs.
 - **2026-11-16**: Phase 3 done. `TranscribeAsync` on OpenAI, Azure (deployment as model, `/openai/v1/audio/transcriptions`), and OpenAI-compatible, through one shared multipart path that sends exactly the bytes it signs and records a field summary. OpenAI and Azure reject `text`, `verbose_json`, and granularities for `gpt-4o` transcription models before sending (the diarizing model accepts `text`). The fixture server now keeps raw request bytes, and `LocalTranscriptionRoutes` parses multipart bodies. 7 transcription cases; local suite 874 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.
 - **2026-11-16**: Phase 4 done. Gemini File API (two-step resumable upload, get, wait for ACTIVE with FAILED, timeout, and cancellation, delete, paged list) and OpenAI `/v1/files` (multipart upload, delete), with uploaded files used as content parts. `HttpClientBase` gained a header-aware POST and `ExecuteSendAsync` for multi-step calls. 5 file cases; local suite 879 passed on both frameworks; Docs, Console, and AOT green with the 4.0.0 request digest unchanged.
+- **2026-11-16**: Phase 5 done. Media span attributes, the media counter and bytes histogram, and token usage by modality; 3 telemetry cases. `Test.Aot` adds 14 media checks with a separate media digest that matches between JIT and native on both frameworks, while the request digest is still the 4.0.0 digest. Consoles gained `attach`, `transcribe`, and `transcription-model`, with 2 new console tests. Local suite 882 passed on both frameworks; Docs and Console green.
