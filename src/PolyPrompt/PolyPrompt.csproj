@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-    <Version>5.0.0</Version>
+    <Version>5.0.1</Version>
     <PackageReleaseNotes>5.0.0: images, audio, and video input on chat (ContentPart, ImageInput, AudioInput, VideoInput), TranscribeAsync, and Gemini and OpenAI file uploads. Breaking: ToolChatAsync merges into ChatAsync, and ChatMessage.Content is a list of parts (use Text for plain text). Text-only requests are unchanged on the wire. See MIGRATION_V4_TO_V5.md, MULTIMEDIA.md, and CHANGELOG.md at https://github.com/jchristn/PolyPrompt.</PackageReleaseNotes>
     <Authors>Joel Christner</Authors>
     <Company>Joel Christner</Company>
@@ -11,7 +11,7 @@
     <Description>PolyPrompt is a lightweight, unified .NET library for chat, tool calling, image, audio, and video input, transcription, text generation, embeddings, reranking, classification, decision models, and model catalogs, with one client per provider: OpenAI (Responses API), OpenAI-compatible servers (vLLM, Ollama /v1, LM Studio, gateways), Azure OpenAI, xAI Grok, Anthropic Claude, Google Gemini, Google Vertex AI, AWS Bedrock, Ollama, Ollama Cloud, Cohere, VoyageAI, Hugging Face Text Embeddings Inference (TEI), and TypeSafe (Jev, Ollaya). Every client exposes every operation; unsupported ones throw CapabilityNotSupportedException, and client.Supports checks first. It also drives local agent harnesses (Claude Code, Codex, Gemini CLI, Cursor CLI, Mux, Pi, and OpenCode) as shell-free child processes with streamed agent events, session resume, bounded output, timeouts, and process-tree cancellation. Native AOT compatible.</Description>
     <PackageProjectUrl>https://github.com/jchristn/PolyPrompt</PackageProjectUrl>
     <RepositoryUrl>https://github.com/jchristn/PolyPrompt</RepositoryUrl>
-    <RepositoryType>Github</RepositoryType>
+    <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>logo.png</PackageIcon>
@@ -28,6 +28,9 @@
     <WarningsAsErrors Condition="'$(Configuration)' == 'Release'">$(WarningsAsErrors);CS1591;CS1572;CS1573;CS1574</WarningsAsErrors>
     <ApplicationIcon>logo.ico</ApplicationIcon>
     <Title>PolyPrompt</Title>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
